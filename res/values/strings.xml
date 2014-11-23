@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+ * @date 30.08.2014
+ * @author Armin Joachimsmeyer
+ * armin.joachimsmeyer@gmail.com
+ * @copyright GPL v3 (http://www.gnu.org/licenses/gpl.html)
+-->
+<resources>
+
+    <string name="app_name">BlueDisplay</string>
+    <string name="app_version">0.9</string>
+
+    <!-- Alerts -->
+    <string name="alert_dialog_no_bt">Cannot use this application without bluetooth.</string>
+    <string name="alert_dialog_yes">Yes</string>
+    <string name="alert_dialog_no">No</string>
+    <string name="alert_dialog_warning_title">Warning</string>
+    <string name="alert_dialog_ok">OK</string>
+    <string name="alert_dialog_reset">Reset</string>
+    <string name="alert_dialog_turn_on_bt">Bluetooth is switched off. Do you want turn on?</string>
+    <string name="toast_connected_to">Connected to</string>
+    <string name="toast_unable_to_connect">Unable to connect device</string>
+    <string name="toast_connection_lost">Device connection was lost</string>
+
+    <!-- Options Menu -->
+    <string name="menu_connect">Connect device</string>
+    <string name="menu_disconnect">Disconnect device</string>
+    <string name="menu_preferences">Preferences</string>
+    <string name="menu_start_logging">Start logging</string>
+    <string name="menu_stop_logging">Stop logging</string>
+    <string name="menu_show_font_testpage">Show font testpage</string>
+    <string name="menu_show_graph_testpage">Show graph testpage</string>
+    <string name="menu_show_statistics">Show statistics</string>
+    <string name="menu_about">About</string>
+
+    <!-- About Menu -->
+    <string name="copyright">Copyright © 2014  Armin Joachimsmeyer</string>
+    <string name="license">GPL v3</string>
+    <string name="code_www">https://code.google.com/p/android-blue-display/</string>
+    
+    <!-- DeviceListActivity -->
+    <string name="scanning">scanning for devices&#8230;</string>
+    <string name="select_device">select a device to connect</string>
+    <string name="none_paired">No devices have been paired</string>
+    <string name="none_found">No devices found</string>
+    <string name="title_paired_devices">Paired Devices</string>
+    <string name="title_other_devices">Other Available Devices</string>
+    <string name="button_scan">Scan for devices</string>
+
+    <!-- Preference dialog -->
+    <string name="general_preferences">General</string>
+
+    <!-- Connection dialog -->
+    <string name="title_allowinsecureconnections_preference">Allow insecure connections</string>
+    <string name="summary_allowinsecureconnections_preference">Allow bluetooth insecure connections</string>
+    <!-- Don't localize this default value -->
+    <string name="default_value_allowinsecureconnections_preference">true</string>
+
+    <!-- Compatibility dialog -->
+    <string name="title_compatibility_preference">Compatibility mode</string>
+    <string name="summary_compatibility_preference">Compatibility mode for drawing pixel, lines and chars etc. E.g. last point of a line is drawn.</string>
+    <!-- Don't localize this default value -->
+    <string name="default_value_compatibility_preference">true</string>
+
+    <!-- Touch dialog -->
+    <string name="title_touch_preference">Touch function</string>
+    <string name="summary_touch_preference">Choose if touch events should be sent.</string>
+    <!-- Don't localize this default value -->
+    <string name="default_value_touch_enabled_preference">true</string>
+
+    <!-- Touch move dialog -->
+    <string name="title_touch_move_preference">Send touch moves</string>
+    <string name="summary_touch_move_preference">Choose if touch moves should be sent also. May lead to buffer overflow on slow clients.</string>
+    <!-- Don't localize this default value -->
+    <string name="default_value_touch_move_preference">true</string>
+
+    <!-- Screen orientation dialog -->
+    <string name="title_screenorientation_preference">Screen orientation</string>
+    <string name="summary_screenorientation_preference">Choose the screen orientation.</string>
+    <!-- Don't localize these default values -->
+    <string name="default_screenorientation_preference">5</string>
+    <string name="dialog_title_screenorientation_preference">Screen orientation</string>
+
+        <!-- Log level dialog -->
+    <string name="title_loglevel_preference">Log level</string>
+    <string name="summary_loglevel_preference">Choose the maximum log level to show if logging is enabled.</string>
+    <!-- Don't localize these default values -->
+    <string name="default_loglevel_preference">5</string>
+    <string name="dialog_title_loglevel_preference">Log level</string>
+    
+</resources>

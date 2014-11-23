@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+ @date 30.08.2014
+ @author Armin Joachimsmeyer
+ armin.joachimsmeyer@gmail.com
+ @copyright GPL v3 (http://www.gnu.org/licenses/gpl.html)
+-->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/ScrollView01"
+    android:layout_width="fill_parent"
+    android:layout_height="fill_parent"
+    android:scrollbars="vertical" >
+
+    <LinearLayout
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical" >
+
+        <TextView
+            android:id="@+id/copyright"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:paddingTop="10dp"
+            android:text="@string/copyright" />
+
+        <TextView
+            android:id="@+id/license"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:text="@string/license" />
+
+        <TextView
+            android:id="@+id/code_www"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:paddingBottom="10dp"
+            android:text="@string/code_www" />
+
+        <Button
+            android:id="@+id/buttonDialog"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/alert_dialog_ok" >
+        </Button>
+    </LinearLayout>
+
+</ScrollView>

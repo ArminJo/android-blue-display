@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="de.joachimsmeyer.android.bluedisplay"
+    android:installLocation="auto"
+    android:versionCode="2"
+    android:versionName="@string/app_version" >
+
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+    <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+
+    <uses-sdk
+        android:minSdkVersion="12"
+        android:targetSdkVersion="20" />
+
+    <application
+        android:allowBackup="true"
+        android:hardwareAccelerated="false"
+        android:icon="@drawable/icon"
+        android:label="@string/app_name" >
+
+        <!-- android:theme="@android:style/Theme.NoTitleBar.Fullscreen" -->
+        <activity
+            android:name="de.joachimsmeyer.android.bluedisplay.BlueDisplay"
+            android:configChanges="keyboardHidden|orientation|screenSize"
+            android:label="@string/app_name" >
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name="de.joachimsmeyer.android.bluedisplay.DeviceListActivity"
+            android:label="@string/select_device"
+            android:theme="@android:style/Theme.Dialog" />
+        <activity android:name="de.joachimsmeyer.android.bluedisplay.BlueDisplayPreferences" />
+    </application>
+
+</manifest>

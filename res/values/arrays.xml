@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+ @date 30.08.2014
+ @author Armin Joachimsmeyer
+ armin.joachimsmeyer@gmail.com
+-->
+
+<resources xmlns:android="http://schemas.android.com/apk/res/android">
+    <string-array name="entries_screenorientation_preference">
+        <item>Auto</item>
+        <item>Portrait</item>
+        <item>Landscape</item>
+    </string-array>
+
+    <!-- Do not localize entryvalues -->
+    <string-array name="entryvalues_screenorientation_preference">
+        <item>0</item>
+        <item>1</item>
+        <item>2</item>
+    </string-array>
+    
+    <string-array name="entries_loglevel_preference">
+        <item>Warn</item>
+        <item>Info</item>
+        <item>Debug</item>
+        <item>Verbose</item>
+    </string-array>
+
+    <!-- Do not localize entryvalues -->
+    <string-array name="entryvalues_loglevel_preference">
+        <item>5</item>
+        <item>4</item>
+        <item>3</item>
+        <item>2</item>
+    </string-array>
+</resources>

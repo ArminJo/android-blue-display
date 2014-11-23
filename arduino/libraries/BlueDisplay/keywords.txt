@@ -1,0 +1,42 @@
+#######################################
+# Syntax coloring map for TouchButton,
+# TouchButtonAutorepeat and TouchSlider
+#######################################
+
+#######################################
+# Datatypes (KEYWORD1)
+#######################################
+
+BlueDisplay	KEYWORD1
+BlueSerial	KEYWORD1
+TouchLib	KEYWORD1
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+
+# from BlueDisplay
+getTextWidth	KEYWORD2
+setFlagsAndSize	KEYWORD2
+needsRefresh	KEYWORD2
+isConnectionJustBuildUp	KEYWORD2
+setCharacterMapping	KEYWORD2
+clearDisplay	KEYWORD2
+
+# from BlueSerial
+USART3_sendBuffer	KEYWORD2
+sendUSARTArgs	KEYWORD2
+sendUSART5Args	KEYWORD2
+sendUSART5ArgsAndByteBuffer	KEYWORD2
+USART_isBluetoothPaired	KEYWORD2
+
+# from TouchLib
+wasTouched	KEYWORD2
+handleReceiveEvent	KEYWORD2
+isTouchStillDown	KEYWORD2
+getXActual	KEYWORD2
+getYActual	KEYWORD2
+
+#######################################
+# Constants (LITERAL1)
+#######################################

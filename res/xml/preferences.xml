@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+ * @date 30.08.2014
+ * @author Armin Joachimsmeyer
+ * armin.joachimsmeyer@gmail.com
+ * @copyright GPL v3 (http://www.gnu.org/licenses/gpl.html)
+-->
+
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android" >
+
+    <PreferenceCategory android:title="@string/general_preferences" >
+        <ListPreference
+            android:defaultValue="@string/default_loglevel_preference"
+            android:dialogTitle="@string/dialog_title_loglevel_preference"
+            android:entries="@array/entries_loglevel_preference"
+            android:entryValues="@array/entryvalues_loglevel_preference"
+            android:key="loglevel"
+            android:summary="@string/summary_loglevel_preference"
+            android:title="@string/title_loglevel_preference" />
+        <ListPreference
+            android:defaultValue="@string/default_screenorientation_preference"
+            android:dialogTitle="@string/dialog_title_screenorientation_preference"
+            android:entries="@array/entries_screenorientation_preference"
+            android:entryValues="@array/entryvalues_screenorientation_preference"
+            android:key="screenorientation"
+            android:summary="@string/summary_screenorientation_preference"
+            android:title="@string/title_screenorientation_preference" />
+        <!-- TOUCH enable -->
+        <CheckBoxPreference
+            android:defaultValue="@string/default_value_touch_enabled_preference"
+            android:key="touchmode"
+            android:summary="@string/summary_touch_preference"
+            android:title="@string/title_touch_preference" />
+        <!-- TOUCH SEND MOVE enable -->
+        <CheckBoxPreference
+            android:defaultValue="@string/default_value_touch_move_preference"
+            android:key="touchmode_move"
+            android:summary="@string/summary_touch_move_preference"
+            android:title="@string/title_touch_move_preference" />
+        <!-- COMPATIBILITY mode -->
+        <CheckBoxPreference
+            android:defaultValue="@string/default_value_compatibility_preference"
+            android:key="compatibilitymode"
+            android:summary="@string/summary_compatibility_preference"
+            android:title="@string/title_compatibility_preference" />
+        <!-- SECURE BT CONNECTION -->
+        <CheckBoxPreference
+            android:defaultValue="@string/default_value_allowinsecureconnections_preference"
+            android:key="allowinsecureconnections"
+            android:summary="@string/summary_allowinsecureconnections_preference"
+            android:title="@string/title_allowinsecureconnections_preference" />
+    </PreferenceCategory>
+
+</PreferenceScreen>
