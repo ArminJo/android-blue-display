@@ -31,14 +31,12 @@ setPosition	KEYWORD2
 setCaption	KEYWORD2
 setCaptionColor	KEYWORD2
 setColor	KEYWORD2
-setTouchBorder	KEYWORD2
 setValue	KEYWORD2
 getCaption	KEYWORD2
 getPositionXRight	KEYWORD2
 getPositionX	KEYWORD2
 getPositionYBottom	KEYWORD2
 getPositionY	KEYWORD2
-getTouchBorder	KEYWORD2
 activate	KEYWORD2
 deactivate	KEYWORD2
 toString	KEYWORD2

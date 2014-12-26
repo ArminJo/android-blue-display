@@ -1,0 +1,5 @@
+/bin
+/.settings
+/gen
+/BlueDisplay*.apk
+/lint.xml

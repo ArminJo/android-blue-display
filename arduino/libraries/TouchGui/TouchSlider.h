@@ -28,7 +28,7 @@
 #define TOUCHSLIDER_DEFAULT_VALUE_COLOR 		COLOR_BLUE
 #define TOUCHSLIDER_DEFAULT_CAPTION_VALUE_BACK_COLOR 	COLOR_NO_BACKGROUND
 #define TOUCHSLIDER_SIZE_FACTOR 				2 // Factor for right and left border size
-#define TOUCHSLIDER_OVERALL_SIZE_FACTOR 		6 // DEFAULT_SIZE * OVERALL_SIZE_FACTOR = width in pixel
+#define TOUCHSLIDER_OVERALL_SIZE_FACTOR 		6 // mSize * OVERALL_SIZE_FACTOR = width in pixel
 #define TOUCHSLIDER_DEFAULT_SIZE 				4
 #define TOUCHSLIDER_DEFAULT_TOUCH_BORDER 		4 // extension of touch region
 #define TOUCHSLIDER_DEFAULT_SHOW_CAPTION		true
@@ -37,17 +37,17 @@
 #define TOUCHSLIDER_DEFAULT_THRESHOLD_VALUE     100
 
 // Error codes
-#define TOUCHSLIDER_ERROR_POS_X			-1
-#define TOUCHSLIDER_ERROR_POS_Y			-2
-#define TOUCHSLIDER_ERROR_SIZE_ZERO 	-3
-#define TOUCHSLIDER_ERROR_SIZE 			-4
-#define TOUCHSLIDER_ERROR_MAX_VALUE		-5
-#define TOUCHSLIDER_ERROR_ACTUAL_VALUE 	-6
-#define TOUCHSLIDER_ERROR_CAPTION_HEIGTH -8
-#define TOUCHSLIDER_ERROR_VALUE_TOO_HIGH -9
-#define TOUCHSLIDER_ERROR_X_RIGHT 		-16
-#define TOUCHSLIDER_ERROR_Y_BOTTOM		-32
-#define TOUCHSLIDER_ERROR_NOT_INITIALIZED -64
+#define TOUCHSLIDER_ERROR_SIZE_ZERO 	-1
+#define TOUCHSLIDER_ERROR_SIZE 			-2
+#define TOUCHSLIDER_ERROR_MAX_VALUE		-4
+#define TOUCHSLIDER_ERROR_ACTUAL_VALUE 	-8
+#define TOUCHSLIDER_ERROR_VALUE_TOO_HIGH -16
+
+// return values for checkAllSliders()
+#ifndef NOT_TOUCHED
+#define NOT_TOUCHED 0
+#endif
+#define SLIDER_TOUCHED 4
 
 class TouchSlider {
 public:
@@ -70,23 +70,26 @@ public:
     /*
      * Member functions
      */
-    int8_t initSimpleSlider(const uint16_t aPositionX, const uint16_t aPositionY, const uint8_t aSizeX,
+    void initSimpleSlider(const uint16_t aPositionX, const uint16_t aPositionY, const uint8_t aSizeX,
             const char * aCaption, const uint8_t aOptions,
-            uint8_t (*aOnChangeHandler)(TouchSlider * const, const uint8_t), const char * (*aValueHandler)(uint8_t));
-    int8_t initSlider(const uint16_t aPositionX, const uint16_t aPositionY, const uint16_t aSize, const uint16_t aMaxValue,
-            const uint16_t aThresholdValue, const uint16_t aInitalValue, const char * aCaption, const int8_t aTouchBorder,
+            int16_t (*aOnChangeHandler)(TouchSlider * const, const int16_t), const char * (*aValueHandler)(int16_t));
+    void initSlider(const uint16_t aPositionX, const uint16_t aPositionY, const uint16_t aSize, const uint16_t aMaxValue,
+            const uint16_t aThresholdValue, const int16_t aInitalValue, const char * aCaption, const int8_t aTouchBorder,
             const uint8_t aOptions,
-            uint8_t (*aOnChangeHandler)(TouchSlider * const, const uint8_t), const char * (*aValueHandler)(uint8_t));
+            int16_t (*aOnChangeHandler)(TouchSlider * const, const int16_t), const char * (*aValueHandler)(int16_t));
     void initSliderColors(const uint16_t aSliderColor, const uint16_t aBarColor, const uint16_t aBarThresholdColor,
             const uint16_t aBarBackgroundColor, const uint16_t aCaptionColor, const uint16_t aValueColor,
             const uint16_t aValueCaptionBackgroundColor);
-    void initValueAndCaptionBackgroundColor(const uint16_t aValueCaptionBackgroundColor);
+    void setValueAndCaptionBackgroundColor(const uint16_t aValueCaptionBackgroundColor);
+    void setValueColor(const uint16_t aValueColor);
     void drawSlider();
     bool checkSlider(const uint16_t aPositionX, const uint16_t aPositionY);
     void drawBar();
     void drawBorder();
-    int8_t getActualValue() const;
-    void setActualValue(int8_t actualValue);
+    int16_t getActualValue() const;
+    void setActualValue(int16_t actualValue);
+    void setActualValueAndDraw(int16_t actualValue);
+    void setActualValueAndDrawBar(int16_t actualValue);
     uint16_t getPositionXRight() const;
     uint16_t getPositionYBottom() const;
     void activate();
@@ -113,17 +116,17 @@ private:
 
     uint8_t mActualTouchValue;
     // This value can be different from mActualTouchValue and is provided by callback handler
-    uint8_t mActualValue;
+    int16_t mActualValue;
     /*
      * The Slider
      */
     uint16_t mPositionX;
     uint16_t mPositionXRight;
     uint16_t mPositionY;
-    uint8_t mMaxValue; //aMaxValue serves also as height
-    uint8_t mThresholdValue; // Value for color change
     uint16_t mPositionYBottom;
-    uint8_t mSize;
+    int16_t mBarLength;
+    int16_t mThresholdValue; // Value for color change
+    uint8_t mBarWidth;
     const char* mCaption;
     uint8_t mTouchBorder; // extension of touch region
     // Colors
@@ -137,8 +140,8 @@ private:
     uint8_t mOptions;
     bool mIsActive;
     TouchSlider* mNextObject;
-    uint8_t (*mOnChangeHandler)(TouchSlider* const, uint8_t);
-    const char* (*mValueHandler)(uint8_t);
+    int16_t (*mOnChangeHandler)(TouchSlider* const, int16_t);
+    const char* (*mValueHandler)(int16_t);
     int8_t checkParameterValues();
     void printCaption();
     int8_t printValue();

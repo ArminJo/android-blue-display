@@ -18,14 +18,13 @@
 
 #include <stdint.h>
 
-struct XYValue {
-    uint16_t X;
-    uint16_t Y;
-};
-
 #define DISPLAY_DEFAULT_HEIGHT 240 // value to use if not connected
 #define DISPLAY_DEFAULT_WIDTH 320
-
+#define STRING_BUFFER_STACK_SIZE 20 // Buffer size allocated on stack for ...PGM() functions.
+struct XYSize {
+    uint16_t XWidth;
+    uint16_t YHeight;
+};
 /*
  * Basic colors
  */
@@ -39,6 +38,7 @@ struct XYValue {
 #define COLOR_YELLOW    0XFFE0
 #define COLOR_MAGENTA   0xF81F
 #define COLOR_CYAN      0x03FF
+#define COLOR_ORANGE    0xF880
 
 // If used as background color for char or text, the background will not filled
 #define COLOR_NO_BACKGROUND   0XFFFE
@@ -46,26 +46,44 @@ struct XYValue {
 #define BLUEMASK 0x1F
 #define RGB(r,g,b)   (((r&0xF8)<<8)|((g&0xFC)<<3)|((b&0xF8)>>3)) //5 red | 6 green | 5 blue
 /*
+ * Android system tones
+ */
+#define TONE_CDMA_KEYPAD_VOLUME_KEY_LITE 89
+#define TONE_PROP_BEEP 27
+#define TONE_PROP_BEEP2 28
+#define TONE_CDMA_ONE_MIN_BEEP 88
+#define TONE_DEFAULT TONE_CDMA_KEYPAD_VOLUME_KEY_LITE
+/*
  * Android Text sizes which are closest to the 8*12 font used locally
  */
 #define TEXT_SIZE_11 11
 #define TEXT_SIZE_22 22 // for factor 2 of 8*12 font
 #define TEXT_SIZE_33 33 // for factor 3 of 8*12 font
 // TextSize * 0.6
+#ifdef LOCAL_DISPLAY_EXISTS
+// 8/16 instead of 7/13 to be compatible with 8*12 font
+#define TEXT_SIZE_11_WIDTH 8
+#define TEXT_SIZE_22_WIDTH 16
+#else
 #define TEXT_SIZE_11_WIDTH 7
 #define TEXT_SIZE_22_WIDTH 13
+#endif
 
 // TextSize * 0.93
+// 12 instead of 11 to  have a margin
 #define TEXT_SIZE_11_HEIGHT 12
 #define TEXT_SIZE_22_HEIGHT 24
 
 // TextSize * 0.93
-#define TEXT_SIZE_11_ASCEND 8
-#define TEXT_SIZE_22_ASCEND 17
+// 9 instead of 8 to have ASCEND + DECEND = HEIGHT
+#define TEXT_SIZE_11_ASCEND 9
+// 18 instead of 17 to have ASCEND + DECEND = HEIGHT
+#define TEXT_SIZE_22_ASCEND 18
 
 // TextSize * 0.24
 #define TEXT_SIZE_11_DECEND 3
-#define TEXT_SIZE_22_DECEND 5
+// 6 instead of 5 to have ASCEND + DECEND = HEIGHT
+#define TEXT_SIZE_22_DECEND 6
 
 uint8_t getTextWidth(uint8_t aTextSize);
 uint8_t getTextAscend(uint8_t aTextSize);
@@ -77,14 +95,18 @@ uint8_t getLocalTextSize(uint8_t aTextSize);
  * Function tags for Bluetooth serial communication
  */
 extern const int FUNCTION_TAG_SET_FLAGS;
-extern const int BD_FLAG_COMPATIBILITY_MODE_ENABLE;
-extern const int BD_FLAG_TOUCH_DISABLE;
+// Sub functions for GLOBAL_SETTINGS
+extern const int FUNCTION_TAG_GLOBAL_SETTINGS;
+extern const int SET_FLAGS_AND_SIZE;
+extern const int SET_CODEPAGE;
+extern const int SET_CHARACTER_CODE_MAPPING;
+extern const int SET_LONG_TOUCH_DOWN_TIMEOUT;
+// Sub functions for SET_FLAGS_AND_SIZE
+extern const int BD_FLAG_FIRST_RESET_ALL;
+extern const int BD_FLAG_TOUCH_BASIC_DISABLE;
 extern const int BD_FLAG_TOUCH_MOVE_DISABLE;
+extern const int BD_FLAG_LONG_TOUCH_ENABLE;
 extern const int BD_FLAG_USE_MAX_SIZE;
-
-extern const int FUNCTION_TAG_SET_FLAGS_AND_SIZE;
-extern const int FUNCTION_TAG_SET_CODEPAGE;
-extern const int FUNCTION_TAG_SET_CHARACTER_CODE_MAPPING;
 
 extern const int FUNCTION_TAG_CLEAR_DISPLAY;
 
@@ -106,6 +128,17 @@ extern const int FUNCTION_TAG_DRAW_CHART;
 extern const int FUNCTION_TAG_DRAW_PATH;
 extern const int FUNCTION_TAG_FILL_PATH;
 
+// Flags for BUTTON_GLOBAL_SETTINGS
+extern const int USE_UP_EVENTS_FOR_BUTTONS;
+
+// Values for Button flag
+extern const int BUTTON_FLAG_DO_BEEP_ON_TOUCH;
+extern const int BUTTON_FLAG_NOTHING;
+
+extern const int TOUCHSLIDER_SHOW_BORDER;
+extern const int TOUCHSLIDER_VALUE_BY_CALLBACK; // if set value will be set by callback handler
+extern const int TOUCHSLIDER_IS_HORIZONTAL;
+
 #ifdef __cplusplus
 class BlueDisplay {
 public:
@@ -114,47 +147,98 @@ public:
     void setFlagsAndSize(uint16_t aFlags, uint16_t aWidth, uint16_t aHeight);
     void setCharacterMapping(uint8_t aChar, uint16_t aUnicodeChar);
 
+    void playTone(uint8_t aToneIndex);
+    void playTone(void);
+    void setLongTouchDownTimeout(uint16_t aLongTouchTimeoutMillis);
+
     void clearDisplay(uint16_t aColor);
+    void drawDisplayDirect(void);
 
     void drawPixel(uint16_t aXPos, uint16_t aYPos, uint16_t aColor);
     void drawCircle(uint16_t aXCenter, uint16_t aYCenter, uint16_t aRadius, uint16_t aColor, uint16_t aStrokeWidth);
     void fillCircle(uint16_t aXCenter, uint16_t aYCenter, uint16_t aRadius, uint16_t aColor);
     void drawRect(uint16_t aXStart, uint16_t aYStart, uint16_t aXEnd, uint16_t aYEnd, uint16_t aColor, uint16_t aStrokeWidth);
+    void drawRectRel(uint16_t aXStart, uint16_t aYStart, uint16_t aWidth, uint16_t aHeight, uint16_t aColor, uint16_t aStrokeWidth);
     void fillRect(uint16_t aXStart, uint16_t aYStart, uint16_t aXEnd, uint16_t aYEnd, uint16_t aColor);
+    void fillRectRel(uint16_t aXStart, uint16_t aYStart, uint16_t aWidth, uint16_t aHeight, uint16_t aColor);
 
     uint16_t drawChar(uint16_t aPosX, uint16_t aPosY, char aChar, uint8_t aCharSize, uint16_t aFGColor, uint16_t aBGColor);
     uint16_t drawText(uint16_t aXStart, uint16_t aYStart, const char *aStringPtr, uint8_t aFontSize, uint16_t aColor,
             uint16_t aBGColor);
+    uint16_t drawTextPGM(uint16_t aXStart, uint16_t aYStart, PGM_P aPGMString, uint8_t aFontSize, uint16_t aColor,
+    uint16_t aBGColor);
+    void debugMessage(const char *aStringPtr);
 
     void drawLine(uint16_t aXStart, uint16_t aYStart, uint16_t aXEnd, uint16_t aYEnd, uint16_t aColor);
-    void drawLineFastOneX(uint16_t x0, uint16_t y0, uint16_t y1, uint16_t color);
+    void drawLineRel(uint16_t aXStart, uint16_t aYStart, uint16_t aXDelta, uint16_t aYDelta, uint16_t aColor);
+    void drawLineOneX(uint16_t x0, uint16_t y0, uint16_t y1, uint16_t color);
     void drawLineWithThickness(uint16_t aXStart, uint16_t aYStart, uint16_t aXEnd, uint16_t aYEnd, int16_t aThickness,
             uint8_t aThicknessMode, uint16_t aColor);
 
     void drawChartByteBuffer(uint16_t aXOffset, uint16_t aYOffset, uint16_t aColor, uint16_t aClearBeforeColor,
             uint8_t *aByteBuffer, uint16_t aByteBufferLength);
+    void drawChartByteBuffer(uint16_t aXOffset, uint16_t aYOffset, uint16_t aColor, uint16_t aClearBeforeColor,uint8_t aChartIndex,bool aDoDrawDirect,
+            uint8_t *aByteBuffer, uint16_t aByteBufferLength);
 
-    void setMaxDisplaySize(int aMaxDisplayWidth, int aMaxDisplayHeight);
+    void setMaxDisplaySize(struct XYSize * const aMaxDisplaySizePtr);
+    void setActualDisplaySize(struct XYSize * const aActualDisplaySizePtr);
     uint16_t getDisplayWidth(void);
     uint16_t getDisplayHeight(void);
 
-    void setNeedsRefresh(void);
-    bool needsRefresh(void);
-    void setConnectionJustBuildUp(void);
-    bool isConnectionJustBuildUp(void);
+    void getNumber(void (*aNumberHandler) (const float ));
+    void getNumberWithShortPrompt(void (*aNumberHandler)(const float), const char *aShortPromptString);
+    void getNumberWithShortPromptPGM(void (*aNumberHandler)(const float),const char *tShortPromptLengtht);
+    void getText(void (*aTextHandler)(const char *));
 
-    uint16_t drawTextPGM(uint16_t aXStart, uint16_t aYStart, PGM_P aPGMString, uint8_t aFontSize, uint16_t aColor,
-    uint16_t aBGColor);
+    /*
+     * Button stuff
+     */
+    void resetAllButtons(void);
+    uint8_t createButton(const uint16_t aPositionX, const uint16_t aPositionY, const uint16_t aWidthX, const uint16_t aHeightY,
+            const uint16_t aButtonColor, const char * aCaption, const uint8_t aCaptionSize, const uint8_t aFlags,
+            const int16_t aValue, void (*aOnTouchHandler)(uint8_t, int16_t));
+    uint8_t createButtonPGM(const uint16_t aPositionX, const uint16_t aPositionY, const uint16_t aWidthX,
+            const uint16_t aHeightY, const uint16_t aButtonColor, PGM_P aPGMCaption, const uint8_t aCaptionSize, const uint8_t aFlags,
+            const int16_t aValue, void (*aOnTouchHandler)(uint8_t, int16_t));
+    void drawButton(uint8_t aButtonNumber);
+    void drawButtonCaption(uint8_t aButtonNumber);
+    void setButtonCaption(uint8_t aButtonNumber, const char * aCaption, bool doDrawButton);
+    void setButtonCaptionPGM(uint8_t aButtonNumber, PGM_P aPGMCaption, bool doDrawButton);
+    void setButtonValue(uint8_t aButtonNumber, const int16_t aValue);
+    void setButtonColor(uint8_t aButtonNumber, const int16_t aButtonColor);
+    void setRedGreenButtonColorAndDraw(uint8_t aButtonNumber, int16_t aValue);
+
+    void activateButton(uint8_t aButtonNumber);
+    void deactivateButton(uint8_t aButtonNumber);
+    void activateAllButtons(void);
+    void deactivateAllButtons(void);
+    void setButtonsGlobalFlags(uint16_t aFlags);
+    void setButtonsTouchTone(uint8_t aToneIndex, uint8_t aToneVolume);
+
+    /*
+     * Slider stuff
+     */
+    void resetAllSliders(void);
+    uint8_t createSlider(const uint16_t aPositionX, const uint16_t aPositionY, const uint8_t aBarWidth, const uint16_t aBarLength,
+            const uint16_t aThresholdValue, const int16_t aInitalValue, const uint16_t aSliderColor, const uint16_t aBarColor,
+            const uint8_t aOptions, void (*aOnChangeHandler)(const uint8_t, const int16_t));
+    void drawSlider(uint8_t aSliderNumber);
+    void drawSliderBorder(uint8_t aSliderNumber);
+    void setSliderActualValueAndDraw(uint8_t aSliderNumber,int16_t aActualValue);
+
+    void activateSlider(uint8_t aSliderNumber);
+    void deactivateSlider(uint8_t aSliderNumber);
+    void activateAllSliders(void);
+    void deactivateAllSliders(void);
 
 private:
-    bool mNeedsRefresh; /* true if resize happens */
-    bool mConnectionBuildUp; /* true if new connection happens */
-    uint16_t mDisplayHeight;
-    uint16_t mDisplayWidth;
-    uint16_t mMaxDisplayHeight;
-    uint16_t mMaxDisplayWidth;
+    struct XYSize mReferenceDisplaySize; // contains requested display size
+            struct XYSize mActualDisplaySize;
+            struct XYSize mMaxDisplaySize;
+            uint16_t mDisplayHeight;
+            uint16_t mDisplayWidth;
 
-};
+        };
 // The instance provided by the class itself
 extern BlueDisplay BlueDisplay1;
 #endif

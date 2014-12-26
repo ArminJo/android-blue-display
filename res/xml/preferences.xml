@@ -25,24 +25,12 @@
             android:key="screenorientation"
             android:summary="@string/summary_screenorientation_preference"
             android:title="@string/title_screenorientation_preference" />
-        <!-- TOUCH enable -->
+        <!-- SHOW TOUCH COORDINATES mode -->
         <CheckBoxPreference
-            android:defaultValue="@string/default_value_touch_enabled_preference"
-            android:key="touchmode"
-            android:summary="@string/summary_touch_preference"
-            android:title="@string/title_touch_preference" />
-        <!-- TOUCH SEND MOVE enable -->
-        <CheckBoxPreference
-            android:defaultValue="@string/default_value_touch_move_preference"
-            android:key="touchmode_move"
-            android:summary="@string/summary_touch_move_preference"
-            android:title="@string/title_touch_move_preference" />
-        <!-- COMPATIBILITY mode -->
-        <CheckBoxPreference
-            android:defaultValue="@string/default_value_compatibility_preference"
-            android:key="compatibilitymode"
-            android:summary="@string/summary_compatibility_preference"
-            android:title="@string/title_compatibility_preference" />
+            android:defaultValue="@string/default_value_show_touch_preference"
+            android:key="show_touch_mode"
+            android:summary="@string/summary_show_touch_preference"
+            android:title="@string/title_show_touch_preference" />
         <!-- SECURE BT CONNECTION -->
         <CheckBoxPreference
             android:defaultValue="@string/default_value_allowinsecureconnections_preference"

@@ -47,12 +47,14 @@ public class BlueDisplayPreferences extends PreferenceActivity implements OnShar
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
-
+		if (BlueDisplay.isINFO()) {
+			Log.i(LOG_TAG, " +++ ON CREATE +++");
+		}
 		// Load the preferences from an XML resource
 		addPreferencesFromResource(R.xml.preferences);
 		ListPreference tPref = (ListPreference) findPreference("loglevel");
 		addValueToPreferenceTitle(tPref);
-		 tPref = (ListPreference) findPreference("screenorientation");
+		tPref = (ListPreference) findPreference("screenorientation");
 		addValueToPreferenceTitle(tPref);
 	}
 
@@ -67,6 +69,9 @@ public class BlueDisplayPreferences extends PreferenceActivity implements OnShar
 	@Override
 	protected void onResume() {
 		super.onResume();
+		if (BlueDisplay.isINFO()) {
+			Log.i(LOG_TAG, " + ON RESUME +");
+		}
 		// Set up a listener whenever a key changes
 		getPreferenceScreen().getSharedPreferences().registerOnSharedPreferenceChangeListener(this);
 	}
@@ -74,6 +79,9 @@ public class BlueDisplayPreferences extends PreferenceActivity implements OnShar
 	@Override
 	protected void onPause() {
 		super.onPause();
+		if (BlueDisplay.isINFO()) {
+			Log.i(LOG_TAG, " - ON PAUSE -");
+		}
 		// Unregister the listener whenever a key changes
 		getPreferenceScreen().getSharedPreferences().unregisterOnSharedPreferenceChangeListener(this);
 	}

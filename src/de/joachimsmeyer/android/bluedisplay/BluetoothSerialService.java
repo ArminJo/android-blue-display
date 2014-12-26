@@ -2,7 +2,8 @@
  * 	SUMMARY
  * 	Blue Display is an Open Source Android remote Display for Arduino etc.
  * 	It receives basic draw requests from Arduino etc. over Bluetooth and renders it.
- * 	Send touch events over Bluetooth back to Arduino.
+ * 	It also implements basic GUI elements as buttons and sliders.
+ * 	It sends touch or GUI callback events over Bluetooth back to Arduino.
  * 
  *  Copyright (C) 2014  Armin Joachimsmeyer
  *  armin.joachimsmeyer@gmail.com
@@ -46,12 +47,13 @@ import android.util.Log;
  * for incoming connections, a thread for connecting with a device, and a thread for performing data transmissions when connected.
  */
 public class BluetoothSerialService {
-	// Debugging
-	private static final String TAG = "BluetoothSerialService";
+	// Logging
+	private static final String LOG_TAG = "BluetoothSerialService";
 
 	private static final UUID SerialPortServiceClass_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
 
-	// Forces the end of writing to bitmap after 0.5 seconds and thus allow bitmap to be displayed
+	// Forces the end of writing to bitmap after 0.5 seconds and thus allow
+	// bitmap to be displayed
 	private static final long MAX_DRAW_INTERVAL_NANOS = 500000000;
 
 	// Member fields
@@ -64,13 +66,24 @@ public class BluetoothSerialService {
 	// Statistics
 	public int mStatisticNumberOfReceivedBytes;
 	public int mStatisticNumberOfReceivedCommands;
+	public int mStatisticNumberOfReceivedChartCommands;
 	public int mStatisticNumberOfSentBytes;
 	public int mStatisticNumberOfSentCommands;
 	public int mStatisticNumberOfBufferWrapArounds;
 	public long mStatisticNanoTimeForCommands;
+	public long mStatisticNanoTimeForChart;
 
 	public final static int EVENT_TAG_CONNECTION_BUILD_UP = 0x10;
 	public final static int EVENT_TAG_RESIZE_ACTION = 0x11;
+	// Must be below 0x20 since it only sends 4 bytes data
+	public final static int EVENT_TAG_LONG_TOUCH_DOWN_CALLBACK_ACTION = 0x18;
+
+	public final static int EVENT_TAG_FIRST_CALLBACK_ACTION = 0x20;
+	public final static int EVENT_TAG_BUTTON_CALLBACK_ACTION = 0x20;
+	public final static int EVENT_TAG_SLIDER_CALLBACK_ACTION = 0x21;
+	public final static int EVENT_TAG_SWIPE_CALLBACK_ACTION = 0x22;
+
+	public final static int EVENT_TAG_NUMBER_CALLBACK = 0x28;
 
 	private boolean mAllowInsecureConnections;
 
@@ -86,9 +99,12 @@ public class BluetoothSerialService {
 
 	// Constants that indicate the current connection state
 	public static final int STATE_NONE = 0; // we're doing nothing
-	public static final int STATE_LISTEN = 1; // now listening for incoming connections
-	public static final int STATE_CONNECTING = 2; // now initiating an outgoing connection
-	public static final int STATE_CONNECTED = 3; // now connected to a remote device
+	public static final int STATE_LISTEN = 1; // now listening for incoming
+												// connections
+	public static final int STATE_CONNECTING = 2; // now initiating an outgoing
+													// connection
+	public static final int STATE_CONNECTED = 3; // now connected to a remote
+													// device
 
 	/**
 	 * Constructor. Prepares a new BluetoothChat session.
@@ -110,10 +126,12 @@ public class BluetoothSerialService {
 	void resetStatistics() {
 		mStatisticNumberOfReceivedBytes = 0;
 		mStatisticNumberOfReceivedCommands = 0;
+		mStatisticNumberOfReceivedChartCommands = 0;
 		mStatisticNumberOfSentBytes = 0;
 		mStatisticNumberOfSentCommands = 0;
 		mStatisticNumberOfBufferWrapArounds = 0;
 		mStatisticNanoTimeForCommands = 0;
+		mStatisticNanoTimeForChart = 0;
 	}
 
 	/**
@@ -124,7 +142,7 @@ public class BluetoothSerialService {
 	 */
 	private synchronized void setState(int state) {
 		if (BlueDisplay.isDEBUG()) {
-			Log.d(TAG, "setState() " + mState + " -> " + state);
+			Log.d(LOG_TAG, "setState() " + mState + " -> " + state);
 		}
 		mState = state;
 
@@ -140,36 +158,42 @@ public class BluetoothSerialService {
 	}
 
 	public String getStatisticsString() {
-		String tReturn = mStatisticNumberOfReceivedBytes + " bytes / " + mStatisticNumberOfReceivedCommands
-				+ " commands received\n";
+		String tReturn = mStatisticNumberOfReceivedBytes + " bytes / " + mStatisticNumberOfReceivedCommands + " / "
+				+ mStatisticNumberOfReceivedChartCommands + " commands received\n";
 		tReturn += mStatisticNumberOfSentBytes + " bytes / " + mStatisticNumberOfSentCommands + " commands sent\n";
 		if (mStatisticNumberOfReceivedCommands != 0) {
 			tReturn += ((mStatisticNanoTimeForCommands / 1000) / mStatisticNumberOfReceivedCommands) + " µs per command\n";
+		}
+		if (mStatisticNumberOfReceivedChartCommands != 0) {
+			tReturn += ((mStatisticNanoTimeForChart / 1000) / mStatisticNumberOfReceivedChartCommands) + " µs per chart command\n";
 		}
 		tReturn += "Buffer wrap arounds=" + mStatisticNumberOfBufferWrapArounds + "\n";
 		int tInputBufferOutIndex = mReceiveBufferOutIndex;
 		int tBytes = getBufferBytesAvailable();
 		tReturn += "InputBuffer: in=" + mReceiveBufferInIndex + ", out=" + tInputBufferOutIndex + ", not processed=" + tBytes
 				+ ", size=" + SIZE_OF_IN_BUFFER + "\n";
-		if (tBytes > 0) {
-			if (tBytes > 20) {
-				tBytes = 20;
+		if (BlueDisplay.isDEBUG()) {
+			if (tBytes > 0) {
+				if (tBytes > 20) {
+					tBytes = 20;
+				}
+				// output content but max. 20 bytes
+				StringBuilder tContent = new StringBuilder(5 * 24);
+				int tValue;
+				for (int i = 0; i < tBytes; i++) {
+					tContent.append(" 0x");
+					tValue = mBigReceiveBuffer[tInputBufferOutIndex + i];
+					tContent.append(Integer.toHexString(tValue & 0xFF));
+				}
+				tReturn += tContent.toString() + "\n";
 			}
-			// output content but max. 24 bytes
-			StringBuilder tContent = new StringBuilder(5 * 24);
-			int tValue;
-			for (int i = 0; i < tBytes; i++) {
-				tContent.append(" 0x");
-				tValue = mBigReceiveBuffer[tInputBufferOutIndex];
-				tContent.append(Integer.toHexString(tValue & 0xFF));
-			}
-			tReturn += tContent.toString() + "\n";
 		}
-		tReturn += "\nCodepage=" + System.getProperty("file.encoding") + "\n";
+
 		RPCView tRPCView = mBlueDisplayContext.mRPCView;
-		tReturn += "Scale=" + tRPCView.mScaleFactor * 100 + "%    " + tRPCView.mRequestedCanvasWidth + "*"
+		tReturn += "\nScale=" + tRPCView.mScaleFactor * 100 + "%    " + tRPCView.mRequestedCanvasWidth + "*"
 				+ tRPCView.mRequestedCanvasHeight + " -> " + tRPCView.mActualCanvasWidth + "*" + tRPCView.mActualCanvasHeight
-				+ "  max=" + tRPCView.mActualViewWidth + "/" + tRPCView.mActualViewHeight;
+				+ "  max=" + tRPCView.mActualViewWidth + "/" + tRPCView.mActualViewHeight + "\n";
+		tReturn += "Codepage=" + System.getProperty("file.encoding");
 		return tReturn;
 	}
 
@@ -181,7 +205,7 @@ public class BluetoothSerialService {
 	 */
 	public synchronized void connect(BluetoothDevice device) {
 		if (BlueDisplay.isDEBUG()) {
-			Log.d(TAG, "connect to: " + device);
+			Log.d(LOG_TAG, "connect to: " + device);
 		}
 
 		// Cancel any thread attempting to make a connection
@@ -214,7 +238,7 @@ public class BluetoothSerialService {
 	 */
 	public synchronized void connected(BluetoothSocket socket, BluetoothDevice device) {
 		if (BlueDisplay.isDEBUG()) {
-			Log.d(TAG, "connected");
+			Log.d(LOG_TAG, "connected");
 		}
 
 		// Cancel the thread that completed the connection
@@ -250,7 +274,7 @@ public class BluetoothSerialService {
 	 */
 	public synchronized void stop() {
 		if (BlueDisplay.isDEBUG()) {
-			Log.d(TAG, "stop threads");
+			Log.d(LOG_TAG, "stop threads");
 		}
 
 		if (mConnectThread != null) {
@@ -273,7 +297,7 @@ public class BluetoothSerialService {
 	 *            The bytes to write
 	 * @see ConnectedThread#write(byte[])
 	 */
-	public void write(int aEventType, float aXPos, float aYPos) {
+	public void writeEvent(int aEventType, int aXPos, int aYPos) {
 		// Create temporary object
 		ConnectedThread r;
 		// Synchronize a copy of the ConnectedThread
@@ -284,6 +308,45 @@ public class BluetoothSerialService {
 		}
 		// Perform the write unsynchronized
 		r.write(aEventType, aXPos, aYPos);
+	}
+
+	public void writeEvent(int aEventType, int aButtonIndex, int aCallbackAddress, int aValue) {
+		// Create temporary object
+		ConnectedThread r;
+		// Synchronize a copy of the ConnectedThread
+		synchronized (this) {
+			if (mState != STATE_CONNECTED)
+				return;
+			r = mConnectedThread;
+		}
+		// Perform the write unsynchronized
+		r.write(aEventType, aButtonIndex, aCallbackAddress, aValue);
+	}
+
+	public void writeEvent(int aEventType, int aCallbackAddress, float aValue) {
+		// Create temporary object
+		ConnectedThread r;
+		// Synchronize a copy of the ConnectedThread
+		synchronized (this) {
+			if (mState != STATE_CONNECTED)
+				return;
+			r = mConnectedThread;
+		}
+		// Perform the write unsynchronized
+		r.write(aEventType, aCallbackAddress, aValue);
+	}
+
+	public void writeEvent(int aEventType, int aIsXDirection, int aStartX, int aStartY, int aDeltaX, int aDeltaY) {
+		// Create temporary object
+		ConnectedThread r;
+		// Synchronize a copy of the ConnectedThread
+		synchronized (this) {
+			if (mState != STATE_CONNECTED)
+				return;
+			r = mConnectedThread;
+		}
+		// Perform the write unsynchronized
+		r.write(aEventType, aIsXDirection, aStartX, aStartY, aDeltaX, aDeltaY);
 	}
 
 	/**
@@ -338,14 +401,14 @@ public class BluetoothSerialService {
 					tSocket = device.createRfcommSocketToServiceRecord(SerialPortServiceClass_UUID);
 				}
 			} catch (Exception e) {
-				Log.e(TAG, "Socket Type: " + tSocketType + "create() failed", e);
+				Log.e(LOG_TAG, "Socket Type: " + tSocketType + "create() failed", e);
 			}
 			mmSocket = tSocket;
 		}
 
 		public void run() {
 			if (BlueDisplay.isINFO()) {
-				Log.i(TAG, "BEGIN mConnectThread");
+				Log.i(LOG_TAG, "BEGIN mConnectThread");
 			}
 			setName("ConnectThread");
 
@@ -363,7 +426,7 @@ public class BluetoothSerialService {
 				try {
 					mmSocket.close();
 				} catch (IOException e2) {
-					Log.e(TAG, "unable to close() socket during connection failure", e2);
+					Log.e(LOG_TAG, "unable to close() socket during connection failure", e2);
 				}
 				return;
 			}
@@ -381,17 +444,20 @@ public class BluetoothSerialService {
 			try {
 				mmSocket.close();
 			} catch (IOException e) {
-				Log.e(TAG, "close() of connect socket failed", e);
+				Log.e(LOG_TAG, "close() of connect socket failed", e);
 			}
 		}
 	}
 
 	public static final int SIZE_OF_IN_BUFFER = 40960;
 	public static final int MIN_MESSAGE_SIZE = 5; // data message with one byte
-	public static final int MIN_COMMAND_SIZE = 6; // command message with one (short) parameter
+	public static final int MIN_COMMAND_SIZE = 6; // command message with one
+													// (short) parameter
 
 	public volatile byte[] mBigReceiveBuffer = new byte[SIZE_OF_IN_BUFFER];
-	private volatile int mInputBufferWrapAroundIndex = 0; // first free byte after last byte in buffer
+	private volatile int mInputBufferWrapAroundIndex = 0; // first free byte
+															// after last byte in
+															// buffer
 	private volatile int mReceiveBufferInIndex; // first free byte
 	private volatile int mReceiveBufferOutIndex; // first unprocessed byte
 	byte[] mDataBuffer = new byte[4096];
@@ -400,15 +466,19 @@ public class BluetoothSerialService {
 	/*
 	 * internal state for searchCommand()
 	 */
-	private boolean searchStateMustBeLoaded = false; // to signal searchCommand(), that searchState must be loaded.
-	private boolean needUpdateViewMessage = true; // to signal thread, that Message should be sent on next read.
+	// to signal searchCommand(), that searchState must be loaded.
+	private boolean searchStateMustBeLoaded = false;
+
+	// To signal BT receive thread, that invalidate() message should be sent on next read.
+	private boolean mNeedUpdateViewMessage = true;
+
 	private byte searchStateCommand;
 	private int searchStateParamsLength;
 	private byte searchStateCommandReceived;
 	private int searchStateDataLengthToWaitFor = MIN_MESSAGE_SIZE;
 
 	public static final byte SYNC_TOKEN = (byte) 0xA5;
-	public static final int MAX_NUMBER_OF_PARAMS = 6;
+	public static final int MAX_NUMBER_OF_PARAMS = 12;
 	private static int[] mParameters = new int[MAX_NUMBER_OF_PARAMS];
 
 	public int getInputBufferInIndex() {
@@ -443,16 +513,20 @@ public class BluetoothSerialService {
 	}
 
 	/*
-	 * Search the input buffer for valid commands and call interpreteCommand() as long as there is data available
+	 * Search the input buffer for valid commands and call interpreteCommand() as long as there is data available Returns true if it
+	 * must be called again.
 	 */
-	void searchCommand(RPCView aRPCView) {
+	boolean searchCommand(RPCView aRPCView) {
 		if (inBufferReadingLock || (mReceiveBufferOutIndex == mReceiveBufferInIndex)) {
 			if (BlueDisplay.isDEBUG()) {
-				Log.d(TAG, "searchCommand just returns. Lock=" + inBufferReadingLock + " BufferInIndex=" + mReceiveBufferInIndex);
+				Log.d(LOG_TAG, "searchCommand just returns. Lock=" + inBufferReadingLock + " BufferInIndex="
+						+ mReceiveBufferInIndex);
 			}
-			return;
+			return false;
 		}
+		boolean tRetval = false;
 		long tStart = System.nanoTime();
+		long tNanosForChart = 0;
 		inBufferReadingLock = true;
 		byte tCommand = 0;
 		int tParamsLength = 0;
@@ -465,13 +539,14 @@ public class BluetoothSerialService {
 
 		// If data command, wait also for data
 		while (getBufferBytesAvailable() >= searchStateDataLengthToWaitFor) {
+			mNeedUpdateViewMessage = false;
+
 			if (searchStateMustBeLoaded) {
 				// restore state
 				tLengthReceived = searchStateDataLengthToWaitFor;
 				tCommandReceived = searchStateCommandReceived;
 				tCommand = searchStateCommand;
 				tParamsLength = searchStateParamsLength;
-				needUpdateViewMessage = false;
 				searchStateMustBeLoaded = false;
 			} else {
 				/*
@@ -482,11 +557,12 @@ public class BluetoothSerialService {
 					if (tByte != SYNC_TOKEN) {
 						if (mReceiveBufferOutIndex == mReceiveBufferInIndex) {
 							inBufferReadingLock = false;
-							Log.e(TAG, "Sync Token not found til end of buffer. End searchCommand. Out=" + tStartOut + "->"
+							Log.e(LOG_TAG, "Sync Token not found til end of buffer. End searchCommand. Out=" + tStartOut + "->"
 									+ mReceiveBufferOutIndex + " In=" + tStartIn + "->" + mReceiveBufferInIndex);
-							return;
+							mNeedUpdateViewMessage = true;
+							return false;
 						}
-						Log.w(TAG, "Byte=" + tByte + " at:" + mReceiveBufferOutIndex + " is no SYNC_TOKEN");
+						Log.w(LOG_TAG, "Byte=" + Integer.toHexString(tByte) + " at:" + mReceiveBufferOutIndex + " is no SYNC_TOKEN");
 					}
 				} while (tByte != SYNC_TOKEN);
 
@@ -502,17 +578,18 @@ public class BluetoothSerialService {
 				tLengthReceived = convert2BytesToInt(tByte, getByteFromBuffer());
 
 				if (BlueDisplay.isDEBUG()) {
-					Log.d(TAG, "Command=0x" + Integer.toHexString(tCommandReceived) + " length=" + tLengthReceived + " at ptr="
+					Log.d(LOG_TAG, "Command=0x" + Integer.toHexString(tCommandReceived) + " length=" + tLengthReceived + " at ptr="
 							+ (mReceiveBufferOutIndex - 1));
 				}
 
 				/*
 				 * Plausi for tLengthReceived
 				 */
-				if (tLengthReceived < 1 || (tCommandReceived < 8 && tLengthReceived > mDataBuffer.length)
+				if ((tCommandReceived < 8 && tLengthReceived > mDataBuffer.length)
 						|| (tCommandReceived >= 8 && tLengthReceived > MAX_NUMBER_OF_PARAMS * 2)) {
-					Log.e(TAG, "ParamsLength of " + tLengthReceived + " wrong. CommandToken=" + tCommandReceived + " Out="
-							+ mReceiveBufferOutIndex);
+					Log.e(LOG_TAG,
+							"ParamsLength of " + tLengthReceived + " wrong. Command=0x" + Integer.toHexString(tCommandReceived)
+									+ " Out=" + mReceiveBufferOutIndex);
 					continue;
 				}
 
@@ -526,15 +603,12 @@ public class BluetoothSerialService {
 					searchStateParamsLength = tParamsLength;
 
 					searchStateMustBeLoaded = true;
-					needUpdateViewMessage = true;
-					inBufferReadingLock = false;
-					if (BlueDisplay.isINFO()) {
-						Log.i(TAG, "Not enough data -> end searchCommand. Out=" + tStartOut + "->" + mReceiveBufferOutIndex + " /"
-								+ (mReceiveBufferOutIndex - tStartOut) + "  In=" + tStartIn + "->" + mReceiveBufferInIndex + " /"
-								+ (mReceiveBufferInIndex - tStartIn));
+					if (BlueDisplay.isDEBUG()) {
+						Log.d(LOG_TAG, "Not enough data");
 					}
-					mStatisticNanoTimeForCommands += System.nanoTime() - tStart;
-					return;
+					// break in order to draw the bitmap
+					tRetval = true;
+					break;
 				}
 			}
 
@@ -542,6 +616,7 @@ public class BluetoothSerialService {
 			 * All data available to interpret command or data
 			 */
 			if (tCommandReceived <= RPCView.LAST_FUNCTION_TAG_DATAFIELD) {
+				long tStart1 = System.nanoTime();
 				/*
 				 * Data buffer command
 				 */
@@ -554,22 +629,33 @@ public class BluetoothSerialService {
 						// Output parameter buffer as character
 						tData.append((char) mDataBuffer[i]);
 					}
-					Log.v(TAG, tData.toString());
+					Log.v(LOG_TAG, tData.toString());
 				}
 				/*
 				 * now both command and data buffer filled
 				 */
 				searchStateDataLengthToWaitFor = MIN_COMMAND_SIZE;
 				aRPCView.interpreteCommand(tCommand, mParameters, tParamsLength, mDataBuffer, null, tLengthReceived);
-				mStatisticNumberOfReceivedCommands++;
+				if (tCommand == RPCView.FUNCTION_TAG_DRAW_CHART
+						|| tCommand == RPCView.FUNCTION_TAG_DRAW_CHART_WITHOUT_DIRECT_RENDERING) {
+					mStatisticNumberOfReceivedChartCommands++;
+					tNanosForChart += System.nanoTime() - tStart1;
+					if (tCommand == RPCView.FUNCTION_TAG_DRAW_CHART) {
+						// break in order to draw the bitmap
+						tRetval = true;
+						break;
+					}
+				} else {
+					mStatisticNumberOfReceivedCommands++;
+				}
 				if ((System.nanoTime() - tStart) > MAX_DRAW_INTERVAL_NANOS) {
 					if (getBufferBytesAvailable() > SIZE_OF_IN_BUFFER / 2) {
-						// skip requests
+						// TODO skip requests
 
 					}
-					Log.w(TAG, "Return searchCommand() prematurely after 0.5 seconds");
+					Log.w(LOG_TAG, "Return searchCommand() prematurely after 0.5 seconds");
 					// break after 0.5 seconds to enable drawing of the bitmap
-					needUpdateViewMessage = true;
+					tRetval = true;
 					break;
 				}
 
@@ -592,54 +678,66 @@ public class BluetoothSerialService {
 						tValue = mParameters[i];
 						tParamsHex.append(" 0x" + Integer.toHexString(tValue & 0xFFFF));
 					}
-					Log.v(TAG, tParamsHex.toString());
+					Log.v(LOG_TAG, tParamsHex.toString());
 				}
 
-				if (tCommand < RPCView.LAST_FUNCTION_TAG_WITHOUT_DATA) {
+				if (tCommand < RPCView.FIRST_FUNCTION_TAG_WITH_DATA) {
 					searchStateDataLengthToWaitFor = MIN_COMMAND_SIZE;
 					/*
 					 * direct commands without data
 					 */
 					aRPCView.interpreteCommand(tCommand, mParameters, tParamsLength, null, null, 0);
 					mStatisticNumberOfReceivedCommands++;
+					if (tCommand == RPCView.FUNCTION_TAG_DRAW_DISPLAY) {
+						// break in order to draw the bitmap
+						tRetval = true;
+						break;
+					}
+
 					if ((System.nanoTime() - tStart) > MAX_DRAW_INTERVAL_NANOS) {
-						Log.w(TAG, "Return searchCommand() prematurely after 0.5 seconds");
-						// break after 0.5 seconds to enable drawing of the bitmap
-						needUpdateViewMessage = true;
+						Log.w(LOG_TAG, "Return searchCommand() prematurely after 0.5 seconds");
+						// break after 0.5 seconds to enable drawing of the
+						// bitmap
+						tRetval = true;
 						break;
 					}
 				} else {
 					searchStateDataLengthToWaitFor = MIN_MESSAGE_SIZE;
 					/*
-					 * Wait for header of data message
+					 * Wait for header of message part containing the expected data
 					 */
 					i = 0;
 					while (getBufferBytesAvailable() < MIN_MESSAGE_SIZE && i < 100) {
 						try {
-							if (BlueDisplay.isINFO()) {
-								Log.i(TAG, "wait for data header i=" + i);
+							if (BlueDisplay.isDEBUG()) {
+								Log.d(LOG_TAG, "wait for data header i=" + i);
 							}
 							Thread.sleep(10);
 							i++;
 						} catch (InterruptedException e) {
-							Log.e(TAG, "Wait for data header was interrupted", e);
+							Log.e(LOG_TAG, "Wait for data header was interrupted", e);
 						}
 					}
 					if (i == 100) {
-						Log.e(TAG, "Timeout waiting for data sync token. Out=" + mReceiveBufferOutIndex + " In="
+						Log.e(LOG_TAG, "Timeout waiting for data sync token. Out=" + mReceiveBufferOutIndex + " In="
 								+ mReceiveBufferInIndex);
 					}
 				}
 			}
-
+		} /* while */
+		if (!tRetval) {
+			// no retrigger by doDraw -> need trigger from ConnectedThread
+			mNeedUpdateViewMessage = true;
 		}
-		if (BlueDisplay.isINFO()) {
-			Log.i(TAG, "End searchCommand. Out=" + tStartOut + "->" + mReceiveBufferOutIndex + " /"
+		if (BlueDisplay.isDEBUG()) {
+			Log.d(LOG_TAG, "End searchCommand. Out=" + tStartOut + "->" + mReceiveBufferOutIndex + " /"
 					+ (mReceiveBufferOutIndex - tStartOut) + "  In=" + tStartIn + "->" + mReceiveBufferInIndex + " /"
 					+ (mReceiveBufferInIndex - tStartIn));
 		}
 		inBufferReadingLock = false;
-		mStatisticNanoTimeForCommands += System.nanoTime() - tStart;
+		mStatisticNanoTimeForCommands += System.nanoTime() - tStart - tNanosForChart;
+		mStatisticNanoTimeForChart += tNanosForChart;
+		return tRetval;
 	}
 
 	/**
@@ -662,13 +760,13 @@ public class BluetoothSerialService {
 				mmInStream = socket.getInputStream();
 				mmOutStream = socket.getOutputStream();
 			} catch (IOException e) {
-				Log.e(TAG, "temp sockets not created", e);
+				Log.e(LOG_TAG, "temp sockets not created", e);
 			}
 		}
 
 		public void run() {
 			if (BlueDisplay.isINFO()) {
-				Log.i(TAG, "BEGIN mConnectedThread");
+				Log.i(LOG_TAG, "BEGIN mConnectedThread");
 			}
 			// Read old content from Bluetooth buffer
 			// Data is present if data was sent before connection
@@ -694,15 +792,18 @@ public class BluetoothSerialService {
 			} catch (IOException e1) {
 				// end up here if cancel() / mmSocket.close() was called before
 				if (BlueDisplay.isVERBOSE()) {
-					Log.w(TAG, "Start run - catched IOException - assume disconnected");
+					Log.w(LOG_TAG, "Start run - catched IOException - assume disconnected");
 				}
 				connectionLost(); // show toast
 				return;
 			}
 			mReceiveBufferInIndex = 0;
 			mReceiveBufferOutIndex = 0;
+
+			mBlueDisplayContext.mRPCView.resetAll();
 			write(EVENT_TAG_CONNECTION_BUILD_UP, mBlueDisplayContext.mRPCView.mActualViewWidth,
 					mBlueDisplayContext.mRPCView.mActualViewHeight);
+
 			int tReadLength;
 			// Keep listening to the InputStream while connected
 			while (true) {
@@ -721,49 +822,50 @@ public class BluetoothSerialService {
 							mReceiveBufferInIndex += tReadLength;
 							if (tOldInIndex < tOutIndex && mReceiveBufferInIndex > tOutIndex) {
 								// input index overhauls out index
-								Log.e(TAG, "Buffer overflow! InIndex=" + mReceiveBufferInIndex);
+								Log.e(LOG_TAG, "Buffer overflow! InIndex=" + mReceiveBufferInIndex);
 							}
 							if (mReceiveBufferInIndex >= SIZE_OF_IN_BUFFER - 256) {
 								// buffer wrap around
 								mInputBufferWrapAroundIndex = mReceiveBufferInIndex;
 								mReceiveBufferInIndex = 0;
 								mStatisticNumberOfBufferWrapArounds++;
-								if (BlueDisplay.isINFO()) {
+								if (BlueDisplay.isDEBUG()) {
 									// Output length
-									Log.i(TAG, "Buffer wrap around " + (mInputBufferWrapAroundIndex - tOutIndex)
+									Log.d(LOG_TAG, "Buffer wrap around " + (mInputBufferWrapAroundIndex - tOutIndex)
 											+ " bytes unprocessed");
 								}
 								if (mReceiveBufferInIndex > tOutIndex) {
 									// after wrap bigger than out index
-									Log.e(TAG, "Buffer overflow! InIndex=" + mReceiveBufferInIndex);
+									Log.e(LOG_TAG, "Buffer overflow! InIndex=" + mReceiveBufferInIndex);
 								}
 							}
 							if (BlueDisplay.isDEBUG()) {
 								// Output length
-								Log.d(TAG, "Read length=" + tReadLength + " BufferInIndex=" + mReceiveBufferInIndex);
+								Log.d(LOG_TAG, "Read length=" + tReadLength + " BufferInIndex=" + mReceiveBufferInIndex);
 							}
 
 							/*
 							 * Do not send message if searchCommand is just running or will be running.
 							 */
-							if (needUpdateViewMessage || tBytesInBufferToProcess < MIN_COMMAND_SIZE
+							if (mNeedUpdateViewMessage || tBytesInBufferToProcess < MIN_COMMAND_SIZE
 									|| tBytesInBufferToProcess < MIN_MESSAGE_SIZE) {
 								mHandler.sendEmptyMessage(BlueDisplay.MESSAGE_UPDATE_VIEW);
 							} else {
 								if (BlueDisplay.isVERBOSE()) {
-									Log.d(TAG, "skip update view message tBytesInBufferToProcess=" + tBytesInBufferToProcess);
+									Log.d(LOG_TAG, "skip update view message tBytesInBufferToProcess=" + tBytesInBufferToProcess);
 								}
 							}
 
 						} else {
-							Log.w(TAG, "Read length = 0");
+							Log.w(LOG_TAG, "Read length = 0");
 						}
 					} while (true);
 
 				} catch (IOException e) {
-					// end up here if cancel() / mmSocket.close() was called before
+					// end up here if cancel() / mmSocket.close() was called
+					// before
 					if (BlueDisplay.isVERBOSE()) {
-						Log.w(TAG, "Catched IOException - assume disconnected");
+						Log.w(LOG_TAG, "Catched IOException - assume disconnected");
 					}
 					connectionLost(); // show toast
 					break;
@@ -772,19 +874,18 @@ public class BluetoothSerialService {
 		}
 
 		/**
-		 * Write to the connected OutStream.
-		 * 
-		 * @param buffer
-		 *            The bytes to write
+		 * send 16 bit X and Y position
 		 */
-		public void write(int aEventType, float aXPos, float aYPos) {
+		public void write(int aEventType, int aXPos, int aYPos) {
 			byte[] tTouchData = new byte[7];
+			int tEventLength = 7;
+
 			try {
-				aXPos += 0.5;
-				aYPos += 0.5; // for correct rounding
 				// assemble data buffer
-				tTouchData[0] = 7; // gross message length in bytes
-				tTouchData[1] = (byte) (aEventType & 0xFF); // Function token
+				tTouchData[0] = (byte) tEventLength; // gross message
+														// length in bytes
+				tTouchData[1] = (byte) (aEventType & 0xFF); // Function
+															// token
 				short tXPos = (short) aXPos;
 				tTouchData[2] = (byte) (tXPos & 0xFF); // LSB
 				tTouchData[3] = (byte) ((tXPos >> 8) & 0xFF); // MSB
@@ -793,15 +894,140 @@ public class BluetoothSerialService {
 				tTouchData[5] = (byte) ((tYPos >> 8) & 0xFF); // MSB
 				tTouchData[6] = SYNC_TOKEN;
 				if (BlueDisplay.isINFO()) {
-					Log.i(TAG, "Write Type=" + (aEventType & 0xFF) + " X=" + aXPos + " Y=" + aYPos);
+					Log.i(LOG_TAG, "Write Type=" + (aEventType & 0xFF) + " X=" + aXPos + " Y=" + aYPos);
 				}
 
-				mmOutStream.write(tTouchData);
+				mmOutStream.write(tTouchData, 0, tEventLength);
 				mmOutStream.flush();
-				mStatisticNumberOfSentBytes += 7;
+				mStatisticNumberOfSentBytes += tEventLength;
 				mStatisticNumberOfSentCommands++;
 			} catch (IOException e) {
-				Log.e(TAG, "Exception during write", e);
+				Log.e(LOG_TAG, "Exception during write", e);
+			}
+		}
+
+		/*
+		 * send 16 bit button index 32 bit callback address and 32 bit value
+		 */
+		public void write(int aEventType, int aButtonIndex, int aCallbackAddress, int aValue) {
+			byte[] tTouchData = new byte[13];
+			int tEventLength = 13;
+
+			try {
+				// assemble data buffer
+				int tIndex = 0;
+				tTouchData[tIndex++] = (byte) tEventLength; // gross message
+															// length in bytes
+				tTouchData[tIndex++] = (byte) (aEventType & 0xFF); // Function
+																	// token
+				short tShortValue = (short) aButtonIndex;
+				tTouchData[tIndex++] = (byte) (tShortValue & 0xFF); // LSB
+				tTouchData[tIndex++] = (byte) ((tShortValue >> 8) & 0xFF); // MSB
+
+				tTouchData[tIndex++] = (byte) (aCallbackAddress & 0xFF); // LSB
+				tTouchData[tIndex++] = (byte) ((aCallbackAddress >> 8) & 0xFF); // MSB
+				tTouchData[tIndex++] = (byte) ((aCallbackAddress >> 16) & 0xFF);
+				tTouchData[tIndex++] = (byte) ((aCallbackAddress >> 24) & 0xFF);
+				tTouchData[tIndex++] = (byte) (aValue & 0xFF); // LSB
+				tTouchData[tIndex++] = (byte) ((aValue >> 8) & 0xFF); // MSB
+				tTouchData[tIndex++] = (byte) ((aValue >> 16) & 0xFF);
+				tTouchData[tIndex++] = (byte) ((aValue >> 24) & 0xFF);
+				tTouchData[tIndex++] = SYNC_TOKEN;
+				if (BlueDisplay.isINFO()) {
+					Log.i(LOG_TAG, "Write Type=" + (aEventType & 0xFF) + " ButtonIndex=" + aButtonIndex + " CallbackAddress=0x"
+							+ Integer.toHexString(aCallbackAddress) + " Value=" + aValue);
+				}
+
+				mmOutStream.write(tTouchData, 0, tEventLength);
+				mmOutStream.flush();
+				mStatisticNumberOfSentBytes += tEventLength;
+				mStatisticNumberOfSentCommands++;
+			} catch (IOException e) {
+				Log.e(LOG_TAG, "Exception during write", e);
+			}
+		}
+
+		/*
+		 * send 16 bit button index 32 bit callback address and 32 bit FLOAT value
+		 */
+		public void write(int aEventType, int aCallbackAddress, float aValue) {
+			byte[] tTouchData = new byte[13];
+			int tEventLength = 13;
+
+			try {
+				// assemble data buffer
+				int tIndex = 0;
+				tTouchData[tIndex++] = (byte) tEventLength; // gross message
+															// length in bytes
+				tTouchData[tIndex++] = (byte) (aEventType & 0xFF); // Function
+																	// token
+				short tShortValue = (short) 0xFF;
+				tTouchData[tIndex++] = (byte) (tShortValue & 0xFF); // LSB
+				tTouchData[tIndex++] = (byte) ((tShortValue >> 8) & 0xFF); // MSB
+
+				tTouchData[tIndex++] = (byte) (aCallbackAddress & 0xFF); // LSB
+				tTouchData[tIndex++] = (byte) ((aCallbackAddress >> 8) & 0xFF); // MSB
+				tTouchData[tIndex++] = (byte) ((aCallbackAddress >> 16) & 0xFF);
+				tTouchData[tIndex++] = (byte) ((aCallbackAddress >> 24) & 0xFF);
+				int tValue = Float.floatToIntBits(aValue);
+				tTouchData[tIndex++] = (byte) (tValue & 0xFF); // LSB
+				tTouchData[tIndex++] = (byte) ((tValue >> 8) & 0xFF); // MSB
+				tTouchData[tIndex++] = (byte) ((tValue >> 16) & 0xFF);
+				tTouchData[tIndex++] = (byte) ((tValue >> 24) & 0xFF);
+				tTouchData[tIndex++] = SYNC_TOKEN;
+				if (BlueDisplay.isINFO()) {
+					Log.i(LOG_TAG,
+							"Write Type=" + (aEventType & 0xFF) + " CallbackAddress=0x" + Integer.toHexString(aCallbackAddress)
+									+ " Value=" + aValue);
+				}
+
+				mmOutStream.write(tTouchData, 0, tEventLength);
+				mmOutStream.flush();
+				mStatisticNumberOfSentBytes += tEventLength;
+				mStatisticNumberOfSentCommands++;
+			} catch (IOException e) {
+				Log.e(LOG_TAG, "Exception during write", e);
+			}
+		}
+
+		/*
+		 * send 16 bit direction 32 bit start position and 32 bit delta
+		 */
+		public void write(int aEventType, int aIsXDirection, int aStartX, int aStartY, int aDeltaX, int aDeltaY) {
+			byte[] tTouchData = new byte[13];
+			int tEventLength = 13;
+
+			try {
+				// assemble data buffer
+				int tIndex = 0;
+				tTouchData[tIndex++] = (byte) tEventLength; // gross message
+															// length in bytes
+				tTouchData[tIndex++] = (byte) (aEventType & 0xFF); // Function
+																	// token
+				short tShortValue = (short) aIsXDirection;
+				tTouchData[tIndex++] = (byte) (tShortValue & 0xFF); // LSB
+				tTouchData[tIndex++] = (byte) ((tShortValue >> 8) & 0xFF); // MSB
+
+				tTouchData[tIndex++] = (byte) (aStartX & 0xFF); // LSB
+				tTouchData[tIndex++] = (byte) ((aStartX >> 8) & 0xFF); // MSB
+				tTouchData[tIndex++] = (byte) (aStartY & 0xFF); // LSB
+				tTouchData[tIndex++] = (byte) ((aStartY >> 8) & 0xFF); // MSB
+				tTouchData[tIndex++] = (byte) (aDeltaX & 0xFF); // LSB
+				tTouchData[tIndex++] = (byte) ((aDeltaX >> 8) & 0xFF); // MSB
+				tTouchData[tIndex++] = (byte) (aDeltaY & 0xFF); // LSB
+				tTouchData[tIndex++] = (byte) ((aDeltaY >> 8) & 0xFF); // MSB
+				tTouchData[tIndex++] = SYNC_TOKEN;
+				if (BlueDisplay.isINFO()) {
+					Log.i(LOG_TAG, "Write Type=" + (aEventType & 0xFF) + " Direction=" + aIsXDirection + " Start=" + aStartX + "/"
+							+ aStartY + " Delta=" + aDeltaX + "/" + aDeltaY);
+				}
+
+				mmOutStream.write(tTouchData, 0, tEventLength);
+				mmOutStream.flush();
+				mStatisticNumberOfSentBytes += tEventLength;
+				mStatisticNumberOfSentCommands++;
+			} catch (IOException e) {
+				Log.e(LOG_TAG, "Exception during write", e);
 			}
 		}
 
@@ -809,7 +1035,7 @@ public class BluetoothSerialService {
 			try {
 				mmSocket.close();
 			} catch (IOException e) {
-				Log.e(TAG, "close() of connect socket failed", e);
+				Log.e(LOG_TAG, "close() of connect socket failed", e);
 			}
 		}
 	}

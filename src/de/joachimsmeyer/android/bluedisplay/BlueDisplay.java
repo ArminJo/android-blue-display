@@ -2,7 +2,8 @@
  * 	SUMMARY
  * 	Blue Display is an Open Source Android remote Display for Arduino etc.
  * 	It receives basic draw requests from Arduino etc. over Bluetooth and renders it.
- * 	Send touch events over Bluetooth back to Arduino.
+ * 	It also implements basic GUI elements as buttons and sliders.
+ * 	It sends touch or GUI callback events over Bluetooth back to Arduino.
  * 
  *  Copyright (C) 2014  Armin Joachimsmeyer
  *  armin.joachimsmeyer@gmail.com
@@ -36,20 +37,17 @@
  *  - Use of font size 11, 22, 44 (which is roughly compatible with 7x12 Font)
  *  
  *  SUPPORTED FUNCTIONS
- *  void setFlags(uint16_t aFlags);
- *  void clearDisplay(uint16_t aColor);
- *  void drawPixel(uint16_t aXPos, uint16_t aYPos, uint16_t aColor);
- *  void drawCircle(uint16_t aXCenter, uint16_t aYCenter, uint16_t aRadius, uint16_t aColor);
- *  void fillCircle(uint16_t aXCenter, uint16_t aYCenter, uint16_t aRadius, uint16_t aColor);
- *  void fillRect(uint16_t aXStart, uint16_t aYStart, uint16_t aXEnd, uint16_t aYEnd, uint16_t aColor);
- *  void drawChar(uint16_t aPosX, uint16_t aPosY, char aChar, uint8_t aCharSize, uint16_t aFGColor, uint16_t aBGColor);
- *  void drawText(uint16_t aXStart, uint16_t aYStart, const char *aStringPtr, uint8_t aFontSize, uint16_t aColor,
- *          uint16_t aBGColor);
- *  void drawLine(uint16_t aXStart, uint16_t aYStart, uint16_t aXEnd, uint16_t aYEnd, uint16_t aColor);
- *  void drawChartByteBuffer(uint16_t aXOffset, uint16_t aYOffset, uint16_t aColor, uint16_t aClearBeforeColor, uint8_t *aByteBuffer,
- *          uint16_t aByteBufferLength);
  *  
-
+ *  Set display size used for drawing commands. The real display size is user definable by just resizing the view.
+ *  Set modes for Touch recognition.
+ *  Clear display.
+ *  Draw Pixel.
+ *  Draw and fill Circle, Rectangle and Path.
+ *  Draw Character, Text and Multi-line Text transparent or with background color for easy overwriting existent text.
+ *  Draw Line.
+ *  Draw Chart from byte or short values. Enables clearing of last drawn chart.
+ *  Set Codepage and set Mapping for utf16 character to codepage location. I.e. have Omega at 0x81.
+ *  
  */
 
 package de.joachimsmeyer.android.bluedisplay;
@@ -65,21 +63,26 @@ import android.bluetooth.BluetoothDevice;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.content.SharedPreferences.Editor;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
 import android.preference.PreferenceManager;
+import android.text.Editable;
+import android.text.InputType;
 import android.util.DisplayMetrics;
 import android.util.Log;
+import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.View.OnClickListener;
+import android.view.WindowManager;
 import android.widget.Button;
+import android.widget.EditText;
+import android.widget.TextView;
 import android.widget.Toast;
 
 public class BlueDisplay extends Activity {
@@ -94,7 +97,8 @@ public class BlueDisplay extends Activity {
 	// Debugging
 	static final String LOG_TAG = "BlueDisplay";
 	private static final String LOGLEVEL_KEY = "loglevel";
-	private static int mLoglevel = Log.WARN; // 6=ERROR 5=WARN, 4=INFO, 3=DEBUG 2=VERBOSE
+	private static int mLoglevel = Log.WARN; // 6=ERROR 5=WARN, 4=INFO, 3=DEBUG
+												// 2=VERBOSE
 
 	public static void setLogLevel(int aNewLevel) {
 		mLoglevel = aNewLevel;
@@ -120,6 +124,12 @@ public class BlueDisplay extends Activity {
 	public static final int MESSAGE_TOAST = 5;
 	public static final int MESSAGE_UPDATE_VIEW = 6;
 
+	// Message sent by RPCView
+	public static final int REQUEST_INPUT_DATA = 10;
+	public static final String CALLBACK_ADDRESS = "callback_address";
+	public static final String DIALOG_PROMPT = "dialog_prompt";
+	public static final String NUMBER_FLAG = "doNumber";
+
 	// Key names received from the BluetoothSerialService Handler
 	public static final String DEVICE_NAME = "device_name";
 	public static final String TOAST = "toast";
@@ -141,18 +151,14 @@ public class BlueDisplay extends Activity {
 	private boolean mShowEnableBTDialog; // We show the enable Bluetooth dialog
 
 	// State variable is declared in BluetoothSerialService
-	private static final String TOUCH_MOVE_KEY = "touchmode_move";
+	private static final String SHOW_TOUCH_COORDINATES_KEY = "show_touch_mode";
 	private static final String ALLOW_INSECURE_CONNECTIONS_KEY = "allowinsecureconnections";
 
 	private static final String SCREENORIENTATION_KEY = "screenorientation";
 	private int mPreferredScreenOrientation;
 	protected int mActualScreenOrientation;
 
-	// Variable is in RPCView
-	private static final String COMPATIBILITY_MODE_KEY = "compatibilitymode";
-	private static final String TOUCH_KEY = "touchmode";
-
-	private MenuItem mMenuItemConnect;
+	MenuItem mMenuItemConnect;
 	// private MenuItem mMenuItemStartStopLogging;
 
 	private Dialog mAboutDialog;
@@ -169,11 +175,13 @@ public class BlueDisplay extends Activity {
 		/*
 		 * Create RPCView
 		 */
-		mRPCView = new RPCView(this);
+		mRPCView = new RPCView(this, mHandlerBT);
 		setContentView(mRPCView);
 		mRPCView.setFocusable(true);
 		mRPCView.setFocusableInTouchMode(true);
 		mRPCView.requestFocus();
+
+		getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
 		/*
 		 * Bluetooth
@@ -205,11 +213,11 @@ public class BlueDisplay extends Activity {
 				mSerialService.stop();
 			}
 		}
-
+		// Set default values only once (after installation)
+		PreferenceManager.setDefaultValues(this, R.xml.preferences, false);
 		readPreferences();
 
 		mShowEnableBTDialog = false;
-
 		// mRPCView.showTestpage();
 		Log.i(LOG_TAG, "+++ DONE IN ON CREATE +++");
 	}
@@ -249,8 +257,8 @@ public class BlueDisplay extends Activity {
 				tAlertDialog.show();
 			}
 		}
-		setRequestedOrientation(mPreferredScreenOrientation);
 		readPreferences();
+		setRequestedOrientation(mPreferredScreenOrientation);
 		mRPCView.invalidate();
 	}
 
@@ -306,10 +314,16 @@ public class BlueDisplay extends Activity {
 		MenuInflater inflater = getMenuInflater();
 		inflater.inflate(R.menu.option_menu, menu);
 		mMenuItemConnect = menu.getItem(0);
-		// mMenuItemStartStopLogging = menu.findItem(R.id.menu_start_stop_logging);
-		// if (mSerialService != null && isDEBUG()) {
-		// mMenuItemStartStopLogging.setTitle(R.string.menu_stop_logging);
-		// }
+		if (mMenuItemConnect != null) {
+			if (mSerialService.getState() == BluetoothSerialService.STATE_CONNECTED) {
+				// modify menu to show appropriate entry
+				mMenuItemConnect.setIcon(android.R.drawable.ic_menu_close_clear_cancel);
+				mMenuItemConnect.setTitle(R.string.menu_disconnect);
+			} else {
+				mMenuItemConnect.setIcon(android.R.drawable.ic_menu_search);
+				mMenuItemConnect.setTitle(R.string.menu_connect);
+			}
+		}
 		return true;
 	}
 
@@ -334,22 +348,27 @@ public class BlueDisplay extends Activity {
 			startActivity(new Intent(this, BlueDisplayPreferences.class));
 			return true;
 			// case R.id.menu_start_stop_logging:
-			// if (mMenuItemStartStopLogging.getTitle() == getString(R.string.menu_stop_logging)) {
+			// if (mMenuItemStartStopLogging.getTitle() ==
+			// getString(R.string.menu_stop_logging)) {
 			// mMenuItemStartStopLogging.setTitle(R.string.menu_start_logging);
 			// mLoglevel = Log.WARN;
 			//
 			// // For future use:
 			// // String tState = Environment.getExternalStorageState();
 			// // if (Environment.MEDIA_MOUNTED.equals(tState)) {
-			// // File tLogDirectory = Environment.getExternalStorageDirectory();
-			// // SimpleDateFormat format = new SimpleDateFormat("yyyyMMdd_HHmmss");
+			// // File tLogDirectory =
+			// Environment.getExternalStorageDirectory();
+			// // SimpleDateFormat format = new
+			// SimpleDateFormat("yyyyMMdd_HHmmss");
 			// // String currentDateTimeString = format.format(new Date());
-			// // String mLogFileName = tLogDirectory.getAbsolutePath() + "/blue_display_" + currentDateTimeString + ".log";
+			// // String mLogFileName = tLogDirectory.getAbsolutePath() +
+			// "/blue_display_" + currentDateTimeString + ".log";
 			// // File tLogFile = new File(mLogFileName);
 			// // FileOutputStream tFileOutputStream;
 			// // try {
 			// // tFileOutputStream = new FileOutputStream(tLogFile, true);
-			// // PrintWriter tLogFilePrintWriter = new PrintWriter(tFileOutputStream);
+			// // PrintWriter tLogFilePrintWriter = new
+			// PrintWriter(tFileOutputStream);
 			// // } catch (FileNotFoundException e) {
 			// // // should not happen since new File(mLogFileName) before
 			// // }
@@ -438,13 +457,21 @@ public class BlueDisplay extends Activity {
 				}
 				mRPCView.invalidate();
 				break;
+
+			case REQUEST_INPUT_DATA:
+				if (isDEBUG()) {
+					Log.d(LOG_TAG, "REQUEST_INPUT_DATA");
+				}
+				showInputDialog(msg.getData().getBoolean(NUMBER_FLAG), msg.getData().getInt(CALLBACK_ADDRESS), msg.getData()
+						.getString(BlueDisplay.DIALOG_PROMPT));
+				break;
 			}
 
 		}
 	};
 
 	/*
-	 * Handles result from DeviceListActivity
+	 * Handles result from started activities
 	 */
 	@Override
 	public void onActivityResult(int requestCode, int resultCode, Intent data) {
@@ -473,6 +500,8 @@ public class BlueDisplay extends Activity {
 				}
 				finishDialogNoBluetooth();
 			}
+			break;
+
 		}
 	}
 
@@ -513,6 +542,51 @@ public class BlueDisplay extends Activity {
 		mAboutDialog.show();
 	}
 
+	@SuppressLint("InflateParams")
+	public void showInputDialog(boolean aDoNumber, final int aCallbackAddress, String tShortPrompt) {
+		LayoutInflater tLayoutInflater = LayoutInflater.from(this);
+		View tInputView = tLayoutInflater.inflate(R.layout.input_data, null);
+
+		if (tShortPrompt != null && tShortPrompt.length() > 0) {
+			final TextView tTitle = (TextView) tInputView.findViewById(R.id.title_input_data);
+			String tPromptLeading = getResources().getString(R.string.title_input_data_prompt_leading);
+			if (tPromptLeading.length() == 0 && tShortPrompt.length() > 1) {
+				// convert first character to upper case
+				tShortPrompt = Character.toUpperCase(tShortPrompt.charAt(0)) + tShortPrompt.substring(1);
+			}
+			String tPromptTrailing = getResources().getString(R.string.title_input_data_prompt_trailing);
+			tTitle.setText(tPromptLeading + " " + tShortPrompt + " " + tPromptTrailing);
+		}
+
+		final EditText tUserInput = (EditText) tInputView.findViewById(R.id.editTextDialogUserInput);
+		if (aDoNumber) {
+			tUserInput.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+		}
+		AlertDialog.Builder tBuilder = new AlertDialog.Builder(this);
+		tBuilder.setView(tInputView);
+		tBuilder.setCancelable(true);
+		tBuilder.setPositiveButton(R.string.alert_dialog_ok, new DialogInterface.OnClickListener() {
+			public void onClick(DialogInterface dialog, int id) {
+				Editable tNumber = tUserInput.getText();
+				float tValue;
+				try {
+					tValue = Float.parseFloat(tNumber.toString());
+					mSerialService.writeEvent(BluetoothSerialService.EVENT_TAG_NUMBER_CALLBACK, aCallbackAddress, tValue);
+				} catch (NumberFormatException e) {
+					tValue = Float.NaN;
+					Log.w(LOG_TAG, "Entered data \"" + tNumber + "\" is no float");
+				}
+			}
+		});
+		tBuilder.setNegativeButton(R.string.alert_dialog_cancel, new DialogInterface.OnClickListener() {
+			public void onClick(DialogInterface dialog, int id) {
+				dialog.cancel();
+			}
+		});
+		AlertDialog tAlertDialog = tBuilder.create();
+		tAlertDialog.show();
+	}
+
 	/*
 	 * Opens an alert and show statistics
 	 */
@@ -550,7 +624,8 @@ public class BlueDisplay extends Activity {
 		/*
 		 * Load preferences
 		 */
-		// integer preferences do not work on Android. Values of <integer-array> are always stored as Strings in HashMap
+		// integer preferences do not work on Android. Values of <integer-array>
+		// are always stored as Strings in HashMap
 		int tScreenOrientation = Integer.parseInt(tSharedPreferences.getString(SCREENORIENTATION_KEY, ""
 				+ ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED));
 		switch (tScreenOrientation) {
@@ -573,28 +648,15 @@ public class BlueDisplay extends Activity {
 		}
 		if (mRPCView != null) {
 			// don't use setter methods since they modify the preference too
-			mRPCView.mTouchEnable = tSharedPreferences.getBoolean(TOUCH_KEY, mRPCView.isTouchEnable());
-			mRPCView.mTouchMoveEnable = tSharedPreferences.getBoolean(TOUCH_MOVE_KEY, mRPCView.isTouchMoveEnable());
-			mRPCView.mCompatibilityMode = tSharedPreferences.getBoolean(COMPATIBILITY_MODE_KEY, mRPCView.isCompatibilityMode());
+			//mRPCView.mTouchMoveEnable = tSharedPreferences.getBoolean(TOUCH_MOVE_KEY, mRPCView.isTouchMoveEnable());
+			mRPCView.mShowTouchCoordinates = tSharedPreferences.getBoolean(SHOW_TOUCH_COORDINATES_KEY, false);
 		}
 	}
 
-	public void setCompatibilityModePreference(boolean aNewMode) {
-		Editor tEditor = PreferenceManager.getDefaultSharedPreferences(this).edit();
-		tEditor.putBoolean(COMPATIBILITY_MODE_KEY, aNewMode);
-		tEditor.apply();
-	}
-
-	public void setTouchModePreference(boolean aNewMode) {
-		Editor tEditor = PreferenceManager.getDefaultSharedPreferences(this).edit();
-		tEditor.putBoolean(COMPATIBILITY_MODE_KEY, aNewMode);
-		tEditor.apply();
-	}
-
-	public void setTouchMoveModePreference(boolean aNewMode) {
-		Editor tEditor = PreferenceManager.getDefaultSharedPreferences(this).edit();
-		tEditor.putBoolean(COMPATIBILITY_MODE_KEY, aNewMode);
-		tEditor.apply();
-	}
+//	public void setTouchMoveModePreference(boolean aNewMode) {
+//		Editor tEditor = PreferenceManager.getDefaultSharedPreferences(this).edit();
+//		tEditor.putBoolean(TOUCH_MOVE_KEY, aNewMode);
+//		tEditor.apply();
+//	}
 
 }

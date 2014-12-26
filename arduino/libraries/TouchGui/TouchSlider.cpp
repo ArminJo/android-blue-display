@@ -15,8 +15,8 @@
  * 		getWidth()
  * 		fillRect()
  * 		drawText()
- * 		FONT_WIDTH
- * 		FONT_HEIGHT
+ * 		TEXT_SIZE_11_WIDTH
+ * 		TEXT_SIZE_11_HEIGHT
  *
  * 	Ram usage:
  * 		15 byte + 39 bytes per slider
@@ -69,9 +69,8 @@ TouchSlider::TouchSlider() {
 /*
  * Static initialization of slider default colors
  */
-void TouchSlider::setDefaults(const int8_t aDefaultTouchBorder, const uint16_t aDefaultSliderColor,
-        const uint16_t aDefaultBarColor, const uint16_t aDefaultBarThresholdColor,
-        const uint16_t aDefaultBarBackgroundColor, const uint16_t aDefaultCaptionColor,
+void TouchSlider::setDefaults(const int8_t aDefaultTouchBorder, const uint16_t aDefaultSliderColor, const uint16_t aDefaultBarColor,
+        const uint16_t aDefaultBarThresholdColor, const uint16_t aDefaultBarBackgroundColor, const uint16_t aDefaultCaptionColor,
         const uint16_t aDefaultValueColor, const uint16_t aDefaultValueCaptionBackgroundColor) {
     sDefaultSliderColor = aDefaultSliderColor;
     sDefaultBarColor = aDefaultBarColor;
@@ -91,9 +90,9 @@ void TouchSlider::setDefaultBarColor(const uint16_t aDefaultBarColor) {
     sDefaultBarColor = aDefaultBarColor;
 }
 
-void TouchSlider::initSliderColors(const uint16_t aSliderColor, const uint16_t aBarColor,
-        const uint16_t aBarThresholdColor, const uint16_t aBarBackgroundColor, const uint16_t aCaptionColor,
-        const uint16_t aValueColor, const uint16_t aValueCaptionBackgroundColor) {
+void TouchSlider::initSliderColors(const uint16_t aSliderColor, const uint16_t aBarColor, const uint16_t aBarThresholdColor,
+        const uint16_t aBarBackgroundColor, const uint16_t aCaptionColor, const uint16_t aValueColor,
+        const uint16_t aValueCaptionBackgroundColor) {
     mSliderColor = aSliderColor;
     mBarColor = aBarColor;
     mBarThresholdColor = aBarThresholdColor;
@@ -103,8 +102,12 @@ void TouchSlider::initSliderColors(const uint16_t aSliderColor, const uint16_t a
     mValueCaptionBackgroundColor = aValueCaptionBackgroundColor;
 }
 
-void TouchSlider::initValueAndCaptionBackgroundColor(const uint16_t aValueCaptionBackgroundColor) {
+void TouchSlider::setValueAndCaptionBackgroundColor(const uint16_t aValueCaptionBackgroundColor) {
     mValueCaptionBackgroundColor = aValueCaptionBackgroundColor;
+}
+
+void TouchSlider::setValueColor(const uint16_t aValueColor) {
+    mValueColor = aValueColor;
 }
 
 /*
@@ -131,19 +134,18 @@ void TouchSlider::deactivateAllSliders() {
 /**
  *  for simple predefined slider
  */
-int8_t TouchSlider::initSimpleSlider(const uint16_t aPositionX, const uint16_t aPositionY, const uint8_t aSize,
-        const char * aCaption, const uint8_t aOptions, uint8_t (*aOnChangeHandler)(TouchSlider * const, const uint8_t),
-        const char * (*aValueHandler)(uint8_t)) {
-    return initSlider(aPositionX, aPositionY, aSize, TOUCHSLIDER_DEFAULT_MAX_VALUE,
-            (TOUCHSLIDER_DEFAULT_MAX_VALUE / 4) * 3, TOUCHSLIDER_DEFAULT_THRESHOLD_VALUE, aCaption, sDefaultTouchBorder,
-            aOptions, aOnChangeHandler, aValueHandler);
+void TouchSlider::initSimpleSlider(const uint16_t aPositionX, const uint16_t aPositionY, const uint8_t aSize, const char * aCaption,
+        const uint8_t aOptions, int16_t (*aOnChangeHandler)(TouchSlider * const, const int16_t),
+        const char * (*aValueHandler)(int16_t)) {
+    initSlider(aPositionX, aPositionY, aSize, TOUCHSLIDER_DEFAULT_MAX_VALUE, (TOUCHSLIDER_DEFAULT_MAX_VALUE / 4) * 3,
+            TOUCHSLIDER_DEFAULT_THRESHOLD_VALUE, aCaption, sDefaultTouchBorder, aOptions, aOnChangeHandler, aValueHandler);
 }
 
 /**
  * @brief initialization with all parameters except color
  * @param aPositionX determines upper left corner
  * @param aPositionY determines upper left corner
- * @param aSize size of border and bar in pixel * #TOUCHSLIDER_OVERALL_SIZE_FACTOR
+ * @param aSize size of bar (and border) in pixel * #TOUCHSLIDER_OVERALL_SIZE_FACTOR
  * @param aMaxValue size of slider bar in pixel
  * @param aThresholdValue value where color of bar changes from #TOUCHSLIDER_DEFAULT_BAR_COLOR to #TOUCHSLIDER_DEFAULT_BAR_THRESHOLD_COLOR
  * @param aInitalValue
@@ -155,12 +157,10 @@ int8_t TouchSlider::initSimpleSlider(const uint16_t aPositionX, const uint16_t a
  *  * @return false if parameters are not consistent ie. are internally modified
  *  or if not enough space to draw caption or value.
  */
-int8_t TouchSlider::initSlider(const uint16_t aPositionX, const uint16_t aPositionY, const uint16_t aSize,
-        const uint16_t aMaxValue, const uint16_t aThresholdValue, const uint16_t aInitalValue, const char * aCaption,
-        const int8_t aTouchBorder, const uint8_t aOptions,
-        uint8_t (*aOnChangeHandler)(TouchSlider * const, const uint8_t), const char * (*aValueHandler)(uint8_t)) {
-
-    int8_t tRetValue = 0;
+void TouchSlider::initSlider(const uint16_t aPositionX, const uint16_t aPositionY, const uint16_t aSize, const uint16_t aMaxValue,
+        const uint16_t aThresholdValue, const int16_t aInitalValue, const char * aCaption, const int8_t aTouchBorder,
+        const uint8_t aOptions, int16_t (*aOnChangeHandler)(TouchSlider * const, const int16_t),
+        const char * (*aValueHandler)(int16_t)) {
 
     mSliderColor = sDefaultSliderColor;
     mBarColor = sDefaultBarColor;
@@ -171,8 +171,8 @@ int8_t TouchSlider::initSlider(const uint16_t aPositionX, const uint16_t aPositi
     mPositionY = aPositionY;
     mOptions = aOptions;
     mCaption = aCaption;
-    mSize = aSize;
-    mMaxValue = aMaxValue;
+    mBarWidth = aSize;
+    mBarLength = aMaxValue;
     mActualValue = aInitalValue;
     mThresholdValue = aThresholdValue;
     mTouchBorder = aTouchBorder;
@@ -182,9 +182,9 @@ int8_t TouchSlider::initSlider(const uint16_t aPositionX, const uint16_t aPositi
         mOptions |= TOUCHSLIDER_SHOW_VALUE;
     }
 
-    tRetValue = checkParameterValues();
+    checkParameterValues();
 
-    uint8_t tSizeOfBorders = 2 * mSize;
+    uint8_t tSizeOfBorders = 2 * mBarWidth;
     if (!(mOptions & TOUCHSLIDER_SHOW_BORDER)) {
         tSizeOfBorders = 0;
     }
@@ -193,45 +193,40 @@ int8_t TouchSlider::initSlider(const uint16_t aPositionX, const uint16_t aPositi
      * compute lower right corner and validate
      */
     if (mOptions & TOUCHSLIDER_IS_HORIZONTAL) {
-        mPositionXRight = mPositionX + mMaxValue + tSizeOfBorders - 1;
+        mPositionXRight = mPositionX + mBarLength + tSizeOfBorders - 1;
         if (mPositionXRight >= mDisplay->getDisplayWidth()) {
             // simple fallback
-            mSize = 1;
+            mBarWidth = 1;
             mPositionX = 0;
-            mPositionXRight = mPositionX + mMaxValue + 1;
-            tRetValue = TOUCHSLIDER_ERROR_X_RIGHT;
+            mPositionXRight = mDisplay->getDisplayWidth() - 1;
         }
-        mPositionYBottom = mPositionY + ((tSizeOfBorders + mSize) * TOUCHSLIDER_SIZE_FACTOR) - 1;
+        mPositionYBottom = mPositionY + ((tSizeOfBorders + mBarWidth) * TOUCHSLIDER_SIZE_FACTOR) - 1;
         if (mPositionYBottom >= mDisplay->getDisplayHeight()) {
             // simple fallback
-            mSize = 1;
+            mBarWidth = 1;
             mPositionY = 0;
-            mPositionYBottom = mPositionY + ((tSizeOfBorders + mSize) * TOUCHSLIDER_SIZE_FACTOR) - 1;
-            tRetValue = TOUCHSLIDER_ERROR_Y_BOTTOM;
+            mPositionYBottom = mDisplay->getDisplayHeight() - 1;
         }
 
     } else {
-        mPositionXRight = mPositionX + ((tSizeOfBorders + mSize) * TOUCHSLIDER_SIZE_FACTOR) - 1;
+        mPositionXRight = mPositionX + ((tSizeOfBorders + mBarWidth) * TOUCHSLIDER_SIZE_FACTOR) - 1;
         if (mPositionXRight >= mDisplay->getDisplayWidth()) {
             // simple fallback
-            mSize = 1;
+            mBarWidth = 1;
             mPositionX = 0;
-            mPositionXRight = mPositionX + ((tSizeOfBorders + mSize) * TOUCHSLIDER_SIZE_FACTOR) - 1;
-            tRetValue = TOUCHSLIDER_ERROR_X_RIGHT;
+            mPositionXRight = mDisplay->getDisplayWidth() - 1;
         }
-        mPositionYBottom = mPositionY + mMaxValue + tSizeOfBorders - 1;
+        mPositionYBottom = mPositionY + mBarLength + tSizeOfBorders - 1;
         if (mPositionYBottom >= mDisplay->getDisplayHeight()) {
             // simple fallback
-            mSize = 1;
+            mBarWidth = 1;
             mPositionY = 0;
-            mPositionYBottom = mPositionY + mMaxValue + 1;
-            tRetValue = TOUCHSLIDER_ERROR_Y_BOTTOM;
+            mPositionYBottom = mDisplay->getDisplayHeight() - 1;
         }
     }
-    return tRetValue;
 }
 
-void TouchSlider::drawSlider() {
+void TouchSlider::drawSlider(void) {
     mIsActive = true;
 
     if ((mOptions & TOUCHSLIDER_SHOW_BORDER)) {
@@ -248,32 +243,30 @@ void TouchSlider::drawSlider() {
 void TouchSlider::drawBorder() {
     if (mOptions & TOUCHSLIDER_IS_HORIZONTAL) {
         // Create value bar upper border
-        mDisplay->fillRect(mPositionX, mPositionY, mPositionXRight, mPositionY + (TOUCHSLIDER_SIZE_FACTOR * mSize) - 1,
-                mSliderColor);
+        mDisplay->fillRectRel(mPositionX, mPositionY, mBarLength + (2 * mBarWidth), TOUCHSLIDER_SIZE_FACTOR * mBarWidth, mSliderColor);
         // Create value bar lower border
-        mDisplay->fillRect(mPositionX, mPositionY + (2 * TOUCHSLIDER_SIZE_FACTOR * mSize), mPositionXRight,
-                mPositionYBottom, mSliderColor);
+        mDisplay->fillRectRel(mPositionX, mPositionY + (2 * TOUCHSLIDER_SIZE_FACTOR * mBarWidth), mBarLength + (2 * mBarWidth),
+                TOUCHSLIDER_SIZE_FACTOR * mBarWidth, mSliderColor);
 
         // Create left border
-        mDisplay->fillRect(mPositionX, mPositionY + (TOUCHSLIDER_SIZE_FACTOR * mSize) - 1, mPositionX + mSize - 1,
-                mPositionY + (2 * TOUCHSLIDER_SIZE_FACTOR * mSize), mSliderColor);
+        mDisplay->fillRectRel(mPositionX, mPositionY + (TOUCHSLIDER_SIZE_FACTOR * mBarWidth), mBarWidth, TOUCHSLIDER_SIZE_FACTOR * mBarWidth,
+                mSliderColor);
         // Create right border
-        mDisplay->fillRect(mPositionXRight - mSize + 1, mPositionY + (TOUCHSLIDER_SIZE_FACTOR * mSize) - 1,
-                mPositionXRight, mPositionY + (2 * TOUCHSLIDER_SIZE_FACTOR * mSize), mSliderColor);
+        mDisplay->fillRectRel(mPositionXRight - mBarWidth + 1, mPositionY + (TOUCHSLIDER_SIZE_FACTOR * mBarWidth), mBarWidth,
+                TOUCHSLIDER_SIZE_FACTOR * mBarWidth, mSliderColor);
     } else {
         // Create left border
-        mDisplay->fillRect(mPositionX, mPositionY, mPositionX + (TOUCHSLIDER_SIZE_FACTOR * mSize) - 1, mPositionYBottom,
-                mSliderColor);
+        mDisplay->fillRectRel(mPositionX, mPositionY, TOUCHSLIDER_SIZE_FACTOR * mBarWidth, mBarLength + (2 * mBarWidth), mSliderColor);
         // Create right border
-        mDisplay->fillRect(mPositionX + (2 * TOUCHSLIDER_SIZE_FACTOR * mSize), mPositionY, mPositionXRight,
-                mPositionYBottom, mSliderColor);
+        mDisplay->fillRectRel(mPositionX + (2 * TOUCHSLIDER_SIZE_FACTOR * mBarWidth), mPositionY, TOUCHSLIDER_SIZE_FACTOR * mBarWidth,
+                mBarLength + (2 * mBarWidth), mSliderColor);
 
         // Create value bar upper border
-        mDisplay->fillRect(mPositionX + (TOUCHSLIDER_SIZE_FACTOR * mSize), mPositionY,
-                mPositionX + (2 * TOUCHSLIDER_SIZE_FACTOR * mSize) - 1, mPositionY + mSize - 1, mSliderColor);
+        mDisplay->fillRectRel(mPositionX + (TOUCHSLIDER_SIZE_FACTOR * mBarWidth), mPositionY, TOUCHSLIDER_SIZE_FACTOR * mBarWidth, mBarWidth,
+                mSliderColor);
         // Create value bar lower border
-        mDisplay->fillRect(mPositionX + (TOUCHSLIDER_SIZE_FACTOR * mSize), mPositionYBottom - mSize + 1,
-                mPositionX + (2 * TOUCHSLIDER_SIZE_FACTOR * mSize) - 1, mPositionYBottom, mSliderColor);
+        mDisplay->fillRectRel(mPositionX + (TOUCHSLIDER_SIZE_FACTOR * mBarWidth), mPositionYBottom - mBarWidth + 1,
+                TOUCHSLIDER_SIZE_FACTOR * mBarWidth, mBarWidth, mSliderColor);
     }
 }
 
@@ -281,9 +274,9 @@ void TouchSlider::drawBorder() {
  * (re)draws the middle bar according to actual value
  */
 void TouchSlider::drawBar() {
-    int tActualValue = mActualValue;
-    if (tActualValue > mMaxValue) {
-        tActualValue = mMaxValue;
+    int16_t tActualValue = mActualValue;
+    if (tActualValue > mBarLength) {
+        tActualValue = mBarLength;
     }
     if (tActualValue < 0) {
         tActualValue = 0;
@@ -291,35 +284,31 @@ void TouchSlider::drawBar() {
 
     uint8_t tBorderSize = 0;
     if ((mOptions & TOUCHSLIDER_SHOW_BORDER)) {
-        tBorderSize = mSize;
+        tBorderSize = mBarWidth;
     }
 // draw background bar
-    if (mActualValue < mMaxValue) {
+    if (tActualValue < mBarLength) {
         if (mOptions & TOUCHSLIDER_IS_HORIZONTAL) {
-            mDisplay->fillRect(mPositionX + tBorderSize + tActualValue,
-                    mPositionY + (tBorderSize * TOUCHSLIDER_SIZE_FACTOR), mPositionXRight - tBorderSize,
-                    mPositionYBottom - (tBorderSize * TOUCHSLIDER_SIZE_FACTOR), mBarBackgroundColor);
+            mDisplay->fillRectRel(mPositionX + tBorderSize + tActualValue, mPositionY + (tBorderSize * TOUCHSLIDER_SIZE_FACTOR),
+                    mBarLength - tActualValue, tBorderSize * TOUCHSLIDER_SIZE_FACTOR, mBarBackgroundColor);
         } else {
-            mDisplay->fillRect(mPositionX + (tBorderSize * TOUCHSLIDER_SIZE_FACTOR), mPositionY + tBorderSize,
-                    mPositionX + ((tBorderSize + mSize) * TOUCHSLIDER_SIZE_FACTOR) - 1,
-                    mPositionYBottom - tBorderSize - tActualValue, mBarBackgroundColor);
+            mDisplay->fillRectRel(mPositionX + (tBorderSize * TOUCHSLIDER_SIZE_FACTOR), mPositionY + tBorderSize,
+                    tBorderSize * TOUCHSLIDER_SIZE_FACTOR, mBarLength - tActualValue, mBarBackgroundColor);
         }
     }
 
 // Draw value bar
-    if (mActualValue > 0) {
+    if (tActualValue > 0) {
         uint16_t tColor = mBarColor;
-        if (mActualValue > mThresholdValue) {
+        if (tActualValue > mThresholdValue) {
             tColor = mBarThresholdColor;
         }
         if (mOptions & TOUCHSLIDER_IS_HORIZONTAL) {
-            mDisplay->fillRect(mPositionX + tBorderSize, mPositionY + (tBorderSize * TOUCHSLIDER_SIZE_FACTOR),
-                    mPositionX + tBorderSize + tActualValue - 1,
-                    mPositionYBottom - (tBorderSize * TOUCHSLIDER_SIZE_FACTOR), tColor);
+            mDisplay->fillRectRel(mPositionX + tBorderSize, mPositionY + (tBorderSize * TOUCHSLIDER_SIZE_FACTOR), tActualValue,
+                    tBorderSize * TOUCHSLIDER_SIZE_FACTOR, tColor);
         } else {
-            mDisplay->fillRect(mPositionX + (tBorderSize * TOUCHSLIDER_SIZE_FACTOR),
-                    mPositionYBottom - tBorderSize - tActualValue + 1,
-                    mPositionXRight - (tBorderSize * TOUCHSLIDER_SIZE_FACTOR), mPositionYBottom - tBorderSize, tColor);
+            mDisplay->fillRectRel(mPositionX + (tBorderSize * TOUCHSLIDER_SIZE_FACTOR),
+                    mPositionYBottom - tBorderSize - tActualValue + 1, tBorderSize * TOUCHSLIDER_SIZE_FACTOR, tActualValue, tColor);
         }
     }
 }
@@ -331,19 +320,19 @@ void TouchSlider::printCaption() {
     if (mCaption == NULL) {
         return;
     }
-    uint16_t tLength = strlen(mCaption) * TEXT_SIZE_11;
+    uint16_t tLength = strlen(mCaption) * TEXT_SIZE_11_WIDTH;
     if (tLength == 0) {
         mCaption = NULL;
     }
 
     uint8_t tSliderWidthPixel;
     if (mOptions & TOUCHSLIDER_IS_HORIZONTAL) {
-        tSliderWidthPixel = mMaxValue;
+        tSliderWidthPixel = mBarLength;
         if ((mOptions & TOUCHSLIDER_SHOW_BORDER)) {
-            tSliderWidthPixel += 2 * mSize;
+            tSliderWidthPixel += 2 * mBarWidth;
         }
     } else {
-        tSliderWidthPixel = mSize * TOUCHSLIDER_SIZE_FACTOR;
+        tSliderWidthPixel = mBarWidth * TOUCHSLIDER_SIZE_FACTOR;
         if ((mOptions & TOUCHSLIDER_SHOW_BORDER)) {
             tSliderWidthPixel = 3 * tSliderWidthPixel;
         }
@@ -356,10 +345,10 @@ void TouchSlider::printCaption() {
         tCaptionPositionX = 0;
     }
 // space for caption?
-    uint16_t tCaptionPositionY = mPositionYBottom + mSize + getTextAscend(TEXT_SIZE_11);
-    if ((tCaptionPositionY) > mDisplay->getDisplayHeight()) {
-        // no space for caption
-        return;
+    uint16_t tCaptionPositionY = mPositionYBottom + mBarWidth + TEXT_SIZE_11_ASCEND;
+    if (tCaptionPositionY > mDisplay->getDisplayHeight() - TEXT_SIZE_11_DECEND) {
+        // fallback
+        tCaptionPositionY = mDisplay->getDisplayHeight() - TEXT_SIZE_11_DECEND;
     }
     mDisplay->drawText(tCaptionPositionX, tCaptionPositionY, (char *) mCaption, TEXT_SIZE_11, mCaptionColor,
             mValueCaptionBackgroundColor);
@@ -373,21 +362,19 @@ int8_t TouchSlider::printValue() {
         return 0;
     }
     const char * pValueAsString;
-    uint16_t tValuePositionY = mPositionYBottom + mSize + getTextAscend(TEXT_SIZE_11);
-    if (mCaption != NULL
-            && !((mOptions & TOUCHSLIDER_IS_HORIZONTAL) && !(mOptions & TOUCHSLIDER_HORIZONTAL_VALUE_BELOW_TITLE))) {
+    uint16_t tValuePositionY = mPositionYBottom + mBarWidth + TEXT_SIZE_11_ASCEND;
+    if (mCaption != NULL && !((mOptions & TOUCHSLIDER_IS_HORIZONTAL) && !(mOptions & TOUCHSLIDER_HORIZONTAL_VALUE_BELOW_TITLE))) {
         tValuePositionY += TEXT_SIZE_11_HEIGHT;
     }
 
-    if ((tValuePositionY) > mDisplay->getDisplayHeight()) {
-        // no space for caption
-        mOptions &= ~TOUCHSLIDER_SHOW_VALUE;
-        return TOUCHSLIDER_ERROR_VALUE_TOO_HIGH;
+    if (tValuePositionY > mDisplay->getDisplayHeight() - TEXT_SIZE_11_DECEND) {
+        // fallback
+        tValuePositionY = mDisplay->getDisplayHeight() - TEXT_SIZE_11_DECEND;
     }
     if (mValueHandler == NULL) {
         char tValueAsString[4];
         pValueAsString = &tValueAsString[0];
-        sprintf(tValueAsString, "%03u", mActualValue);
+        sprintf(tValueAsString, "%03d", mActualValue);
     } else {
         // mValueHandler has to provide the char array
         pValueAsString = mValueHandler(mActualValue);
@@ -417,18 +404,18 @@ bool TouchSlider::checkSlider(const uint16_t aTouchPositionX, const uint16_t aTo
     }
     uint8_t tTinyBorderSize = 0;
     if ((mOptions & TOUCHSLIDER_SHOW_BORDER)) {
-        tTinyBorderSize = mSize;
+        tTinyBorderSize = mBarWidth;
     }
     /*
      *  Touch position is in slider (plus additional touch border) here
      */
 // adjust value according to size of upper and lower border
-    uint8_t tActualTouchValue;
+    int16_t tActualTouchValue;
     if (mOptions & TOUCHSLIDER_IS_HORIZONTAL) {
         if (aTouchPositionX < (mPositionX + tTinyBorderSize)) {
             tActualTouchValue = 0;
         } else if (aTouchPositionX > (mPositionXRight - tTinyBorderSize)) {
-            tActualTouchValue = mMaxValue;
+            tActualTouchValue = mBarLength;
         } else {
             tActualTouchValue = aTouchPositionX - mPositionX - tTinyBorderSize + 1;
         }
@@ -436,7 +423,7 @@ bool TouchSlider::checkSlider(const uint16_t aTouchPositionX, const uint16_t aTo
         if (aTouchPositionY > (mPositionYBottom - tTinyBorderSize)) {
             tActualTouchValue = 0;
         } else if (aTouchPositionY < (mPositionY + tTinyBorderSize)) {
-            tActualTouchValue = mMaxValue;
+            tActualTouchValue = mBarLength;
         } else {
             tActualTouchValue = mPositionYBottom - tTinyBorderSize - aTouchPositionY + 1;
         }
@@ -452,8 +439,8 @@ bool TouchSlider::checkSlider(const uint16_t aTouchPositionX, const uint16_t aTo
                 // value returned did not change - do nothing
                 return true;
             }
-            if (tActualTouchValue > mMaxValue) {
-                tActualTouchValue = mMaxValue;
+            if (tActualTouchValue > mBarLength) {
+                tActualTouchValue = mBarLength;
             }
         }
         // value changed - store and redraw
@@ -472,24 +459,35 @@ bool TouchSlider::checkAllSliders(const uint16_t aTouchPositionX, const uint16_t
 // walk through list
     while (tObjectPointer != NULL) {
         if (tObjectPointer->mIsActive && tObjectPointer->checkSlider(aTouchPositionX, aTouchPositionY)) {
+            sSliderTouched = true;
             return true;
         }
         tObjectPointer = tObjectPointer->mNextObject;
     }
+    sSliderTouched = false;
     return false;
 }
 
-int8_t TouchSlider::getActualValue() const {
+int16_t TouchSlider::getActualValue() const {
     return mActualValue;
 }
 
 /*
  * also redraws value bar
  */
-void TouchSlider::setActualValue(int8_t actualValue) {
+void TouchSlider::setActualValue(int16_t actualValue) {
+    mActualValue = actualValue;
+}
+
+void TouchSlider::setActualValueAndDraw(int16_t actualValue) {
     mActualValue = actualValue;
     drawBar();
     printValue();
+}
+
+void TouchSlider::setActualValueAndDrawBar(int16_t actualValue) {
+    mActualValue = actualValue;
+    drawBar();
 }
 
 uint16_t TouchSlider::getPositionXRight() const {
@@ -511,36 +509,22 @@ int8_t TouchSlider::checkParameterValues() {
     /**
      * Check and copy parameter
      */
-    uint16_t tScreenWidth = mDisplay->getDisplayWidth();
-    uint16_t tScreenHeight = mDisplay->getDisplayHeight();
     int8_t tRetValue = 0;
 
-    if (mPositionX >= (tScreenWidth - (3 * TOUCHSLIDER_SIZE_FACTOR))) {
-        // simple fallback
-        mPositionX = 0;
-        tRetValue = TOUCHSLIDER_ERROR_POS_X;
-    }
-
-    if (mPositionY >= (tScreenHeight - 3)) {
-        // simple fallback
-        mPositionY = 0;
-        tRetValue = TOUCHSLIDER_ERROR_POS_Y;
-    }
-
-    if (mSize == 0) {
-        mSize = TOUCHSLIDER_DEFAULT_SIZE;
+    if (mBarWidth == 0) {
+        mBarWidth = TOUCHSLIDER_DEFAULT_SIZE;
         tRetValue = TOUCHSLIDER_ERROR_SIZE_ZERO;
-    } else if (mSize > 20) {
-        mSize = TOUCHSLIDER_DEFAULT_SIZE;
+    } else if (mBarWidth > 20) {
+        mBarWidth = TOUCHSLIDER_DEFAULT_SIZE;
         tRetValue = TOUCHSLIDER_ERROR_SIZE;
     }
-    if (mMaxValue == 0) {
+    if (mBarLength == 0) {
         tRetValue = TOUCHSLIDER_ERROR_MAX_VALUE;
-        mMaxValue = 1;
+        mBarLength = 1;
     }
-    if (mActualValue > mMaxValue) {
+    if (mActualValue > mBarLength) {
         tRetValue = TOUCHSLIDER_ERROR_ACTUAL_VALUE;
-        mActualValue = mMaxValue;
+        mActualValue = mBarLength;
     }
 
     return tRetValue;

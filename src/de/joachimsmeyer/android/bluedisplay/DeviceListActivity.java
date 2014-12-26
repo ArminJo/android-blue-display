@@ -38,7 +38,7 @@ import android.widget.TextView;
  */
 public class DeviceListActivity extends Activity {
 	// Debugging
-	private static final String LOG_TAG = "DeviceListActivity";
+	private static final String LOG_TAG = "BlueDeviceListActivity";
 
 	// Return Intent extra
 	public static String EXTRA_DEVICE_ADDRESS = "device_address";

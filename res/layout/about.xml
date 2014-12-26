@@ -16,6 +16,17 @@
         android:layout_height="wrap_content"
         android:orientation="vertical" >
 
+        <ImageView
+            android:id="@+id/abouticon"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="left"
+            android:contentDescription="@string/logo"
+            android:gravity="center"
+            android:src="@drawable/icon" >
+
+        </ImageView>
+
         <TextView
             android:id="@+id/copyright"
             android:layout_width="fill_parent"
@@ -36,7 +47,7 @@
             android:layout_width="fill_parent"
             android:layout_height="wrap_content"
             android:gravity="center"
-            android:paddingBottom="10dp"
+            android:padding="10dp"
             android:text="@string/code_www" />
 
         <Button

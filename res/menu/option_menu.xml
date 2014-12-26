@@ -18,6 +18,7 @@
 
     <item
         android:id="@+id/menu_connect"
+        android:showAsAction="ifRoom"
         android:icon="@android:drawable/ic_menu_search"
         android:title="@string/menu_connect"/>
     <item
@@ -30,7 +31,7 @@
         android:title="@string/menu_start_logging"/> -->
     <item
         android:id="@+id/menu_show_statistics"
-        android:icon="@android:drawable/ic_menu_report_image"
+        android:icon="@android:drawable/ic_menu_info_details"
         android:title="@string/menu_show_statistics"/> 
     <item
         android:id="@+id/menu_about"

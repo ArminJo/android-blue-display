@@ -16,12 +16,26 @@ TouchLib	KEYWORD1
 #######################################
 
 # from BlueDisplay
-getTextWidth	KEYWORD2
 setFlagsAndSize	KEYWORD2
-needsRefresh	KEYWORD2
-isConnectionJustBuildUp	KEYWORD2
 setCharacterMapping	KEYWORD2
 clearDisplay	KEYWORD2
+drawPixel	KEYWORD2
+drawLine	KEYWORD2
+drawLineFastOneX	KEYWORD2
+drawLineWithThickness	KEYWORD2
+drawRect	KEYWORD2
+fillRect	KEYWORD2
+drawCircle	KEYWORD2
+fillCircle	KEYWORD2
+drawChar	KEYWORD2
+drawText	KEYWORD2
+drawTextPGM	KEYWORD2
+drawMLText	KEYWORD2
+drawChartByteBuffer	KEYWORD2
+needsRefresh	KEYWORD2
+isConnectionJustBuildUp KEYWORD2
+getTextWidth	KEYWORD2
+getTextAscend	KEYWORD2
 
 # from BlueSerial
 USART3_sendBuffer	KEYWORD2
@@ -31,12 +45,46 @@ sendUSART5ArgsAndByteBuffer	KEYWORD2
 USART_isBluetoothPaired	KEYWORD2
 
 # from TouchLib
-wasTouched	KEYWORD2
-handleReceiveEvent	KEYWORD2
-isTouchStillDown	KEYWORD2
-getXActual	KEYWORD2
-getYActual	KEYWORD2
+sButtonTouched	KEYWORD2
+sAutorepeatButtonTouched	KEYWORD2
+sSliderTouched	KEYWORD2
+sNothingTouched	KEYWORD2
+sSliderIsMoveTarget	KEYWORD2
+resetTouchFlags	KEYWORD2
+
+sDisableTouchUpOnce	KEYWORD2
+
+checkAndHandleTouchEvents	KEYWORD2
+registerSwipeEndCallback	KEYWORD2
+setSwipeEndCallbackEnabled	KEYWORD2
+registerConnectCallback	KEYWORD2
+registerSimpleConnectCallback	KEYWORD2
+registerResizeCallback	KEYWORD2
+registerSimpleResizeCallback	KEYWORD2
+registerTouchDownCallback	KEYWORD2
+simpleTouchDownHandler	KEYWORD2
+simpleTouchDownHandlerForSlider	KEYWORD2
+registerTouchMoveCallback	KEYWORD2
+simpleTouchMoveHandlerForSlider	KEYWORD2
+handleEvent	KEYWORD2
 
 #######################################
 # Constants (LITERAL1)
 #######################################
+
+BD_FLAG_FIRST_RESET_ALL	LITERAL1
+BD_FLAG_TOUCH_DISABLE	LITERAL1
+BD_FLAG_USE_MAX_SIZE	LITERAL1
+
+TEXT_SIZE_11	LITERAL1
+TEXT_SIZE_22	LITERAL1
+
+RGB	LITERAL1
+COLOR_WHITE	LITERAL1
+COLOR_BLACK	LITERAL1
+COLOR_RED	LITERAL1
+COLOR_GREEN	LITERAL1
+COLOR_BLUE	LITERAL1
+COLOR_YELLOW	LITERAL1
+COLOR_MAGENTA	LITERAL1
+COLOR_CYAN	LITERAL1
