@@ -84,6 +84,9 @@ public class BluetoothSerialService {
 	public final static int EVENT_TAG_SWIPE_CALLBACK_ACTION = 0x22;
 
 	public final static int EVENT_TAG_NUMBER_CALLBACK = 0x28;
+	public final static int EVENT_TAG_NOP_ACTION = 0x2F;
+
+	public final static int EVENT_TAG_FIRST_SENSOR_ACTION_CODE = 0x30;
 
 	private boolean mAllowInsecureConnections;
 
@@ -204,8 +207,8 @@ public class BluetoothSerialService {
 	 *            The BluetoothDevice to connect
 	 */
 	public synchronized void connect(BluetoothDevice device) {
-		if (BlueDisplay.isDEBUG()) {
-			Log.d(LOG_TAG, "connect to: " + device);
+		if (BlueDisplay.isINFO()) {
+			Log.i(LOG_TAG, "connect to: " + device);
 		}
 
 		// Cancel any thread attempting to make a connection
@@ -237,8 +240,8 @@ public class BluetoothSerialService {
 	 *            The BluetoothDevice that has been connected
 	 */
 	public synchronized void connected(BluetoothSocket socket, BluetoothDevice device) {
-		if (BlueDisplay.isDEBUG()) {
-			Log.d(LOG_TAG, "connected");
+		if (BlueDisplay.isINFO()) {
+			Log.i(LOG_TAG, "connected");
 		}
 
 		// Cancel the thread that completed the connection
@@ -297,7 +300,7 @@ public class BluetoothSerialService {
 	 *            The bytes to write
 	 * @see ConnectedThread#write(byte[])
 	 */
-	public void writeEvent(int aEventType, int aXPos, int aYPos) {
+	public void writeTouchAndScaleEvent(int aEventType, int aXPos, int aYPos) {
 		// Create temporary object
 		ConnectedThread r;
 		// Synchronize a copy of the ConnectedThread
@@ -307,10 +310,10 @@ public class BluetoothSerialService {
 			r = mConnectedThread;
 		}
 		// Perform the write unsynchronized
-		r.write(aEventType, aXPos, aYPos);
+		r.sendTouchScaleAndConnect(aEventType, aXPos, aYPos);
 	}
 
-	public void writeEvent(int aEventType, int aButtonIndex, int aCallbackAddress, int aValue) {
+	public void writeGuiCallbackEvent(int aEventType, int aButtonIndex, int aCallbackAddress, int aValue) {
 		// Create temporary object
 		ConnectedThread r;
 		// Synchronize a copy of the ConnectedThread
@@ -320,10 +323,10 @@ public class BluetoothSerialService {
 			r = mConnectedThread;
 		}
 		// Perform the write unsynchronized
-		r.write(aEventType, aButtonIndex, aCallbackAddress, aValue);
+		r.sendGuiCallback(aEventType, aButtonIndex, aCallbackAddress, aValue);
 	}
 
-	public void writeEvent(int aEventType, int aCallbackAddress, float aValue) {
+	public void writeNumberCallbackEvent(int aEventType, int aCallbackAddress, float aValue) {
 		// Create temporary object
 		ConnectedThread r;
 		// Synchronize a copy of the ConnectedThread
@@ -333,10 +336,10 @@ public class BluetoothSerialService {
 			r = mConnectedThread;
 		}
 		// Perform the write unsynchronized
-		r.write(aEventType, aCallbackAddress, aValue);
+		r.sendNumberCallback(aEventType, aCallbackAddress, aValue);
 	}
 
-	public void writeEvent(int aEventType, int aIsXDirection, int aStartX, int aStartY, int aDeltaX, int aDeltaY) {
+	public void writeSwipeCallbackEvent(int aEventType, int aIsXDirection, int aStartX, int aStartY, int aDeltaX, int aDeltaY) {
 		// Create temporary object
 		ConnectedThread r;
 		// Synchronize a copy of the ConnectedThread
@@ -346,19 +349,32 @@ public class BluetoothSerialService {
 			r = mConnectedThread;
 		}
 		// Perform the write unsynchronized
-		r.write(aEventType, aIsXDirection, aStartX, aStartY, aDeltaX, aDeltaY);
+		r.sendSwipeCallback(aEventType, aIsXDirection, aStartX, aStartY, aDeltaX, aDeltaY);
+	}
+
+	public void writeSensorEvent(int aEventType, float aValueX, float aValueY, float aValueZ) {
+		// Create temporary object
+		ConnectedThread r;
+		// Synchronize a copy of the ConnectedThread
+		synchronized (this) {
+			if (mState != STATE_CONNECTED)
+				return;
+			r = mConnectedThread;
+		}
+		// Perform the write unsynchronized
+		r.sendSensor(aEventType, aValueX, aValueY, aValueZ);
 	}
 
 	/**
 	 * Indicate that the connection attempt failed and notify the UI Activity.
 	 */
-	private void connectionFailed() {
+	private void connectionFailed(String aName) {
 		setState(STATE_NONE);
 
 		// Send a failure message back to the Activity
 		Message msg = mHandler.obtainMessage(BlueDisplay.MESSAGE_TOAST);
 		Bundle bundle = new Bundle();
-		bundle.putString(BlueDisplay.TOAST, mBlueDisplayContext.getString(R.string.toast_unable_to_connect));
+		bundle.putString(BlueDisplay.TOAST, mBlueDisplayContext.getString(R.string.toast_unable_to_connect) + " " + aName);
 		msg.setData(bundle);
 		mHandler.sendMessage(msg);
 	}
@@ -369,12 +385,8 @@ public class BluetoothSerialService {
 	private void connectionLost() {
 		setState(STATE_NONE);
 
-		// Send a failure message back to the Activity
-		Message msg = mHandler.obtainMessage(BlueDisplay.MESSAGE_TOAST);
-		Bundle bundle = new Bundle();
-		bundle.putString(BlueDisplay.TOAST, mBlueDisplayContext.getString(R.string.toast_connection_lost));
-		msg.setData(bundle);
-		mHandler.sendMessage(msg);
+		// Send a disconnect message back to the Activity
+		mHandler.sendEmptyMessage(BlueDisplay.MESSAGE_DISCONNECT);
 	}
 
 	/**
@@ -421,7 +433,7 @@ public class BluetoothSerialService {
 				// successful connection or an exception
 				mmSocket.connect();
 			} catch (IOException e) {
-				connectionFailed();
+				connectionFailed(mmDevice.getName());
 				// Close the socket
 				try {
 					mmSocket.close();
@@ -513,13 +525,13 @@ public class BluetoothSerialService {
 	}
 
 	/*
-	 * Search the input buffer for valid commands and call interpreteCommand() as long as there is data available Returns true if it
+	 * Search the input buffer for valid commands and call interpretCommand() as long as there is data available Returns true if it
 	 * must be called again.
 	 */
 	boolean searchCommand(RPCView aRPCView) {
 		if (inBufferReadingLock || (mReceiveBufferOutIndex == mReceiveBufferInIndex)) {
-			if (BlueDisplay.isDEBUG()) {
-				Log.d(LOG_TAG, "searchCommand just returns. Lock=" + inBufferReadingLock + " BufferInIndex="
+			if (BlueDisplay.isVERBOSE()) {
+				Log.v(LOG_TAG, "searchCommand just returns. Lock=" + inBufferReadingLock + " BufferInIndex="
 						+ mReceiveBufferInIndex);
 			}
 			return false;
@@ -549,10 +561,10 @@ public class BluetoothSerialService {
 				tParamsLength = searchStateParamsLength;
 				searchStateMustBeLoaded = false;
 			} else {
-				/*
-				 * check for SYNC Token
-				 */
 				do {
+					/*
+					 * check for SYNC Token
+					 */
 					tByte = getByteFromBuffer();
 					if (tByte != SYNC_TOKEN) {
 						if (mReceiveBufferOutIndex == mReceiveBufferInIndex) {
@@ -577,8 +589,8 @@ public class BluetoothSerialService {
 				tByte = getByteFromBuffer();
 				tLengthReceived = convert2BytesToInt(tByte, getByteFromBuffer());
 
-				if (BlueDisplay.isDEBUG()) {
-					Log.d(LOG_TAG, "Command=0x" + Integer.toHexString(tCommandReceived) + " length=" + tLengthReceived + " at ptr="
+				if (BlueDisplay.isVERBOSE()) {
+					Log.v(LOG_TAG, "Command=0x" + Integer.toHexString(tCommandReceived) + " length=" + tLengthReceived + " at ptr="
 							+ (mReceiveBufferOutIndex - 1));
 				}
 
@@ -603,8 +615,8 @@ public class BluetoothSerialService {
 					searchStateParamsLength = tParamsLength;
 
 					searchStateMustBeLoaded = true;
-					if (BlueDisplay.isDEBUG()) {
-						Log.d(LOG_TAG, "Not enough data");
+					if (BlueDisplay.isVERBOSE()) {
+						Log.v(LOG_TAG, "Not enough data in buffer for a complete command");
 					}
 					// break in order to draw the bitmap
 					tRetval = true;
@@ -623,11 +635,20 @@ public class BluetoothSerialService {
 				for (i = 0; i < tLengthReceived; i++) {
 					mDataBuffer[i] = getByteFromBuffer();
 				}
-				if (BlueDisplay.isVERBOSE()) {
+				if (BlueDisplay.isDEVELPMENT_TESTING()) {
 					StringBuilder tData = new StringBuilder("Data=");
+					int tValue;
 					for (i = 0; i < tLengthReceived; i++) {
-						// Output parameter buffer as character
-						tData.append((char) mDataBuffer[i]);
+						if (tLengthReceived < 160) {
+							// Output parameter buffer as character
+							tData.append((char) mDataBuffer[i]);
+						} else {
+							// Output parameter buffer as hex
+							tData.append("0x");
+							tValue = mDataBuffer[i];
+							tData.append(Integer.toHexString(tValue & 0xFF));
+							tData.append(" ");
+						}
 					}
 					Log.v(LOG_TAG, tData.toString());
 				}
@@ -635,7 +656,7 @@ public class BluetoothSerialService {
 				 * now both command and data buffer filled
 				 */
 				searchStateDataLengthToWaitFor = MIN_COMMAND_SIZE;
-				aRPCView.interpreteCommand(tCommand, mParameters, tParamsLength, mDataBuffer, null, tLengthReceived);
+				aRPCView.interpretCommand(tCommand, mParameters, tParamsLength, mDataBuffer, null, tLengthReceived);
 				if (tCommand == RPCView.FUNCTION_TAG_DRAW_CHART
 						|| tCommand == RPCView.FUNCTION_TAG_DRAW_CHART_WITHOUT_DIRECT_RENDERING) {
 					mStatisticNumberOfReceivedChartCommands++;
@@ -670,7 +691,7 @@ public class BluetoothSerialService {
 					tByte = getByteFromBuffer();
 					mParameters[i] = convert2BytesToInt(tByte, getByteFromBuffer());
 				}
-				if (BlueDisplay.isVERBOSE()) {
+				if (BlueDisplay.isDEVELPMENT_TESTING()) {
 					// Output parameter buffer as short hex values
 					StringBuilder tParamsHex = new StringBuilder("Params=");
 					int tValue;
@@ -686,7 +707,7 @@ public class BluetoothSerialService {
 					/*
 					 * direct commands without data
 					 */
-					aRPCView.interpreteCommand(tCommand, mParameters, tParamsLength, null, null, 0);
+					aRPCView.interpretCommand(tCommand, mParameters, tParamsLength, null, null, 0);
 					mStatisticNumberOfReceivedCommands++;
 					if (tCommand == RPCView.FUNCTION_TAG_DRAW_DISPLAY) {
 						// break in order to draw the bitmap
@@ -695,9 +716,7 @@ public class BluetoothSerialService {
 					}
 
 					if ((System.nanoTime() - tStart) > MAX_DRAW_INTERVAL_NANOS) {
-						Log.w(LOG_TAG, "Return searchCommand() prematurely after 0.5 seconds");
-						// break after 0.5 seconds to enable drawing of the
-						// bitmap
+						Log.w(LOG_TAG, "Return searchCommand() prematurely after 0.5 seconds to enable display refresh");
 						tRetval = true;
 						break;
 					}
@@ -709,8 +728,8 @@ public class BluetoothSerialService {
 					i = 0;
 					while (getBufferBytesAvailable() < MIN_MESSAGE_SIZE && i < 100) {
 						try {
-							if (BlueDisplay.isDEBUG()) {
-								Log.d(LOG_TAG, "wait for data header i=" + i);
+							if (BlueDisplay.isVERBOSE()) {
+								Log.v(LOG_TAG, "wait for data header i=" + i);
 							}
 							Thread.sleep(10);
 							i++;
@@ -729,8 +748,8 @@ public class BluetoothSerialService {
 			// no retrigger by doDraw -> need trigger from ConnectedThread
 			mNeedUpdateViewMessage = true;
 		}
-		if (BlueDisplay.isDEBUG()) {
-			Log.d(LOG_TAG, "End searchCommand. Out=" + tStartOut + "->" + mReceiveBufferOutIndex + " /"
+		if (BlueDisplay.isVERBOSE()) {
+			Log.v(LOG_TAG, "End searchCommand. Out=" + tStartOut + "->" + mReceiveBufferOutIndex + " /"
 					+ (mReceiveBufferOutIndex - tStartOut) + "  In=" + tStartIn + "->" + mReceiveBufferInIndex + " /"
 					+ (mReceiveBufferInIndex - tStartIn));
 		}
@@ -743,7 +762,6 @@ public class BluetoothSerialService {
 	/**
 	 * This thread runs during a connection with a remote device. It handles all incoming and outgoing transmissions.
 	 */
-	// TODO put Thread on other processor
 	private class ConnectedThread extends Thread {
 		private final BluetoothSocket mmSocket;
 		private InputStream mmInStream = null;
@@ -774,7 +792,7 @@ public class BluetoothSerialService {
 			int tBytesAvailable;
 			try {
 				try {
-					// 50 is to little, 100 works sometimes, 200 works reliable
+					// 50 is to little, 100 works sometimes, 200 works reliable.
 					Thread.sleep(200);
 				} catch (InterruptedException e) {
 					// Just do nothing
@@ -791,8 +809,8 @@ public class BluetoothSerialService {
 				}
 			} catch (IOException e1) {
 				// end up here if cancel() / mmSocket.close() was called before
-				if (BlueDisplay.isVERBOSE()) {
-					Log.w(LOG_TAG, "Start run - catched IOException - assume disconnected");
+				if (BlueDisplay.isINFO()) {
+					Log.v(LOG_TAG, "Start run - catched IOException - assume disconnected");
 				}
 				connectionLost(); // show toast
 				return;
@@ -801,7 +819,10 @@ public class BluetoothSerialService {
 			mReceiveBufferOutIndex = 0;
 
 			mBlueDisplayContext.mRPCView.resetAll();
-			write(EVENT_TAG_CONNECTION_BUILD_UP, mBlueDisplayContext.mRPCView.mActualViewWidth,
+			// signal connection to arduino
+			// first write a NOP command for synchronizing
+			sendGuiCallback(EVENT_TAG_NOP_ACTION, 0, 0, 0);
+			sendTouchScaleAndConnect(EVENT_TAG_CONNECTION_BUILD_UP, mBlueDisplayContext.mRPCView.mActualViewWidth,
 					mBlueDisplayContext.mRPCView.mActualViewHeight);
 
 			int tReadLength;
@@ -829,9 +850,9 @@ public class BluetoothSerialService {
 								mInputBufferWrapAroundIndex = mReceiveBufferInIndex;
 								mReceiveBufferInIndex = 0;
 								mStatisticNumberOfBufferWrapArounds++;
-								if (BlueDisplay.isDEBUG()) {
+								if (BlueDisplay.isVERBOSE()) {
 									// Output length
-									Log.d(LOG_TAG, "Buffer wrap around " + (mInputBufferWrapAroundIndex - tOutIndex)
+									Log.v(LOG_TAG, "Buffer wrap around " + (mInputBufferWrapAroundIndex - tOutIndex)
 											+ " bytes unprocessed");
 								}
 								if (mReceiveBufferInIndex > tOutIndex) {
@@ -839,9 +860,9 @@ public class BluetoothSerialService {
 									Log.e(LOG_TAG, "Buffer overflow! InIndex=" + mReceiveBufferInIndex);
 								}
 							}
-							if (BlueDisplay.isDEBUG()) {
+							if (BlueDisplay.isVERBOSE()) {
 								// Output length
-								Log.d(LOG_TAG, "Read length=" + tReadLength + " BufferInIndex=" + mReceiveBufferInIndex);
+								Log.v(LOG_TAG, "Read length=" + tReadLength + " BufferInIndex=" + mReceiveBufferInIndex);
 							}
 
 							/*
@@ -851,7 +872,7 @@ public class BluetoothSerialService {
 									|| tBytesInBufferToProcess < MIN_MESSAGE_SIZE) {
 								mHandler.sendEmptyMessage(BlueDisplay.MESSAGE_UPDATE_VIEW);
 							} else {
-								if (BlueDisplay.isVERBOSE()) {
+								if (BlueDisplay.isDEVELPMENT_TESTING()) {
 									Log.d(LOG_TAG, "skip update view message tBytesInBufferToProcess=" + tBytesInBufferToProcess);
 								}
 							}
@@ -864,7 +885,7 @@ public class BluetoothSerialService {
 				} catch (IOException e) {
 					// end up here if cancel() / mmSocket.close() was called
 					// before
-					if (BlueDisplay.isVERBOSE()) {
+					if (BlueDisplay.isINFO()) {
 						Log.w(LOG_TAG, "Catched IOException - assume disconnected");
 					}
 					connectionLost(); // show toast
@@ -876,25 +897,28 @@ public class BluetoothSerialService {
 		/**
 		 * send 16 bit X and Y position
 		 */
-		public void write(int aEventType, int aXPos, int aYPos) {
+		public void sendTouchScaleAndConnect(int aEventType, int aXPos, int aYPos) {
 			byte[] tTouchData = new byte[7];
 			int tEventLength = 7;
+			int tEventType = aEventType & 0xFF;
 
 			try {
 				// assemble data buffer
-				tTouchData[0] = (byte) tEventLength; // gross message
-														// length in bytes
-				tTouchData[1] = (byte) (aEventType & 0xFF); // Function
-															// token
+				int tIndex = 0;
+				tTouchData[tIndex++] = (byte) tEventLength; // gross message
+				// length in bytes
+				tTouchData[tIndex++] = (byte) tEventType; // Function token
+
 				short tXPos = (short) aXPos;
-				tTouchData[2] = (byte) (tXPos & 0xFF); // LSB
-				tTouchData[3] = (byte) ((tXPos >> 8) & 0xFF); // MSB
+				tTouchData[tIndex++] = (byte) (tXPos & 0xFF); // LSB
+				tTouchData[tIndex++] = (byte) ((tXPos >> 8) & 0xFF); // MSB
 				short tYPos = (short) aYPos;
-				tTouchData[4] = (byte) (tYPos & 0xFF); // LSB
-				tTouchData[5] = (byte) ((tYPos >> 8) & 0xFF); // MSB
-				tTouchData[6] = SYNC_TOKEN;
+				tTouchData[tIndex++] = (byte) (tYPos & 0xFF); // LSB
+				tTouchData[tIndex++] = (byte) ((tYPos >> 8) & 0xFF); // MSB
+				tTouchData[tIndex++] = SYNC_TOKEN;
 				if (BlueDisplay.isINFO()) {
-					Log.i(LOG_TAG, "Write Type=" + (aEventType & 0xFF) + " X=" + aXPos + " Y=" + aYPos);
+					String tType = RPCView.sActionMappings.get(tEventType);
+					Log.i(LOG_TAG, "Send Type=" + tEventType + "|" + tType + " X=" + aXPos + " Y=" + aYPos);
 				}
 
 				mmOutStream.write(tTouchData, 0, tEventLength);
@@ -906,39 +930,46 @@ public class BluetoothSerialService {
 			}
 		}
 
+		final static int CALLBACK_DATA_SIZE = 15;
+
 		/*
-		 * send 16 bit button index 32 bit callback address and 32 bit value
+		 * send 16 bit button index, 16 bit filler, 32 bit callback address and 32 bit value
 		 */
-		public void write(int aEventType, int aButtonIndex, int aCallbackAddress, int aValue) {
-			byte[] tTouchData = new byte[13];
-			int tEventLength = 13;
+		public void sendGuiCallback(int aEventType, int aButtonIndex, int aCallbackAddress, int aValue) {
+			byte[] tGuiCallbackData = new byte[CALLBACK_DATA_SIZE];
+			int tEventLength = CALLBACK_DATA_SIZE;
+			int tEventType = aEventType & 0xFF;
 
 			try {
 				// assemble data buffer
 				int tIndex = 0;
-				tTouchData[tIndex++] = (byte) tEventLength; // gross message
-															// length in bytes
-				tTouchData[tIndex++] = (byte) (aEventType & 0xFF); // Function
-																	// token
+				tGuiCallbackData[tIndex++] = (byte) tEventLength; // gross message
+				// length in bytes
+				tGuiCallbackData[tIndex++] = (byte) tEventType; // Function token
+
 				short tShortValue = (short) aButtonIndex;
-				tTouchData[tIndex++] = (byte) (tShortValue & 0xFF); // LSB
-				tTouchData[tIndex++] = (byte) ((tShortValue >> 8) & 0xFF); // MSB
+				tGuiCallbackData[tIndex++] = (byte) (tShortValue & 0xFF); // LSB
+				tGuiCallbackData[tIndex++] = (byte) ((tShortValue >> 8) & 0xFF); // MSB
+				// for 32 bit padding
+				tGuiCallbackData[tIndex++] = (byte) (0x00); // LSB
+				tGuiCallbackData[tIndex++] = (byte) (0x00); // MSB
 
-				tTouchData[tIndex++] = (byte) (aCallbackAddress & 0xFF); // LSB
-				tTouchData[tIndex++] = (byte) ((aCallbackAddress >> 8) & 0xFF); // MSB
-				tTouchData[tIndex++] = (byte) ((aCallbackAddress >> 16) & 0xFF);
-				tTouchData[tIndex++] = (byte) ((aCallbackAddress >> 24) & 0xFF);
-				tTouchData[tIndex++] = (byte) (aValue & 0xFF); // LSB
-				tTouchData[tIndex++] = (byte) ((aValue >> 8) & 0xFF); // MSB
-				tTouchData[tIndex++] = (byte) ((aValue >> 16) & 0xFF);
-				tTouchData[tIndex++] = (byte) ((aValue >> 24) & 0xFF);
-				tTouchData[tIndex++] = SYNC_TOKEN;
+				tGuiCallbackData[tIndex++] = (byte) (aCallbackAddress & 0xFF); // LSB
+				tGuiCallbackData[tIndex++] = (byte) ((aCallbackAddress >> 8) & 0xFF); // MSB
+				tGuiCallbackData[tIndex++] = (byte) ((aCallbackAddress >> 16) & 0xFF);
+				tGuiCallbackData[tIndex++] = (byte) ((aCallbackAddress >> 24) & 0xFF);
+				tGuiCallbackData[tIndex++] = (byte) (aValue & 0xFF); // LSB
+				tGuiCallbackData[tIndex++] = (byte) ((aValue >> 8) & 0xFF); // MSB
+				tGuiCallbackData[tIndex++] = (byte) ((aValue >> 16) & 0xFF);
+				tGuiCallbackData[tIndex++] = (byte) ((aValue >> 24) & 0xFF);
+				tGuiCallbackData[tIndex++] = SYNC_TOKEN;
 				if (BlueDisplay.isINFO()) {
-					Log.i(LOG_TAG, "Write Type=" + (aEventType & 0xFF) + " ButtonIndex=" + aButtonIndex + " CallbackAddress=0x"
-							+ Integer.toHexString(aCallbackAddress) + " Value=" + aValue);
+					String tType = RPCView.sActionMappings.get(tEventType);
+					Log.i(LOG_TAG, "Send Type=" + Integer.toHexString(tEventType) + "|" + tType + " ButtonIndex=" + aButtonIndex
+							+ " CallbackAddress=0x" + Integer.toHexString(aCallbackAddress) + " Value=" + aValue);
 				}
 
-				mmOutStream.write(tTouchData, 0, tEventLength);
+				mmOutStream.write(tGuiCallbackData, 0, tEventLength);
 				mmOutStream.flush();
 				mStatisticNumberOfSentBytes += tEventLength;
 				mStatisticNumberOfSentCommands++;
@@ -948,40 +979,45 @@ public class BluetoothSerialService {
 		}
 
 		/*
-		 * send 16 bit button index 32 bit callback address and 32 bit FLOAT value
+		 * send 16 bit button index, 16 bit filler, 32 bit callback address and 32 bit FLOAT value
 		 */
-		public void write(int aEventType, int aCallbackAddress, float aValue) {
-			byte[] tTouchData = new byte[13];
-			int tEventLength = 13;
+		public void sendNumberCallback(int aEventType, int aCallbackAddress, float aValue) {
+			byte[] tNumberCallbackData = new byte[CALLBACK_DATA_SIZE];
+			int tEventLength = CALLBACK_DATA_SIZE;
+			int tEventType = aEventType & 0xFF;
 
 			try {
 				// assemble data buffer
 				int tIndex = 0;
-				tTouchData[tIndex++] = (byte) tEventLength; // gross message
-															// length in bytes
-				tTouchData[tIndex++] = (byte) (aEventType & 0xFF); // Function
-																	// token
+				tNumberCallbackData[tIndex++] = (byte) tEventLength; // gross message
+				// length in bytes
+				tNumberCallbackData[tIndex++] = (byte) tEventType; // Function token
+
 				short tShortValue = (short) 0xFF;
-				tTouchData[tIndex++] = (byte) (tShortValue & 0xFF); // LSB
-				tTouchData[tIndex++] = (byte) ((tShortValue >> 8) & 0xFF); // MSB
+				tNumberCallbackData[tIndex++] = (byte) (tShortValue & 0xFF); // LSB
+				tNumberCallbackData[tIndex++] = (byte) ((tShortValue >> 8) & 0xFF); // MSB
+				// for 32 bit padding
+				tNumberCallbackData[tIndex++] = (byte) (0x00); // LSB
+				tNumberCallbackData[tIndex++] = (byte) (0x00); // MSB
 
-				tTouchData[tIndex++] = (byte) (aCallbackAddress & 0xFF); // LSB
-				tTouchData[tIndex++] = (byte) ((aCallbackAddress >> 8) & 0xFF); // MSB
-				tTouchData[tIndex++] = (byte) ((aCallbackAddress >> 16) & 0xFF);
-				tTouchData[tIndex++] = (byte) ((aCallbackAddress >> 24) & 0xFF);
+				tNumberCallbackData[tIndex++] = (byte) (aCallbackAddress & 0xFF); // LSB
+				tNumberCallbackData[tIndex++] = (byte) ((aCallbackAddress >> 8) & 0xFF); // MSB
+				tNumberCallbackData[tIndex++] = (byte) ((aCallbackAddress >> 16) & 0xFF);
+				tNumberCallbackData[tIndex++] = (byte) ((aCallbackAddress >> 24) & 0xFF);
 				int tValue = Float.floatToIntBits(aValue);
-				tTouchData[tIndex++] = (byte) (tValue & 0xFF); // LSB
-				tTouchData[tIndex++] = (byte) ((tValue >> 8) & 0xFF); // MSB
-				tTouchData[tIndex++] = (byte) ((tValue >> 16) & 0xFF);
-				tTouchData[tIndex++] = (byte) ((tValue >> 24) & 0xFF);
-				tTouchData[tIndex++] = SYNC_TOKEN;
+				tNumberCallbackData[tIndex++] = (byte) (tValue & 0xFF); // LSB
+				tNumberCallbackData[tIndex++] = (byte) ((tValue >> 8) & 0xFF); // MSB
+				tNumberCallbackData[tIndex++] = (byte) ((tValue >> 16) & 0xFF);
+				tNumberCallbackData[tIndex++] = (byte) ((tValue >> 24) & 0xFF);
+				tNumberCallbackData[tIndex++] = SYNC_TOKEN;
 				if (BlueDisplay.isINFO()) {
+					String tType = RPCView.sActionMappings.get(tEventType);
 					Log.i(LOG_TAG,
-							"Write Type=" + (aEventType & 0xFF) + " CallbackAddress=0x" + Integer.toHexString(aCallbackAddress)
-									+ " Value=" + aValue);
+							"Send Type=" + Integer.toHexString(tEventType) + "|" + tType + " CallbackAddress=0x"
+									+ Integer.toHexString(aCallbackAddress) + " Value=" + aValue);
 				}
 
-				mmOutStream.write(tTouchData, 0, tEventLength);
+				mmOutStream.write(tNumberCallbackData, 0, tEventLength);
 				mmOutStream.flush();
 				mStatisticNumberOfSentBytes += tEventLength;
 				mStatisticNumberOfSentCommands++;
@@ -991,38 +1027,88 @@ public class BluetoothSerialService {
 		}
 
 		/*
-		 * send 16 bit direction 32 bit start position and 32 bit delta
+		 * send 16 bit direction,16 bit filler, 32 bit start position and 32 bit delta
 		 */
-		public void write(int aEventType, int aIsXDirection, int aStartX, int aStartY, int aDeltaX, int aDeltaY) {
-			byte[] tTouchData = new byte[13];
-			int tEventLength = 13;
+		public void sendSwipeCallback(int aEventType, int aIsXDirection, int aStartX, int aStartY, int aDeltaX, int aDeltaY) {
+			byte[] tSwipeData = new byte[CALLBACK_DATA_SIZE];
+			int tEventLength = CALLBACK_DATA_SIZE;
+			int tEventType = aEventType & 0xFF;
 
 			try {
 				// assemble data buffer
 				int tIndex = 0;
-				tTouchData[tIndex++] = (byte) tEventLength; // gross message
+				tSwipeData[tIndex++] = (byte) tEventLength; // gross message
 															// length in bytes
-				tTouchData[tIndex++] = (byte) (aEventType & 0xFF); // Function
-																	// token
+				tSwipeData[tIndex++] = (byte) tEventType; // Function token
 				short tShortValue = (short) aIsXDirection;
-				tTouchData[tIndex++] = (byte) (tShortValue & 0xFF); // LSB
-				tTouchData[tIndex++] = (byte) ((tShortValue >> 8) & 0xFF); // MSB
+				tSwipeData[tIndex++] = (byte) (tShortValue & 0xFF); // LSB
+				tSwipeData[tIndex++] = (byte) ((tShortValue >> 8) & 0xFF); // MSB
+				// for 32 bit padding
+				tSwipeData[tIndex++] = (byte) (0x00); // LSB
+				tSwipeData[tIndex++] = (byte) (0x00); // MSB
 
-				tTouchData[tIndex++] = (byte) (aStartX & 0xFF); // LSB
-				tTouchData[tIndex++] = (byte) ((aStartX >> 8) & 0xFF); // MSB
-				tTouchData[tIndex++] = (byte) (aStartY & 0xFF); // LSB
-				tTouchData[tIndex++] = (byte) ((aStartY >> 8) & 0xFF); // MSB
-				tTouchData[tIndex++] = (byte) (aDeltaX & 0xFF); // LSB
-				tTouchData[tIndex++] = (byte) ((aDeltaX >> 8) & 0xFF); // MSB
-				tTouchData[tIndex++] = (byte) (aDeltaY & 0xFF); // LSB
-				tTouchData[tIndex++] = (byte) ((aDeltaY >> 8) & 0xFF); // MSB
-				tTouchData[tIndex++] = SYNC_TOKEN;
+				tSwipeData[tIndex++] = (byte) (aStartX & 0xFF); // LSB
+				tSwipeData[tIndex++] = (byte) ((aStartX >> 8) & 0xFF); // MSB
+				tSwipeData[tIndex++] = (byte) (aStartY & 0xFF); // LSB
+				tSwipeData[tIndex++] = (byte) ((aStartY >> 8) & 0xFF); // MSB
+				tSwipeData[tIndex++] = (byte) (aDeltaX & 0xFF); // LSB
+				tSwipeData[tIndex++] = (byte) ((aDeltaX >> 8) & 0xFF); // MSB
+				tSwipeData[tIndex++] = (byte) (aDeltaY & 0xFF); // LSB
+				tSwipeData[tIndex++] = (byte) ((aDeltaY >> 8) & 0xFF); // MSB
+				tSwipeData[tIndex++] = SYNC_TOKEN;
 				if (BlueDisplay.isINFO()) {
-					Log.i(LOG_TAG, "Write Type=" + (aEventType & 0xFF) + " Direction=" + aIsXDirection + " Start=" + aStartX + "/"
-							+ aStartY + " Delta=" + aDeltaX + "/" + aDeltaY);
+					String tType = RPCView.sActionMappings.get(tEventType);
+					Log.i(LOG_TAG, "Send Type=" + Integer.toHexString(tEventType) + "|" + tType + " Direction=" + aIsXDirection
+							+ " Start=" + aStartX + "/" + aStartY + " Delta=" + aDeltaX + "/" + aDeltaY);
 				}
 
-				mmOutStream.write(tTouchData, 0, tEventLength);
+				mmOutStream.write(tSwipeData, 0, tEventLength);
+				mmOutStream.flush();
+				mStatisticNumberOfSentBytes += tEventLength;
+				mStatisticNumberOfSentCommands++;
+			} catch (IOException e) {
+				Log.e(LOG_TAG, "Exception during write", e);
+			}
+		}
+
+		/*
+		 * send sensor event type and xyz 32 bit FLOAT values
+		 */
+		public void sendSensor(int aEventType, float aValueX, float aValueY, float aValueZ) {
+			byte[] tSensorEventData = new byte[CALLBACK_DATA_SIZE];
+			int tEventLength = CALLBACK_DATA_SIZE;
+			int tEventType = aEventType & 0xFF;
+
+			try {
+				// assemble data buffer
+				int tIndex = 0;
+				tSensorEventData[tIndex++] = (byte) tEventLength; // gross message
+				// length in bytes
+				tSensorEventData[tIndex++] = (byte) tEventType; // Function token
+
+				int tValue = Float.floatToIntBits(aValueX);
+				tSensorEventData[tIndex++] = (byte) (tValue & 0xFF); // LSB
+				tSensorEventData[tIndex++] = (byte) ((tValue >> 8) & 0xFF); // MSB
+				tSensorEventData[tIndex++] = (byte) ((tValue >> 16) & 0xFF);
+				tSensorEventData[tIndex++] = (byte) ((tValue >> 24) & 0xFF);
+				tValue = Float.floatToIntBits(aValueY);
+				tSensorEventData[tIndex++] = (byte) (tValue & 0xFF); // LSB
+				tSensorEventData[tIndex++] = (byte) ((tValue >> 8) & 0xFF); // MSB
+				tSensorEventData[tIndex++] = (byte) ((tValue >> 16) & 0xFF);
+				tSensorEventData[tIndex++] = (byte) ((tValue >> 24) & 0xFF);
+				tValue = Float.floatToIntBits(aValueZ);
+				tSensorEventData[tIndex++] = (byte) (tValue & 0xFF); // LSB
+				tSensorEventData[tIndex++] = (byte) ((tValue >> 8) & 0xFF); // MSB
+				tSensorEventData[tIndex++] = (byte) ((tValue >> 16) & 0xFF);
+				tSensorEventData[tIndex++] = (byte) ((tValue >> 24) & 0xFF);
+				tSensorEventData[tIndex++] = SYNC_TOKEN;
+				if (BlueDisplay.isDEBUG()) {
+					String tType = RPCView.sActionMappings.get(tEventType);
+					Log.d(LOG_TAG, "Send Sensor Event Type=0x" + Integer.toHexString(tEventType) + "|" + tType + " X=" + aValueX
+							+ " Y=" + aValueY + " Z=" + aValueZ);
+				}
+
+				mmOutStream.write(tSensorEventData, 0, tEventLength);
 				mmOutStream.flush();
 				mStatisticNumberOfSentBytes += tEventLength;
 				mStatisticNumberOfSentCommands++;

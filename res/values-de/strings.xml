@@ -1,18 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-	<string name="alert_dialog_no_bt">Kein Bluetooth vorhanden. Applikation wird beendet.</string>
-	<string name="alert_dialog_yes">Ja</string>
-	<string name="alert_dialog_no">Nein</string>
-	<string name="alert_dialog_warning_title">Achtung</string>
-	<string name="alert_dialog_ok">OK</string>
+    <string name="alert_dialog_no_bt">Kein Bluetooth vorhanden oder aktiviert. Applikation wird beendet.</string>
+    <string name="alert_dialog_ok">OK</string>
     <string name="alert_dialog_cancel">Abbruch</string>
-	<string name="alert_dialog_turn_on_bt">Bluetooth ist nicht aktiv. Soll es aktiviert werden?</string>
+    <string name="toast_connected_to">Verbunden zu</string>
+    <string name="toast_unable_to_connect">Verbindung nicht möglich zu</string>
+    <string name="toast_connection_lost">Verbindung abgebrochen zu</string>
 
-	<string name="toast_connected_to">Verbunden zu</string>
-	<string name="toast_unable_to_connect">Verbindung nicht möglich</string>
-	<string name="toast_connection_lost">Verbindung abgebrochen</string>
-	
     <!-- Options Menu -->
     <string name="menu_connect">Gerät verbinden</string>
     <string name="menu_disconnect">Gerät trennen</string>
@@ -21,23 +16,21 @@
     <string name="menu_show_graph_testpage">Grafik Testseite</string>
     <string name="menu_show_statistics">Statistik</string>
     <string name="menu_about">Über</string>
-    
+
     <!-- Input data -->
     <string name="title_input_data">(Fliesskomma) Zahl eingeben</string>
     <string name="title_input_data_prompt_leading"></string>
     <string name="title_input_data_prompt_trailing">eingeben</string>
-    
+
     <!-- Preference dialog -->
     <string name="title_allowinsecureconnections_preference">Unsichere BT Verbindung</string>
     <string name="summary_allowinsecureconnections_preference">Unsichere Bluetooth Verbindung verwenden</string>
-    
-        <!-- Show touch coordinates dialog -->
+
+    <!-- Show touch coordinates dialog -->
     <string name="title_show_touch_preference">Touch Position anzeigen</string>
     <string name="summary_show_touch_preference">Zeigt die gesendete Touch Position oben links an.</string>
-
-        <string name="summary_loglevel_preference">Log Level für erzeugten ADB-LogCat Output setzen.</string>
-    
+    <string name="summary_loglevel_preference">Log Level für erzeugten ADB-LogCat Output setzen.</string>
     <string name="title_screenorientation_preference">Bildschirm Ausrichtung</string>
     <string name="summary_screenorientation_preference">Bildschirm Ausrichtung wählen</string>
-    
+
 </resources>

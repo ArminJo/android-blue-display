@@ -8,20 +8,16 @@
 <resources>
 
     <string name="app_name">BlueDisplay</string>
-    <string name="app_version">2.1</string>
+    <string name="app_version">3.0</string>
 
     <!-- Alerts -->
-    <string name="alert_dialog_no_bt">Cannot use this application without bluetooth.</string>
-    <string name="alert_dialog_yes">Yes</string>
-    <string name="alert_dialog_no">No</string>
-    <string name="alert_dialog_warning_title">Warning</string>
+    <string name="alert_dialog_no_bt">Bluetooth not available or activated. Stop application.</string>
     <string name="alert_dialog_ok">OK</string>
     <string name="alert_dialog_cancel">Cancel</string>
     <string name="alert_dialog_reset">Reset</string>
-    <string name="alert_dialog_turn_on_bt">Bluetooth is switched off. Do you want turn on?</string>
     <string name="toast_connected_to">Connected to</string>
-    <string name="toast_unable_to_connect">Unable to connect device</string>
-    <string name="toast_connection_lost">Device connection was lost</string>
+    <string name="toast_unable_to_connect">Unable to connect to device</string>
+    <string name="toast_connection_lost">Disconnected from</string>
 
     <!-- Options menu -->
     <string name="menu_connect">Connect device</string>
@@ -36,13 +32,16 @@
     <string name="logo">BlueDisplay Logo</string>
     <string name="copyright">Copyright © 2014/2015  Armin Joachimsmeyer</string>
     <string name="license">GPL v3</string>
-    <string name="code_www">https://code.google.com/p/android-blue-display/</string>
+    <string name="code_www">https://github.com/ArminJo/android-blue-display</string>
     
     <!-- DeviceListActivity -->
+    <string name="scanning">scanning for devices&#8230;</string>
     <string name="select_device">select a device to connect</string>
     <string name="none_paired">No devices have been paired</string>
     <string name="none_found">No devices found</string>
     <string name="title_paired_devices">Paired Devices</string>
+    <string name="title_other_devices">Other Available Devices</string>
+    <string name="button_scan">Scan for devices</string>
 
     <!-- Input data -->
     <string name="title_input_data">Enter (float) number</string>
@@ -74,8 +73,8 @@
         <!-- Log level dialog -->
     <string name="title_loglevel_preference">Log level</string>
     <string name="summary_loglevel_preference">Choose the log level for generating ADB-LogCat output.</string>
-    <!-- Don't localize these default values -->
-    <string name="default_loglevel_preference">5</string>
+    <!-- Don't localize these default values 4 = INFO -->
+    <string name="default_loglevel_preference">4</string>
     <string name="dialog_title_loglevel_preference">Log level</string>
     
 </resources>

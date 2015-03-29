@@ -34,6 +34,8 @@ import java.nio.charset.Charset;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.content.pm.ActivityInfo;
+import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -42,12 +44,14 @@ import android.graphics.Paint.Cap;
 import android.graphics.Path;
 import android.graphics.RectF;
 import android.graphics.Typeface;
+import android.hardware.Sensor;
 import android.media.AudioManager;
 import android.media.ToneGenerator;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
 import android.util.Log;
+import android.util.SparseArray;
 import android.view.GestureDetector.SimpleOnGestureListener;
 import android.view.MotionEvent;
 import android.view.ScaleGestureDetector;
@@ -57,6 +61,8 @@ import android.widget.Toast;
 public class RPCView extends View {
 
 	public static final String LOG_TAG = "BlueRPCView";
+
+	BlueDisplay mBlueDisplayContext;
 
 	private static final int DEFAULT_CANVAS_WIDTH = 320;
 	private static final int DEFAULT_CANVAS_HEIGHT = 240;
@@ -88,8 +94,6 @@ public class RPCView extends View {
 	private Canvas mCanvas;
 	private Path mPath = new Path();
 
-	public BluetoothSerialService mSerialService;
-	private BlueDisplay mBlueDisplayContext;
 	private final Handler mHandler;
 
 	public static char[] sCharsArray = new char[1024];
@@ -107,7 +111,7 @@ public class RPCView extends View {
 	 */
 	private boolean mUseMaxSize;
 	protected boolean mTouchBasicEnable; // send down, (move) and up events
-	protected boolean mTouchMoveEnable; // can be used to suppress only move events (mTouchBasicEnable must be true then)
+	protected boolean mTouchMoveEnable; // can be used to suppress the move events if mTouchBasicEnable is true
 	private boolean mIsLongTouchEnabled;
 	boolean mUseUpEventForButtons;
 
@@ -125,9 +129,9 @@ public class RPCView extends View {
 	boolean mDisableButtonUpOnce = false;
 	private float mTouchDownPositionX;
 	private float mTouchDownPositionY;
-	boolean mButtonTouched = false;
-	boolean mSliderActive = false; // true if touch starts on a slider, used to distinguish between slider and swipe moves
-	private boolean mSwipeDetected = false; // can only go true if slider was not touched on down event
+	int mTouchStartsOnButtonNumber = -1; // number of button for last touch_down event
+	boolean mTouchStartsOnSlider = false; // true if touch starts on a slider, used to distinguish between slider and swipe moves
+	boolean mSkipProcessingUntilTouchUp = false; // true if touch down already sends an event (eg. a button down event)
 
 	private ScaleGestureDetector mScaleDetector;
 
@@ -185,12 +189,16 @@ public class RPCView extends View {
 	private final static int SET_CODEPAGE = 0x01;
 	private final static int SET_CHARACTER_CODE_MAPPING = 0x02;
 	private final static int SET_LONG_TOUCH_DOWN_TIMEOUT = 0x08;
+	private final static int SET_SCREEN_ORIENTATION_LOCK = 0x0C;
+
 	// Sub functions for SET_FLAGS_AND_SIZE
 	private final static int BD_FLAG_FIRST_RESET_ALL = 0x01;
 	private final static int BD_FLAG_TOUCH_BASIC_DISABLE = 0x02;
 	private final static int BD_FLAG_TOUCH_MOVE_DISABLE = 0x04;
 	private final static int BD_FLAG_LONG_TOUCH_ENABLE = 0x08;
 	private final static int BD_FLAG_USE_MAX_SIZE = 0x10;
+
+	private final static int FUNCTION_TAG_SENSOR_SETTINGS = 0x0A;
 
 	/*
 	 * Miscellaneous functions
@@ -233,8 +241,29 @@ public class RPCView extends View {
 
 	private static final int LONG_TOUCH_DOWN = 0;
 
-	public void setSerialService(BluetoothSerialService aSerialService) {
-		this.mSerialService = aSerialService;
+	/*
+	 * Action code to action string mappings
+	 */
+	public static final SparseArray<String> sActionMappings = new SparseArray<String>(16);
+
+	static {
+		sActionMappings.put(MotionEvent.ACTION_DOWN, "down");
+		sActionMappings.put(MotionEvent.ACTION_UP, "up");
+		sActionMappings.put(MotionEvent.ACTION_MOVE, "move");
+		sActionMappings.put(MotionEvent.ACTION_CANCEL, "cancel");
+		sActionMappings.put(BluetoothSerialService.EVENT_TAG_CONNECTION_BUILD_UP, "connection build up");
+		sActionMappings.put(BluetoothSerialService.EVENT_TAG_RESIZE_ACTION, "resize");
+		sActionMappings.put(BluetoothSerialService.EVENT_TAG_LONG_TOUCH_DOWN_CALLBACK_ACTION, "long down");
+		sActionMappings.put(BluetoothSerialService.EVENT_TAG_FIRST_CALLBACK_ACTION, "first");
+		sActionMappings.put(BluetoothSerialService.EVENT_TAG_BUTTON_CALLBACK_ACTION, "button");
+		sActionMappings.put(BluetoothSerialService.EVENT_TAG_SLIDER_CALLBACK_ACTION, "slider");
+		sActionMappings.put(BluetoothSerialService.EVENT_TAG_SWIPE_CALLBACK_ACTION, "swipe");
+		sActionMappings.put(BluetoothSerialService.EVENT_TAG_NUMBER_CALLBACK, "number");
+		sActionMappings.put(BluetoothSerialService.EVENT_TAG_FIRST_SENSOR_ACTION_CODE + Sensor.TYPE_ACCELEROMETER, "Accelerometer");
+		sActionMappings.put(BluetoothSerialService.EVENT_TAG_FIRST_SENSOR_ACTION_CODE + Sensor.TYPE_GRAVITY, "Gravity");
+		sActionMappings.put(BluetoothSerialService.EVENT_TAG_FIRST_SENSOR_ACTION_CODE + Sensor.TYPE_GYROSCOPE, "Gyroscope");
+		sActionMappings.put(BluetoothSerialService.EVENT_TAG_FIRST_SENSOR_ACTION_CODE + Sensor.TYPE_LINEAR_ACCELERATION, "LinAccelation");
+		sActionMappings.put(BluetoothSerialService.EVENT_TAG_FIRST_SENSOR_ACTION_CODE + Sensor.TYPE_MAGNETIC_FIELD, "Magnetic");
 	}
 
 	protected void setMaxScaleFactor() {
@@ -242,13 +271,15 @@ public class RPCView extends View {
 		float tMaxWidthFactor = (float) mActualViewWidth / mRequestedCanvasWidth;
 		mMaxScaleFactor = Math.min(tMaxHeightFactor, tMaxWidthFactor);
 		if (BlueDisplay.isDEBUG()) {
-			Log.d(LOG_TAG, "MaxScaleFactor=" + mMaxScaleFactor);
+			Log.v(LOG_TAG, "MaxScaleFactor=" + mMaxScaleFactor);
 		}
 	}
 
 	public RPCView(Context aContext, Handler aHandler) {
 		super(aContext);
-		Log.i(LOG_TAG, "+++ ON CREATE +++");
+		if (BlueDisplay.isINFO()) {
+			Log.i(LOG_TAG, "+++ ON CREATE +++");
+		}
 
 		mBlueDisplayContext = (BlueDisplay) aContext;
 		mHandler = aHandler;
@@ -307,8 +338,10 @@ public class RPCView extends View {
 	@Override
 	public void onSizeChanged(int aWidth, int aHeight, int aOldWidth, int aOldHeight) {
 		// Is called on start and on changing orientation
-		Log.i(LOG_TAG, "++ ON SizeChanged width=" + aWidth + " height=" + aHeight + " old width=" + aOldWidth + " old height="
-				+ aOldHeight);
+		if (BlueDisplay.isINFO()) {
+			Log.i(LOG_TAG, "++ ON SizeChanged width=" + aWidth + " height=" + aHeight + " old width=" + aOldWidth + " old height="
+					+ aOldHeight);
+		}
 
 		mActualViewWidth = aWidth;
 		mActualViewHeight = aHeight;
@@ -327,8 +360,8 @@ public class RPCView extends View {
 		if (BlueDisplay.isVERBOSE()) {
 			Log.v(LOG_TAG, "+ ON Draw +");
 		}
-		if (mSerialService != null) {
-			boolean tRetrigger = mSerialService.searchCommand(this);
+		if (mBlueDisplayContext.mSerialService != null) {
+			boolean tRetrigger = mBlueDisplayContext.mSerialService.searchCommand(this);
 			canvas.drawBitmap(mBitmap, 0, 0, mBitmapPaint);
 			if (tRetrigger) {
 				// Trigger next frame
@@ -355,6 +388,14 @@ public class RPCView extends View {
 	 * @see android.view.View#onTouchEvent(android.view.MotionEvent)
 	 */
 	public boolean onTouchEvent(MotionEvent aEvent) {
+		float tDistanceFromTouchDown = 0;
+		boolean doNotRemoveLongTouchDownMessage = false; // Flag for suppressing micro moves on long touch down
+		
+		int tMaskedAction = aEvent.getActionMasked();
+
+		if (BlueDisplay.isVERBOSE()) {
+			Log.v(LOG_TAG, "TouchEvent action=" + tMaskedAction);
+		}
 		// process event also by scale detector
 		mScaleDetector.onTouchEvent(aEvent);
 
@@ -363,11 +404,6 @@ public class RPCView extends View {
 			mMultiTouchDetected = true;
 		}
 
-		float tDistanceFromTouchDown = 0;
-		boolean doNotRemoveLongTouchDownMessage = false;
-
-		// get masked (not specific to a pointer) action
-		int tMaskedAction = aEvent.getActionMasked();
 		if (mShowTouchCoordinates) {
 			int tXPos = (int) (aEvent.getX() + 0.5);
 			int tYPos = (int) (aEvent.getY() + 0.5);
@@ -385,16 +421,11 @@ public class RPCView extends View {
 			mTouchDownPositionX = aEvent.getX();
 			mTouchDownPositionY = aEvent.getY();
 			mMultiTouchDetected = false;
-			mSwipeDetected = false;
 			break;
 
 		case MotionEvent.ACTION_MOVE:
-			// swipe only if touch did not start on a slider
 			tDistanceFromTouchDown = Math.max(Math.abs(mTouchDownPositionX - aEvent.getX()),
 					Math.abs(mTouchDownPositionY - aEvent.getY()));
-			if (!mSliderActive && tDistanceFromTouchDown > SWIPE_LIMIT) {
-				mSwipeDetected = true;
-			}
 			// avoid to disable long touch down recognition on pseudo or micro moves
 			if (tDistanceFromTouchDown < MICRO_MOVE_LIMIT) {
 				doNotRemoveLongTouchDownMessage = true;
@@ -404,71 +435,96 @@ public class RPCView extends View {
 		case MotionEvent.ACTION_UP:
 		case MotionEvent.ACTION_CANCEL:
 		default:
+			if (mSkipProcessingUntilTouchUp) {
+				mSkipProcessingUntilTouchUp = false;
+				mTouchStartsOnButtonNumber = -1;
+				return true;
+			}
 			mTouchIsActive = false;
 			mMultiTouchDetected = false;
-			mSliderActive = false;
 			break;
 
 		}
 
 		if (mIsLongTouchEnabled && !doNotRemoveLongTouchDownMessage) {
+			// reset long touch recognition by clearing messages
 			mLongTouchDownHandler.removeMessages(LONG_TOUCH_DOWN);
 		}
 
-		// check if event is on canvas
+		// check if event is on CANVAS
 		if (aEvent.getX() > mActualCanvasWidth || aEvent.getY() > mActualCanvasHeight) {
 			// open options menu (important for devices without an options button)
 			if (tMaskedAction == MotionEvent.ACTION_UP) {
 				mBlueDisplayContext.openOptionsMenu();
 			}
-		} else if (!mMultiTouchDetected && mSerialService != null
-				&& mSerialService.getState() == BluetoothSerialService.STATE_CONNECTED) {
+		} else if (!mMultiTouchDetected && mBlueDisplayContext.mSerialService != null
+				&& mBlueDisplayContext.mSerialService.getState() == BluetoothSerialService.STATE_CONNECTED) {
 			/*
 			 * send data if connected and if no multi-touch is present
 			 */
 
-			/*
-			 * Send swipe callback
-			 */
-			if (tMaskedAction == MotionEvent.ACTION_UP && mSwipeDetected) {
-				int tDeltaX = (int) ((aEvent.getX() - mTouchDownPositionX) / mScaleFactor);
-				int tDeltaY = (int) ((aEvent.getY() - mTouchDownPositionY) / mScaleFactor);
-				int tIsXDirection = 0;
-				if (Math.abs(tDeltaX) >= Math.abs(tDeltaY)) {
-					// horizontal swipe
-					tIsXDirection = 1;
+			if (tMaskedAction == MotionEvent.ACTION_UP && !mTouchStartsOnSlider) {
+				/*
+				 * Check SWIPE callback only if touch did not start on a slider
+				 */
+				tDistanceFromTouchDown = Math.max(Math.abs(mTouchDownPositionX - aEvent.getX()),
+						Math.abs(mTouchDownPositionY - aEvent.getY()));
+				/*
+				 * SWIPE only if move is greater than SWIPE_LIMIT. If SWIPE starts on a button then swipe must be even greater.
+				 */
+				if ((mTouchStartsOnButtonNumber < 0 && tDistanceFromTouchDown > SWIPE_LIMIT)
+						|| tDistanceFromTouchDown > 4 * SWIPE_LIMIT) {
+					int tDeltaX = (int) ((aEvent.getX() - mTouchDownPositionX) / mScaleFactor);
+					int tDeltaY = (int) ((aEvent.getY() - mTouchDownPositionY) / mScaleFactor);
+					int tIsXDirection = 0;
+					if (Math.abs(tDeltaX) >= Math.abs(tDeltaY)) {
+						// horizontal swipe
+						tIsXDirection = 1;
+					}
+					// send swipe event and suppress UP-event sending
+					mBlueDisplayContext.mSerialService.writeSwipeCallbackEvent(
+							BluetoothSerialService.EVENT_TAG_SWIPE_CALLBACK_ACTION, tIsXDirection,
+							(int) (mTouchDownPositionX / mScaleFactor), (int) (mTouchDownPositionY / mScaleFactor), tDeltaX,
+							tDeltaY);
+					// (mis)use mTouchStartsOnSlider flag to suppress other checks on ACTION_UP and sending of UP-event
+					mTouchStartsOnSlider = true;
 				}
-				// send swipe event and suppress UP-event sending
-				mSerialService.writeEvent(BluetoothSerialService.EVENT_TAG_SWIPE_CALLBACK_ACTION, tIsXDirection,
-						(int) (mTouchDownPositionX / mScaleFactor), (int) (mTouchDownPositionY / mScaleFactor), tDeltaX, tDeltaY);
-				// use mSliderActive flag to suppress sending of UP-event
-				mSliderActive = true;
 			}
 
 			/*
-			 * Check sliders if ACTION_DOWN or (ACTION_MOVE and slider active)
+			 * Check SLIDERS if ACTION_DOWN or (ACTION_MOVE and slider active)
 			 */
-			if (tMaskedAction == MotionEvent.ACTION_DOWN || (tMaskedAction == MotionEvent.ACTION_MOVE && mSliderActive)) {
+			if (tMaskedAction == MotionEvent.ACTION_DOWN || (tMaskedAction == MotionEvent.ACTION_MOVE && mTouchStartsOnSlider)) {
 				boolean tMatch = TouchSlider.checkAllSliders((int) (aEvent.getX() / mScaleFactor + 0.5), (int) (aEvent.getY()
 						/ mScaleFactor + 0.5));
 				if (tMatch && tMaskedAction == MotionEvent.ACTION_DOWN) {
-					mSliderActive = true;
+					mTouchStartsOnSlider = true;
 				}
 			}
 
-			/*
-			 * Check buttons if no slider active AND (ACTION_DOWN OR if mUseUpEventForButtons AND ACTION_UP and no swipe detected)
-			 */
-			if (!mSliderActive && !mSwipeDetected) {
+			if (!mTouchStartsOnSlider) {
+				/*
+				 * Check BUTTONS if no slider active AND (ACTION_DOWN OR if mUseUpEventForButtons AND ACTION_UP and no swipe
+				 * detected)
+				 */
 				if (((tMaskedAction == MotionEvent.ACTION_DOWN && !mUseUpEventForButtons) || (tMaskedAction == MotionEvent.ACTION_UP
 						&& mUseUpEventForButtons && !mDisableButtonUpOnce))) {
-					mButtonTouched = TouchButton.checkAllButtons((int) (aEvent.getX() / mScaleFactor + 0.5), (int) (aEvent.getY()
-							/ mScaleFactor + 0.5));
+					mTouchStartsOnButtonNumber = TouchButton.checkAllButtons((int) (aEvent.getX() / mScaleFactor + 0.5),
+							(int) (aEvent.getY() / mScaleFactor + 0.5), false);
+					if (mTouchStartsOnButtonNumber >= 0 && tMaskedAction == MotionEvent.ACTION_DOWN) {
+						// signal that we send an event on touch down and to skip processing until touch up
+						mSkipProcessingUntilTouchUp = true;
+					}
+				} else if (tMaskedAction == MotionEvent.ACTION_DOWN) {
+					// Just check if down touch hits a button area
+					mTouchStartsOnButtonNumber = TouchButton.checkAllButtons((int) (aEvent.getX() / mScaleFactor + 0.5),
+							(int) (aEvent.getY() / mScaleFactor + 0.5), true);
 				}
+
 				/*
-				 * check for long touch initialization
+				 * check for LONG TOUCH initialization
 				 */
-				if (tMaskedAction == MotionEvent.ACTION_DOWN && mIsLongTouchEnabled && !mButtonTouched) {
+				if (tMaskedAction == MotionEvent.ACTION_DOWN && mIsLongTouchEnabled && mTouchStartsOnButtonNumber < 0) {
 					/*
 					 * send delayed message to handler, witch in turn sends the callback. If another event happens, the message will
 					 * be simply deleted.
@@ -479,15 +535,15 @@ public class RPCView extends View {
 			}
 
 			// evaluate local and global flags before sending basic events
-			if (!mButtonTouched && !mSliderActive && mTouchBasicEnable
+			if (mTouchStartsOnButtonNumber < 0 && !mTouchStartsOnSlider && mTouchBasicEnable
 					&& (mTouchMoveEnable || tMaskedAction != MotionEvent.ACTION_MOVE)) {
 				// no button/slider touched and touch is enabled -> send touch event to client
-				mSerialService.writeEvent(tMaskedAction, (int) (aEvent.getX() / mScaleFactor + 0.5), (int) (aEvent.getY()
-						/ mScaleFactor + 0.5));
+				mBlueDisplayContext.mSerialService.writeTouchAndScaleEvent(tMaskedAction,
+						(int) (aEvent.getX() / mScaleFactor + 0.5), (int) (aEvent.getY() / mScaleFactor + 0.5));
 			}
 			if (tMaskedAction == MotionEvent.ACTION_UP || tMaskedAction == MotionEvent.ACTION_CANCEL) {
-				mButtonTouched = false;
-				mSwipeDetected = false;
+				mTouchStartsOnButtonNumber = -1;
+				mTouchStartsOnSlider = false;
 				mDisableButtonUpOnce = false;
 			}
 		}
@@ -503,7 +559,8 @@ public class RPCView extends View {
 
 			case LONG_TOUCH_DOWN:
 				mDisableButtonUpOnce = true;
-				mSerialService.writeEvent(BluetoothSerialService.EVENT_TAG_LONG_TOUCH_DOWN_CALLBACK_ACTION,
+				mBlueDisplayContext.mSerialService.writeTouchAndScaleEvent(
+						BluetoothSerialService.EVENT_TAG_LONG_TOUCH_DOWN_CALLBACK_ACTION,
 						(int) (mTouchDownPositionX / mScaleFactor + 0.5), (int) (mTouchDownPositionY / mScaleFactor + 0.5));
 				break;
 
@@ -675,12 +732,15 @@ public class RPCView extends View {
 
 		mGraphPaintStrokeScaleFactor.setStrokeWidth(mScaleFactor);
 
-		Log.i(LOG_TAG, "setScaleFactor(" + aScaleFactor + ") old factor=" + tOldFactor + " resulting factor=" + mScaleFactor);
+		if (BlueDisplay.isINFO()) {
+			Log.i(LOG_TAG, "setScaleFactor(" + aScaleFactor + ") old factor=" + tOldFactor + " resulting factor=" + mScaleFactor);
+		}
 		if (tOldFactor != mScaleFactor) {
 			invalidate();
 			// send new size to client
-			if (mSerialService != null && aSendToClient) {
-				mSerialService.writeEvent(BluetoothSerialService.EVENT_TAG_RESIZE_ACTION, mActualCanvasWidth, mActualCanvasHeight);
+			if (mBlueDisplayContext.mSerialService != null && aSendToClient) {
+				mBlueDisplayContext.mSerialService.writeTouchAndScaleEvent(BluetoothSerialService.EVENT_TAG_RESIZE_ACTION,
+						mActualCanvasWidth, mActualCanvasHeight);
 			}
 			// show new Values
 			if (mLastScaleValueToast != null) {
@@ -698,6 +758,10 @@ public class RPCView extends View {
 		return ((aShortColor & 0x1F) << 3 | (aShortColor & 0x07E0) << 5 | (aShortColor & 0xF800) << 8) | 0xFF000000;
 	}
 
+	public static String shortToColorString(int aShortColor) {
+		return "R:" + ((aShortColor & 0xF800) >> 8) + " G:" + ((aShortColor & 0x07E0) >> 3) + " B:" + ((aShortColor & 0x1F) << 3);
+	}
+
 	public static int convertByteToInt(byte aByte) {
 		if (aByte < 0) {
 			return aByte + 256;
@@ -705,24 +769,24 @@ public class RPCView extends View {
 		return aByte;
 	}
 
-	public void interpreteCommand(int aCommand, int[] aParameters, int aParamsLength, byte[] aDataBytes, int[] aDataInts,
+	public void interpretCommand(int aCommand, int[] aParameters, int aParamsLength, byte[] aDataBytes, int[] aDataInts,
 			int aDataLength) {
 
-		if (BlueDisplay.isDEBUG()) {
+		if (BlueDisplay.isVERBOSE()) {
 			StringBuilder tParam = new StringBuilder("cmd=0x" + Integer.toHexString(aCommand) + " / " + aCommand);
 			for (int i = 0; i < aParamsLength; i++) {
 				tParam.append(" ").append(i).append("=").append(aParameters[i]);
 			}
 			tParam.append(" data length=" + aDataLength);
-			Log.d(LOG_TAG, tParam.toString());
+			Log.v(LOG_TAG, tParam.toString());
 		}
 		if ((aCommand >= FIRST_FUNCTION_TAG_BUTTON && aCommand <= LAST_FUNCTION_TAG_BUTTON)
 				|| aCommand >= FIRST_FUNCTION_TAG_BUTTON_WITH_DATA && aCommand <= LAST_FUNCTION_TAG_BUTTON_WITH_DATA) {
-			TouchButton.interpreteCommand(this, aCommand, aParameters, aParamsLength, aDataBytes, aDataInts, aDataLength);
+			TouchButton.interpretCommand(this, aCommand, aParameters, aParamsLength, aDataBytes, aDataInts, aDataLength);
 			return;
 		} else if ((aCommand >= FIRST_FUNCTION_TAG_SLIDER && aCommand <= LAST_FUNCTION_TAG_SLIDER)
 				|| aCommand >= FIRST_FUNCTION_TAG_SLIDER_WITH_DATA && aCommand <= LAST_FUNCTION_TAG_SLIDER_WITH_DATA) {
-			TouchSlider.interpreteCommand(this, aCommand, aParameters, aParamsLength, aDataBytes, aDataInts, aDataLength);
+			TouchSlider.interpretCommand(this, aCommand, aParameters, aParamsLength, aDataBytes, aDataInts, aDataLength);
 			return;
 		}
 
@@ -747,437 +811,484 @@ public class RPCView extends View {
 		float tAscend;
 
 		int tSubcommand;
-		switch (aCommand) {
-		case FUNCTION_TAG_PLAY_TONE:
-			int tTone = ToneGenerator.TONE_CDMA_KEYPAD_VOLUME_KEY_LITE;
-			if (aParamsLength == 1) {
-				if (aParameters[0] > 0 && aParameters[0] < ToneGenerator.TONE_CDMA_SIGNAL_OFF) {
-					tTone = aParameters[0];
+
+		try {
+			switch (aCommand) {
+			case FUNCTION_TAG_PLAY_TONE:
+				int tTone = ToneGenerator.TONE_CDMA_KEYPAD_VOLUME_KEY_LITE;
+				if (aParamsLength == 1) {
+					if (aParameters[0] > 0 && aParameters[0] < ToneGenerator.TONE_CDMA_SIGNAL_OFF) {
+						tTone = aParameters[0];
+					}
 				}
-			}
-			if (mToneGenerator == null) {
-				mToneGenerator = new ToneGenerator(AudioManager.STREAM_SYSTEM, ToneGenerator.MAX_VOLUME);
-			}
-			mToneGenerator.startTone(tTone);
-			break;
-
-		case FUNCTION_TAG_GET_NUMBER:
-		case FUNCTION_TAG_GET_NUMBER_WITH_SHORT_PROMPT:
-		case FUNCTION_TAG_GET_TEXT:
-			boolean tDoNumber = true;
-			tFunctionName = "number";
-
-			if (aCommand == FUNCTION_TAG_GET_TEXT) {
-				tFunctionName = "text";
-				tDoNumber = false;
-			}
-			if (aDataLength > 0) {
-				myConvertChars(aDataBytes, sCharsArray, aDataLength);
-				tStringParameter = new String(sCharsArray, 0, aDataLength);
-			}
-			if (BlueDisplay.isINFO()) {
-				Log.i(LOG_TAG, "Get " + tFunctionName + " callback=0x" + Integer.toHexString(aParameters[0]) + " String=\""
-						+ tStringParameter + "\"");
-			}
-			// Send request for number input to the UI Activity
-
-			Message msg = mHandler.obtainMessage(BlueDisplay.REQUEST_INPUT_DATA);
-			Bundle bundle = new Bundle();
-			bundle.putInt(BlueDisplay.CALLBACK_ADDRESS, aParameters[0]);
-			bundle.putString(BlueDisplay.DIALOG_PROMPT, tStringParameter);
-			bundle.putBoolean(BlueDisplay.NUMBER_FLAG, tDoNumber);
-			msg.setData(bundle);
-			mHandler.sendMessage(msg);
-			break;
-
-		case FUNCTION_TAG_GLOBAL_SETTINGS:
-			tSubcommand = aParameters[0];
-			switch (tSubcommand) {
-			case SET_FLAGS_AND_SIZE:
-				// set canvas size
-				if (BlueDisplay.isINFO()) {
-					Log.i(LOG_TAG, "Set flags=0x" + Integer.toHexString(aParameters[1]) + " and canvas size=" + aParameters[2]
-							+ "/" + aParameters[3]);
+				if (mToneGenerator == null) {
+					mToneGenerator = new ToneGenerator(AudioManager.STREAM_SYSTEM, ToneGenerator.MAX_VOLUME);
 				}
-				mRequestedCanvasWidth = aParameters[2];
-				mRequestedCanvasHeight = aParameters[3];
-				setMaxScaleFactor();
-				setFlags(aParameters[1]);
+				mToneGenerator.startTone(tTone);
 				break;
 
-			case SET_CODEPAGE:
+			case FUNCTION_TAG_GET_NUMBER:
+			case FUNCTION_TAG_GET_NUMBER_WITH_SHORT_PROMPT:
+			case FUNCTION_TAG_GET_TEXT:
+				boolean tDoNumber = true;
+				tFunctionName = "number";
+
+				if (aCommand == FUNCTION_TAG_GET_TEXT) {
+					tFunctionName = "text";
+					tDoNumber = false;
+				}
+				if (aDataLength > 0) {
+					myConvertChars(aDataBytes, sCharsArray, aDataLength);
+					tStringParameter = new String(sCharsArray, 0, aDataLength);
+				}
 				if (BlueDisplay.isINFO()) {
-					Log.i(LOG_TAG, "Set codepage=ISO_8859_" + aParameters[1]);
+					Log.i(LOG_TAG, "Get " + tFunctionName + " callback=0x" + Integer.toHexString(aParameters[0]) + " String=\""
+							+ tStringParameter + "\"");
 				}
-				String tCharsetName = "ISO_8859_" + aParameters[1];
-				Charset tCharset = Charset.forName(tCharsetName);
-				byte[] tCodepage = new byte[mCharMappingArray.length];
-				for (int i = 0; i < mCharMappingArray.length; i++) {
-					tCodepage[i] = (byte) (0x0080 + i);
-				}
-				ByteBuffer tBytebuffer = ByteBuffer.wrap(tCodepage);
-				CharBuffer tCharBuffer = tCharset.decode(tBytebuffer);
-				mCharMappingArray = tCharBuffer.array();
+				// Send request for number input to the UI Activity
+
+				Message msg = mHandler.obtainMessage(BlueDisplay.REQUEST_INPUT_DATA);
+				Bundle bundle = new Bundle();
+				bundle.putInt(BlueDisplay.CALLBACK_ADDRESS, aParameters[0]);
+				bundle.putString(BlueDisplay.DIALOG_PROMPT, tStringParameter);
+				bundle.putBoolean(BlueDisplay.NUMBER_FLAG, tDoNumber);
+				msg.setData(bundle);
+				mHandler.sendMessage(msg);
 				break;
 
-			case SET_CHARACTER_CODE_MAPPING:
-				tIndex = aParameters[1] - 0x80;
-				if (BlueDisplay.isINFO()) {
-					Log.i(LOG_TAG, "Set character mapping=" + mCharMappingArray[tIndex] + "->" + (char) aParameters[2] + " / 0x"
-							+ Integer.toHexString(aParameters[1]) + "-> 0x" + Integer.toHexString(aParameters[2]));
-				}
-				if (tIndex >= 0 && tIndex < mCharMappingArray.length) {
-					mCharMappingArray[tIndex] = (char) aParameters[2];
+			case FUNCTION_TAG_GLOBAL_SETTINGS:
+				tSubcommand = aParameters[0];
+				switch (tSubcommand) {
+				case SET_FLAGS_AND_SIZE:
+					if (aParameters[1] < 10 || aParameters[2] < 10) {
+						Log.e(LOG_TAG, "Set flags=0x" + Integer.toHexString(aParameters[1]) + " and canvas size=" + aParameters[2]
+								+ "/" + aParameters[3] + ". Size parameter values to small -> return.");
+						return;
+					}
+					// set canvas size
+					if (BlueDisplay.isINFO()) {
+						Log.i(LOG_TAG, "Set flags=0x" + Integer.toHexString(aParameters[1]) + " and canvas size=" + aParameters[2]
+								+ "/" + aParameters[3]);
+					}
+					mRequestedCanvasWidth = aParameters[2];
+					mRequestedCanvasHeight = aParameters[3];
+					setMaxScaleFactor();
+					setFlags(aParameters[1]);
+					break;
+
+				case SET_CODEPAGE:
+					if (BlueDisplay.isINFO()) {
+						Log.i(LOG_TAG, "Set codepage=ISO_8859_" + aParameters[1]);
+					}
+					String tCharsetName = "ISO_8859_" + aParameters[1];
+					Charset tCharset = Charset.forName(tCharsetName);
+					byte[] tCodepage = new byte[mCharMappingArray.length];
+					for (int i = 0; i < mCharMappingArray.length; i++) {
+						tCodepage[i] = (byte) (0x0080 + i);
+					}
+					ByteBuffer tBytebuffer = ByteBuffer.wrap(tCodepage);
+					CharBuffer tCharBuffer = tCharset.decode(tBytebuffer);
+					mCharMappingArray = tCharBuffer.array();
+					break;
+
+				case SET_CHARACTER_CODE_MAPPING:
+					tIndex = aParameters[1] - 0x80;
+					if (BlueDisplay.isINFO()) {
+						Log.i(LOG_TAG, "Set character mapping=" + mCharMappingArray[tIndex] + "->" + (char) aParameters[2]
+								+ " / 0x" + Integer.toHexString(aParameters[1]) + "-> 0x" + Integer.toHexString(aParameters[2]));
+					}
+					if (tIndex >= 0 && tIndex < mCharMappingArray.length) {
+						mCharMappingArray[tIndex] = (char) aParameters[2];
+					}
+					break;
+
+				case SET_LONG_TOUCH_DOWN_TIMEOUT:
+					if (aParameters[1] <= 0) {
+						mLongTouchDownTimeoutMillis = 0;
+						mIsLongTouchEnabled = false;
+					} else {
+						mLongTouchDownTimeoutMillis = aParameters[1];
+						mIsLongTouchEnabled = true;
+					}
+					if (BlueDisplay.isINFO()) {
+						Log.i(LOG_TAG, "Long touch-down timeout=" + mLongTouchDownTimeoutMillis);
+					}
+					break;
+
+				case SET_SCREEN_ORIENTATION_LOCK:
+					if (aParameters[1] != 0) {
+						// Get REAL orientation - 1 for Portrait and 2 for Landscape
+						int tActualRealOrientation = mBlueDisplayContext.getResources().getConfiguration().orientation;
+						int tNewOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE;
+						if (tActualRealOrientation == Configuration.ORIENTATION_PORTRAIT) {
+							tNewOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
+						}
+						mBlueDisplayContext.setActualScreenOrientation(tNewOrientation, true);
+						if (BlueDisplay.isINFO()) {
+							Log.i(LOG_TAG, "Locked screen orientation to actual orientation="
+									+ mBlueDisplayContext.mActualScreenOrientationString);
+						}
+					} else {
+						// unlock
+						mBlueDisplayContext.setActualScreenOrientation(mBlueDisplayContext.mPreferredScreenOrientation, true);
+						if (BlueDisplay.isINFO()) {
+							Log.i(LOG_TAG, "Unlocked screen orientation to preferred orientation="
+									+ mBlueDisplayContext.mActualScreenOrientationString);
+						}
+					}
+
+					break;
+
+				default:
+					Log.e(LOG_TAG, "Global settings: unknown subcommand 0x" + Integer.toHexString(tSubcommand)
+							+ " received. paramsLength=" + aParamsLength + " dataLenght=" + aDataLength);
+					break;
+
 				}
 				break;
 
-			case SET_LONG_TOUCH_DOWN_TIMEOUT:
-				if (aParameters[1] <= 0) {
-					mLongTouchDownTimeoutMillis = 0;
-					mIsLongTouchEnabled = false;
+			case FUNCTION_TAG_SENSOR_SETTINGS:
+				boolean tDoActivate = false;
+				tFunctionName = "SetSensor";
+				if (aParameters[1] != 0) {
+					tDoActivate = true;
+				}
+				mBlueDisplayContext.mSensorEventListener.setSensor(aParameters[0], tDoActivate, aParameters[2]);
+				break;
+
+			case FUNCTION_TAG_CLEAR_DISPLAY:
+				// clear screen
+				if (BlueDisplay.isDEBUG()) {
+					Log.d(LOG_TAG, "Clear screen color= " + shortToColorString(aParameters[0]));
+				}
+				mCanvas.drawColor(shortToLongColor(aParameters[0]));
+				// reset screen buffer
+				mChartScreenBufferActualLength = 0;
+				break;
+
+			case FUNCTION_TAG_DRAW_PIXEL:
+				mGraphPaintStrokeScaleFactor.setColor(shortToLongColor(aParameters[2]));
+				if (BlueDisplay.isDEBUG()) {
+					Log.d(LOG_TAG, "drawPixel(" + aParameters[0] + ", " + aParameters[1] + ") color= "
+							+ shortToColorString(aParameters[2]));
+				}
+				mCanvas.drawPoint(tXStart, tYStart, mGraphPaintStrokeScaleFactor);
+				break;
+
+			case FUNCTION_TAG_DRAW_LINE_REL:
+			case FUNCTION_TAG_DRAW_LINE:
+				if (aCommand == FUNCTION_TAG_DRAW_LINE_REL) {
+					tFunctionName = "drawLineRel";
+					tXEnd = tXStart + aParameters[2] * mScaleFactor;
+					tYEnd = tYStart + aParameters[3] * mScaleFactor;
 				} else {
-					mLongTouchDownTimeoutMillis = aParameters[1];
-					mIsLongTouchEnabled = true;
+					tFunctionName = "drawLine";
+					tXEnd = aParameters[2] * mScaleFactor;
+					tYEnd = aParameters[3] * mScaleFactor;
 				}
-				if (BlueDisplay.isINFO()) {
-					Log.i(LOG_TAG, "Long touch-down timeout=" + mLongTouchDownTimeoutMillis);
+
+				tColor = shortToLongColor(aParameters[4]);
+
+				if (aParamsLength > 5) {
+					// Stroke parameter
+					mGraphPaintStrokeSettable.setStrokeWidth(aParameters[5] * mScaleFactor);
+					tResultingPaint = mGraphPaintStrokeSettable;
+					if (BlueDisplay.isDEBUG()) {
+						tAdditionalInfo = " strokeWidth=" + aParameters[5] * mScaleFactor;
+					}
+				} else {
+					tResultingPaint = mGraphPaintStrokeScaleFactor;
+				}
+
+				tResultingPaint.setColor(tColor);
+				if (tXStart == tXEnd && tYStart == tYEnd) {
+					mCanvas.drawPoint(tXStart, tYStart, tResultingPaint);
+				} else {
+					mCanvas.drawLine(tXStart, tYStart, tXEnd, tYEnd, tResultingPaint);
+				}
+				if (BlueDisplay.isDEBUG()) {
+					Log.d(LOG_TAG, tFunctionName + "(" + aParameters[0] + ", " + aParameters[1] + ", " + aParameters[2] + ", "
+							+ aParameters[3] + ") color= " + shortToColorString(tColor) + tAdditionalInfo);
+				}
+				break;
+
+			case FUNCTION_TAG_DRAW_CHART:
+			case FUNCTION_TAG_DRAW_CHART_WITHOUT_DIRECT_RENDERING:
+				/*
+				 * Chart index is coded in the upper 4 bits of Y start position
+				 */
+				int tChartIndex = aParameters[1] >> 12;
+				if (tChartIndex > 0) {
+					tYStart = (aParameters[1] & 0x0FFF) * mScaleFactor;
+				}
+				tColor = shortToLongColor(aParameters[2]);
+				int tDeleteColor = shortToLongColor(aParameters[3]);
+
+				if (BlueDisplay.isDEBUG()) {
+					if (aCommand == FUNCTION_TAG_DRAW_CHART) {
+						tFunctionName = "drawChart";
+					} else {
+						tFunctionName = "drawChartWithoutDirectRendering";
+					}
+					Log.d(LOG_TAG, tFunctionName + "(" + aParameters[0] + ", " + (aParameters[1] & 0x0FFF) + ") color= "
+							+ shortToColorString(tColor) + " ,deleteColor= " + shortToColorString(tDeleteColor) + " lenght="
+							+ aDataLength + " ChartIndex=" + tChartIndex);
+				}
+
+				if (aParameters[3] != 0) {
+					/*
+					 * delete old chart
+					 */
+					// set delete color
+					mGraphPaintStrokeScaleFactor.setColor(tDeleteColor);
+					mCanvas.drawLines(mChartScreenBuffer[tChartIndex], 0, mChartScreenBufferActualLength * 4,
+							mGraphPaintStrokeScaleFactor);
+				}
+
+				/*
+				 * draw new chart
+				 */
+
+				mGraphPaintStrokeScaleFactor.setColor(tColor);
+
+				float tYOffset = tYStart;
+				tYStart += BluetoothSerialService.convertByteToFloat(aDataBytes[0]) * mScaleFactor;
+				mChartScreenBuffer[tChartIndex][0] = tXStart;
+				mChartScreenBuffer[tChartIndex][1] = tYStart;
+				mChartScreenBufferActualLength = aDataLength;
+				mChartScreenBufferXStart = tXStart;
+				int j = 1;
+				int i = 2;
+				// for points for each line
+				while (i < (aDataLength - 2) * 4) {
+					tXStart += mScaleFactor;
+					tYStart = (BluetoothSerialService.convertByteToFloat(aDataBytes[j++]) * mScaleFactor) + tYOffset;
+					// end of first line ...
+					mChartScreenBuffer[tChartIndex][i++] = tXStart;
+					mChartScreenBuffer[tChartIndex][i++] = tYStart;
+					// ... is start of next line
+					mChartScreenBuffer[tChartIndex][i++] = tXStart;
+					mChartScreenBuffer[tChartIndex][i++] = tYStart;
+				}
+				mChartScreenBuffer[tChartIndex][i++] = tXStart + mScaleFactor;
+				mChartScreenBuffer[tChartIndex][i] = (BluetoothSerialService.convertByteToFloat(aDataBytes[j++]) * mScaleFactor)
+						+ tYOffset;
+
+				mCanvas.drawLines(mChartScreenBuffer[tChartIndex], 0, aDataLength * 4, mGraphPaintStrokeScaleFactor);
+
+				break;
+
+			case FUNCTION_TAG_DRAW_PATH:
+			case FUNCTION_TAG_FILL_PATH:
+				tColor = shortToLongColor(aParameters[0]);
+				if (aCommand == FUNCTION_TAG_DRAW_PATH) {
+					tFunctionName = "drawPath";
+					mGraphPaintStrokeSettable.setColor(tColor);
+					mGraphPaintStrokeSettable.setStrokeWidth(aParameters[1] * mScaleFactor);
+					tResultingPaint = mGraphPaintStrokeSettable;
+					if (BlueDisplay.isDEBUG()) {
+						tAdditionalInfo = " strokeWidth=" + aParameters[1] * mScaleFactor;
+					}
+				} else {
+					tFunctionName = "fillPath";
+					mGraphPaintStroke1Fill.setColor(tColor);
+					tResultingPaint = mGraphPaintStroke1Fill;
+				}
+				if (BlueDisplay.isDEBUG()) {
+					Log.d(LOG_TAG, tFunctionName + "(" + tXStart + ", " + tYStart + ") color= " + shortToColorString(tColor)
+							+ " lenght=" + aDataLength + tAdditionalInfo);
+				}
+
+				/*
+				 * Data to path
+				 */
+				mPath.incReserve(aDataLength + 1);
+				mPath.moveTo(aDataInts[0] * mScaleFactor, aDataInts[1] * mScaleFactor);
+				i = 2;
+				while (i < aDataLength) {
+					mPath.lineTo(aDataInts[i] * mScaleFactor, aDataInts[i + 1] * mScaleFactor);
+					i += 2;
+				}
+				mPath.close();
+
+				mCanvas.drawPath(mPath, tResultingPaint);
+
+				// Path only consists of lines
+				mPath.rewind();
+
+				break;
+
+			case FUNCTION_TAG_DRAW_RECT_REL:
+			case FUNCTION_TAG_FILL_RECT_REL:
+			case FUNCTION_TAG_DRAW_RECT:
+			case FUNCTION_TAG_FILL_RECT:
+				if (aCommand == FUNCTION_TAG_DRAW_RECT_REL || aCommand == FUNCTION_TAG_FILL_RECT_REL) {
+					tXEnd = tXStart + aParameters[2] * mScaleFactor;
+					tYEnd = tYStart + aParameters[3] * mScaleFactor;
+				} else {
+					tXEnd = aParameters[2] * mScaleFactor;
+					tYEnd = aParameters[3] * mScaleFactor;
+					// sort parameters
+					float tmp;
+					if (tXStart > tXEnd) {
+						tmp = tXStart;
+						tXStart = tXEnd;
+						tXEnd = tmp;
+					}
+					if (tYStart > tYEnd) {
+						tmp = tYStart;
+						tYStart = tYEnd;
+						tYEnd = tmp;
+					}
+				}
+
+				tColor = shortToLongColor(aParameters[4]);
+
+				if (aCommand == FUNCTION_TAG_DRAW_RECT || aCommand == FUNCTION_TAG_DRAW_RECT_REL) {
+					if (aCommand == FUNCTION_TAG_DRAW_RECT_REL) {
+						tFunctionName = "drawRectRel";
+					} else {
+						tFunctionName = "drawRect";
+					}
+					mGraphPaintStrokeSettable.setColor(tColor);
+					mGraphPaintStrokeSettable.setStrokeWidth(aParameters[5] * mScaleFactor);
+					tResultingPaint = mGraphPaintStrokeSettable;
+					if (BlueDisplay.isDEBUG()) {
+						tAdditionalInfo = " strokeWidth=" + aParameters[5] * mScaleFactor;
+					}
+				} else {
+					if (aCommand == FUNCTION_TAG_FILL_RECT_REL) {
+						tFunctionName = "fillRectRel";
+					} else {
+						tFunctionName = "fillRect";
+					}
+					mGraphPaintStroke1Fill.setColor(tColor);
+					tResultingPaint = mGraphPaintStroke1Fill;
+				}
+
+				if (BlueDisplay.isDEBUG()) {
+					Log.d(LOG_TAG, tFunctionName + "(" + aParameters[0] + ", " + aParameters[1] + ", " + aParameters[2] + ", "
+							+ aParameters[3] + ") , color= " + shortToColorString(tColor) + tAdditionalInfo);
+				}
+				mCanvas.drawRect(tXStart, tYStart, tXEnd, tYEnd, tResultingPaint);
+				break;
+
+			case FUNCTION_TAG_DRAW_CIRCLE:
+			case FUNCTION_TAG_FILL_CIRCLE:
+				tColor = shortToLongColor(aParameters[3]);
+				float tRadius = aParameters[2] * mScaleFactor;
+				if (aCommand == FUNCTION_TAG_DRAW_CIRCLE) {
+					tFunctionName = "drawCircle";
+					mGraphPaintStrokeSettable.setColor(tColor);
+					mGraphPaintStrokeSettable.setStrokeWidth(aParameters[4] * mScaleFactor);
+					tResultingPaint = mGraphPaintStrokeSettable;
+					if (BlueDisplay.isDEBUG()) {
+						tAdditionalInfo = " strokeWidth=" + aParameters[4] * mScaleFactor;
+					}
+				} else {
+					tFunctionName = "fillCircle";
+					mGraphPaintStroke1Fill.setColor(tColor);
+					tResultingPaint = mGraphPaintStroke1Fill;
+				}
+
+				if (BlueDisplay.isDEBUG()) {
+					Log.d(LOG_TAG, tFunctionName + "(" + aParameters[0] + ", " + aParameters[1] + ", " + aParameters[2]
+							+ ") ,color= " + shortToColorString(aParameters[3]) + tAdditionalInfo);
+				}
+				mCanvas.drawCircle(tXStart, tYStart, tRadius, tResultingPaint);
+				break;
+
+			case FUNCTION_TAG_DEBUG_STRING:
+				tStringParameter = new String(aDataBytes, 0, aDataLength);
+				Log.i(LOG_TAG, "Debug=" + tStringParameter);
+				break;
+
+			case FUNCTION_TAG_DRAW_CHAR:
+			case FUNCTION_TAG_DRAW_STRING:
+
+				tTextSize = (int) (aParameters[2] * mScaleFactor);
+				mTextPaint.setTextSize(tTextSize);
+				// ascend for background color. + mScaleFactor for upper margin
+				tAscend = (float) (tTextSize * 0.76) + mScaleFactor;
+				tDecend = (float) (tTextSize * 0.24);
+
+				int tDataLength = aDataLength;
+				if (aCommand == FUNCTION_TAG_DRAW_CHAR) {
+					tFunctionName = "drawChar";
+					sCharsArray[0] = myConvertChar((byte) aParameters[5]);
+					tDataLength = 1;
+				} else {
+					tFunctionName = "drawString";
+					myConvertChars(aDataBytes, sCharsArray, tDataLength);
+				}
+				tStringParameter = new String(sCharsArray, 0, tDataLength);
+
+				mTextPaint.setColor(shortToLongColor(aParameters[3]));
+
+				if (BlueDisplay.isDEBUG()) {
+					Log.d(LOG_TAG, tFunctionName + "(\"" + tStringParameter + "\", " + aParameters[0] + ", " + aParameters[1]
+							+ ", " + aParameters[2] + ") color= " + shortToColorString(aParameters[3]) + " bg= "
+							+ shortToColorString(aParameters[4]));
+				}
+
+				tIndex = tStringParameter.indexOf('\n');
+				boolean tDrawBackground = false;
+				if (aParameters[4] != COLOR_NO_BACKGROUND) {
+					mTextBackgroundPaint.setColor(shortToLongColor(aParameters[4]));
+					tDrawBackground = true;
+				}
+				if (tIndex > 0) {
+					int tStartIndex = 0;
+
+					while (tIndex > 0) {
+						/*
+						 * Multiline text
+						 */
+						if (tDrawBackground) {
+							// draw background for whole rest of line
+							mCanvas.drawRect(tXStart, tYStart - tAscend, mActualCanvasWidth, tYStart + tDecend,
+									mTextBackgroundPaint);
+						}
+						// check for single newline
+						if (tStartIndex != tIndex) {
+							// draw string
+							mCanvas.drawText(tStringParameter, tStartIndex, tIndex, tXStart, tYStart, mTextPaint);
+							tYStart += tTextSize + mScaleFactor; // + Margin
+						}
+						// search for next newline
+						tStartIndex = tIndex + 1;
+						if (tIndex + 1 <= tStringParameter.length()) {
+							tIndex = tStringParameter.indexOf('\n', tIndex + 1);
+							if (tIndex < 0) {
+								tIndex = tStringParameter.length();
+							}
+						} else {
+							tIndex = 0;
+						}
+					}
+				} else {
+					if (tDrawBackground) {
+						float tTextLength = mTextPaint.measureText(tStringParameter);
+						// draw background
+						mCanvas.drawRect(tXStart, tYStart - tAscend, tXStart + tTextLength, tYStart + tDecend, mTextBackgroundPaint);
+						// mCanvas.drawRect(tXStart, tYStart - tAscend, tXStart +
+						// (tTextWidth * tDataLength) + 1, tYStart + tDecend,
+						// mTextBackgroundPaint);
+					}
+
+					// draw char / string
+					mCanvas.drawText(tStringParameter, tXStart, tYStart, mTextPaint);
 				}
 				break;
 
 			default:
-				Log.e(LOG_TAG, "Global settings: unknown subcommand 0x" + Integer.toHexString(tSubcommand)
-						+ " received. paramsLength=" + aParamsLength + " dataLenght=" + aDataLength);
+				Log.e(LOG_TAG, "unknown command 0x" + Integer.toHexString(aCommand) + " received. paramsLength=" + aParamsLength
+						+ " dataLenght=" + aDataLength);
 				break;
-
 			}
-			break;
-
-		case FUNCTION_TAG_CLEAR_DISPLAY:
-			// clear screen
-			if (BlueDisplay.isINFO()) {
-				Log.i(LOG_TAG, "Clear screen color=0x" + Integer.toHexString(shortToLongColor(aParameters[0])));
-			}
-			mCanvas.drawColor(shortToLongColor(aParameters[0]));
-			// reset screen buffer
-			mChartScreenBufferActualLength = 0;
-			break;
-
-		case FUNCTION_TAG_DRAW_PIXEL:
-			mGraphPaintStrokeScaleFactor.setColor(shortToLongColor(aParameters[2]));
-			if (BlueDisplay.isINFO()) {
-				Log.i(LOG_TAG,
-						"drawPixel(" + tXStart + ", " + tYStart + ") color=0x"
-								+ Integer.toHexString(shortToLongColor(aParameters[2])));
-			}
-			mCanvas.drawPoint(tXStart, tYStart, mGraphPaintStrokeScaleFactor);
-			break;
-
-		case FUNCTION_TAG_DRAW_LINE_REL:
-		case FUNCTION_TAG_DRAW_LINE:
-			if (aCommand == FUNCTION_TAG_DRAW_LINE_REL) {
-				tFunctionName = "drawLineRel";
-				tXEnd = tXStart + aParameters[2] * mScaleFactor;
-				tYEnd = tYStart + aParameters[3] * mScaleFactor;
-			} else {
-				tFunctionName = "drawLine";
-				tXEnd = aParameters[2] * mScaleFactor;
-				tYEnd = aParameters[3] * mScaleFactor;
-			}
-
-			tColor = shortToLongColor(aParameters[4]);
-
-			if (aParamsLength > 5) {
-				// Stroke parameter
-				mGraphPaintStrokeSettable.setStrokeWidth(aParameters[5] * mScaleFactor);
-				tResultingPaint = mGraphPaintStrokeSettable;
-				if (BlueDisplay.isINFO()) {
-					tAdditionalInfo = " strokeWidth=" + aParameters[5] * mScaleFactor;
-				}
-			} else {
-				tResultingPaint = mGraphPaintStrokeScaleFactor;
-			}
-
-			tResultingPaint.setColor(tColor);
-			if (tXStart == tXEnd && tYStart == tYEnd) {
-				mCanvas.drawPoint(tXStart, tYStart, tResultingPaint);
-			} else {
-				mCanvas.drawLine(tXStart, tYStart, tXEnd, tYEnd, tResultingPaint);
-			}
-			if (BlueDisplay.isINFO()) {
-				Log.i(LOG_TAG, tFunctionName + "(" + tXStart + ", " + tYStart + ", " + tXEnd + ", " + tYEnd + ") color=0x"
-						+ Integer.toHexString(tColor) + tAdditionalInfo);
-			}
-			break;
-
-		case FUNCTION_TAG_DRAW_CHART:
-		case FUNCTION_TAG_DRAW_CHART_WITHOUT_DIRECT_RENDERING:
-			/*
-			 * Chart index is coded in the upper 4 bits of Y start position
-			 */
-			int tChartIndex = aParameters[1] >> 12;
-			if (tChartIndex > 0) {
-				tYStart = (aParameters[1] & 0x0FFF) * mScaleFactor;
-			}
-			tColor = shortToLongColor(aParameters[2]);
-			int tDeleteColor = shortToLongColor(aParameters[3]);
-
-			if (BlueDisplay.isINFO()) {
-				Log.i(LOG_TAG, "drawChart(" + tXStart + ", " + tYStart + ") color=0x" + Integer.toHexString(tColor)
-						+ " ,deleteColor=0x" + Integer.toHexString(tDeleteColor) + " lenght=" + aDataLength);
-			}
-
-			if (aParameters[3] != 0) {
-				/*
-				 * delete old chart
-				 */
-				// set delete color
-				mGraphPaintStrokeScaleFactor.setColor(tDeleteColor);
-				mCanvas.drawLines(mChartScreenBuffer[tChartIndex], 0, mChartScreenBufferActualLength * 4,
-						mGraphPaintStrokeScaleFactor);
-			}
-
-			/*
-			 * draw new chart
-			 */
-
-			mGraphPaintStrokeScaleFactor.setColor(tColor);
-
-			float tYOffset = tYStart;
-			tYStart += BluetoothSerialService.convertByteToFloat(aDataBytes[0]) * mScaleFactor;
-			mChartScreenBuffer[tChartIndex][0] = tXStart;
-			mChartScreenBuffer[tChartIndex][1] = tYStart;
-			mChartScreenBufferActualLength = aDataLength;
-			mChartScreenBufferXStart = tXStart;
-			int j = 1;
-			int i = 2;
-			// for points for each line
-			while (i < (aDataLength - 2) * 4) {
-				tXStart += mScaleFactor;
-				tYStart = (BluetoothSerialService.convertByteToFloat(aDataBytes[j++]) * mScaleFactor) + tYOffset;
-				// end of first line ...
-				mChartScreenBuffer[tChartIndex][i++] = tXStart;
-				mChartScreenBuffer[tChartIndex][i++] = tYStart;
-				// ... is start of next line
-				mChartScreenBuffer[tChartIndex][i++] = tXStart;
-				mChartScreenBuffer[tChartIndex][i++] = tYStart;
-			}
-			mChartScreenBuffer[tChartIndex][i++] = tXStart + mScaleFactor;
-			mChartScreenBuffer[tChartIndex][i] = (BluetoothSerialService.convertByteToFloat(aDataBytes[j++]) * mScaleFactor)
-					+ tYOffset;
-
-			mCanvas.drawLines(mChartScreenBuffer[tChartIndex], 0, aDataLength * 4, mGraphPaintStrokeScaleFactor);
-
-			break;
-
-		case FUNCTION_TAG_DRAW_PATH:
-		case FUNCTION_TAG_FILL_PATH:
-			tColor = shortToLongColor(aParameters[0]);
-			if (aCommand == FUNCTION_TAG_DRAW_PATH) {
-				tFunctionName = "drawPath";
-				mGraphPaintStrokeSettable.setColor(tColor);
-				mGraphPaintStrokeSettable.setStrokeWidth(aParameters[1] * mScaleFactor);
-				tResultingPaint = mGraphPaintStrokeSettable;
-				if (BlueDisplay.isINFO()) {
-					tAdditionalInfo = " strokeWidth=" + aParameters[1] * mScaleFactor;
-				}
-			} else {
-				tFunctionName = "fillPath";
-				mGraphPaintStroke1Fill.setColor(tColor);
-				tResultingPaint = mGraphPaintStroke1Fill;
-			}
-			if (BlueDisplay.isINFO()) {
-				Log.i(LOG_TAG, tFunctionName + "(" + tXStart + ", " + tYStart + ") color=0x" + Integer.toHexString(tColor)
-						+ " lenght=" + aDataLength + tAdditionalInfo);
-			}
-
-			/*
-			 * Data to path
-			 */
-			mPath.incReserve(aDataLength + 1);
-			mPath.moveTo(aDataInts[0] * mScaleFactor, aDataInts[1] * mScaleFactor);
-			i = 2;
-			while (i < aDataLength) {
-				mPath.lineTo(aDataInts[i] * mScaleFactor, aDataInts[i + 1] * mScaleFactor);
-				i += 2;
-			}
-			mPath.close();
-
-			mCanvas.drawPath(mPath, tResultingPaint);
-
-			// Path only consists of lines
-			mPath.rewind();
-
-			break;
-
-		case FUNCTION_TAG_DRAW_RECT_REL:
-		case FUNCTION_TAG_FILL_RECT_REL:
-		case FUNCTION_TAG_DRAW_RECT:
-		case FUNCTION_TAG_FILL_RECT:
-			if (aCommand == FUNCTION_TAG_DRAW_RECT_REL || aCommand == FUNCTION_TAG_FILL_RECT_REL) {
-				tXEnd = tXStart + aParameters[2] * mScaleFactor;
-				tYEnd = tYStart + aParameters[3] * mScaleFactor;
-			} else {
-				tXEnd = aParameters[2] * mScaleFactor;
-				tYEnd = aParameters[3] * mScaleFactor;
-				// sort parameters
-				float tmp;
-				if (tXStart > tXEnd) {
-					tmp = tXStart;
-					tXStart = tXEnd;
-					tXEnd = tmp;
-				}
-				if (tYStart > tYEnd) {
-					tmp = tYStart;
-					tYStart = tYEnd;
-					tYEnd = tmp;
-				}
-			}
-
-			tColor = shortToLongColor(aParameters[4]);
-
-			if (aCommand == FUNCTION_TAG_DRAW_RECT || aCommand == FUNCTION_TAG_DRAW_RECT_REL) {
-				if (aCommand == FUNCTION_TAG_DRAW_RECT_REL) {
-					tFunctionName = "drawRectRel";
-				} else {
-					tFunctionName = "drawRect";
-				}
-				mGraphPaintStrokeSettable.setColor(tColor);
-				mGraphPaintStrokeSettable.setStrokeWidth(aParameters[5] * mScaleFactor);
-				tResultingPaint = mGraphPaintStrokeSettable;
-				if (BlueDisplay.isINFO()) {
-					tAdditionalInfo = " strokeWidth=" + aParameters[5] * mScaleFactor;
-				}
-			} else {
-				if (aCommand == FUNCTION_TAG_FILL_RECT_REL) {
-					tFunctionName = "fillRectRel";
-				} else {
-					tFunctionName = "fillRect";
-				}
-				mGraphPaintStroke1Fill.setColor(tColor);
-				tResultingPaint = mGraphPaintStroke1Fill;
-			}
-
-			if (BlueDisplay.isINFO()) {
-				Log.i(LOG_TAG, tFunctionName + "(" + tXStart + ", " + tYStart + ", " + tXEnd + ", " + tYEnd + ") , color=0x"
-						+ Integer.toHexString(tColor) + tAdditionalInfo);
-			}
-			mCanvas.drawRect(tXStart, tYStart, tXEnd, tYEnd, tResultingPaint);
-			break;
-
-		case FUNCTION_TAG_DRAW_CIRCLE:
-		case FUNCTION_TAG_FILL_CIRCLE:
-			tColor = shortToLongColor(aParameters[3]);
-			float tRadius = aParameters[2] * mScaleFactor;
-			if (aCommand == FUNCTION_TAG_DRAW_CIRCLE) {
-				tFunctionName = "drawCircle";
-				mGraphPaintStrokeSettable.setColor(tColor);
-				mGraphPaintStrokeSettable.setStrokeWidth(aParameters[4] * mScaleFactor);
-				tResultingPaint = mGraphPaintStrokeSettable;
-				if (BlueDisplay.isINFO()) {
-					tAdditionalInfo = " strokeWidth=" + aParameters[4] * mScaleFactor;
-				}
-			} else {
-				tFunctionName = "fillCircle";
-				mGraphPaintStroke1Fill.setColor(tColor);
-				tResultingPaint = mGraphPaintStroke1Fill;
-			}
-
-			if (BlueDisplay.isINFO()) {
-				Log.i(LOG_TAG,
-						tFunctionName + "(" + tXStart + ", " + tYStart + ", " + tRadius + ") ,color=0x"
-								+ Integer.toHexString(shortToLongColor(aParameters[3])) + tAdditionalInfo);
-			}
-			mCanvas.drawCircle(tXStart, tYStart, tRadius, tResultingPaint);
-			break;
-
-		case FUNCTION_TAG_DEBUG_STRING:
-			tStringParameter = new String(aDataBytes, 0, aDataLength);
-			// output string as error to be more visible
-			Log.e(LOG_TAG, "Debug=" + tStringParameter);
-			break;
-
-		case FUNCTION_TAG_DRAW_CHAR:
-		case FUNCTION_TAG_DRAW_STRING:
-
-			tTextSize = (int) (aParameters[2] * mScaleFactor);
-			mTextPaint.setTextSize(tTextSize);
-			// ascend for background color. + mScaleFactor for upper margin
-			tAscend = (float) (tTextSize * 0.76) + mScaleFactor;
-			tDecend = (float) (tTextSize * 0.24);
-
-			int tDataLength = aDataLength;
-			if (aCommand == FUNCTION_TAG_DRAW_CHAR) {
-				tFunctionName = "drawChar";
-				sCharsArray[0] = myConvertChar((byte) aParameters[5]);
-				tDataLength = 1;
-			} else {
-				tFunctionName = "drawString";
-				myConvertChars(aDataBytes, sCharsArray, tDataLength);
-			}
-			tStringParameter = new String(sCharsArray, 0, tDataLength);
-
-			mTextPaint.setColor(shortToLongColor(aParameters[3]));
-
-			if (BlueDisplay.isINFO()) {
-				Log.i(LOG_TAG,
-						tFunctionName + "(\"" + tStringParameter + "\", " + tXStart + ", " + tYStart + ", " + tTextSize
-								+ ") color=0x" + Integer.toHexString(shortToLongColor(aParameters[3])) + " bg=0x"
-								+ Integer.toHexString(shortToLongColor(aParameters[4])));
-			}
-
-			tIndex = tStringParameter.indexOf('\n');
-			boolean tDrawBackground = false;
-			if (aParameters[4] != COLOR_NO_BACKGROUND) {
-				mTextBackgroundPaint.setColor(shortToLongColor(aParameters[4]));
-				tDrawBackground = true;
-			}
-			if (tIndex > 0) {
-				int tStartIndex = 0;
-
-				while (tIndex > 0) {
-					/*
-					 * Multiline text
-					 */
-					if (tDrawBackground) {
-						// draw background for whole rest of line
-						mCanvas.drawRect(tXStart, tYStart - tAscend, mActualCanvasWidth, tYStart + tDecend, mTextBackgroundPaint);
-					}
-					// check for single newline
-					if (tStartIndex != tIndex) {
-						// draw string
-						mCanvas.drawText(tStringParameter, tStartIndex, tIndex, tXStart, tYStart, mTextPaint);
-						tYStart += tTextSize + mScaleFactor; // + Margin
-					}
-					// search for next newline
-					tStartIndex = tIndex + 1;
-					if (tIndex + 1 <= tStringParameter.length()) {
-						tIndex = tStringParameter.indexOf('\n', tIndex + 1);
-						if (tIndex < 0) {
-							tIndex = tStringParameter.length();
-						}
-					} else {
-						tIndex = 0;
-					}
-				}
-			} else {
-				if (tDrawBackground) {
-					float tTextLength = mTextPaint.measureText(tStringParameter);
-					// draw background
-					mCanvas.drawRect(tXStart, tYStart - tAscend, tXStart + tTextLength, tYStart + tDecend, mTextBackgroundPaint);
-					// mCanvas.drawRect(tXStart, tYStart - tAscend, tXStart +
-					// (tTextWidth * tDataLength) + 1, tYStart + tDecend,
-					// mTextBackgroundPaint);
-				}
-
-				// draw char / string
-				mCanvas.drawText(tStringParameter, tXStart, tYStart, mTextPaint);
-			}
-			break;
-
-		default:
-			Log.e(LOG_TAG, "unknown command 0x" + Integer.toHexString(aCommand) + " received. paramsLength=" + aParamsLength
+		} catch (Exception e) {
+			Log.e(LOG_TAG, "Exception catched for command 0x" + Integer.toHexString(aCommand) + ". paramsLength=" + aParamsLength
 					+ " dataLenght=" + aDataLength);
-			break;
 		}
 		// long tEnd = System.nanoTime();
 		// Log.i(LOG_TAG, "Interpret=" + (tEnd - tStart));
@@ -1227,6 +1338,7 @@ public class RPCView extends View {
 	protected void resetAll() {
 		TouchButton.resetButtons(this);
 		TouchSlider.deactivateAllSliders();
+		Sensors.disableAllSensors();
 		resetFlags();
 		initCharMappingArray();
 		if (BlueDisplay.isINFO()) {
@@ -1389,20 +1501,20 @@ public class RPCView extends View {
 		tParameters[2] = tStartX + 10;
 		tParameters[3] = aStartY;
 		tParameters[4] = 0; // Color black
-		interpreteCommand(FUNCTION_TAG_DRAW_LINE, tParameters, 5, tByteBuffer, null, 0);
+		interpretCommand(FUNCTION_TAG_DRAW_LINE, tParameters, 5, tByteBuffer, null, 0);
 		tParameters[0] = tParameters[2] = tStartX;
 		tParameters[1] = aStartY + 1;
 		tParameters[3] = aStartY + 10;
 		tParameters[4] = 0x7E0; // Color green
-		interpreteCommand(FUNCTION_TAG_DRAW_LINE, tParameters, 5, tByteBuffer, null, 0);
+		interpretCommand(FUNCTION_TAG_DRAW_LINE, tParameters, 5, tByteBuffer, null, 0);
 		tParameters[0] = tParameters[2] = tStartX + 10;
-		interpreteCommand(FUNCTION_TAG_DRAW_LINE, tParameters, 5, tByteBuffer, null, 0);
+		interpretCommand(FUNCTION_TAG_DRAW_LINE, tParameters, 5, tByteBuffer, null, 0);
 		tParameters[1] = tParameters[3] = aStartY + 10;
 		tParameters[0] = tStartX + 1;
 		tParameters[2] = tStartX + 9;
 		tParameters[4] = 0xF800; // Color red
 		// red bottom line as rect
-		interpreteCommand(FUNCTION_TAG_FILL_RECT, tParameters, 6, tByteBuffer, null, 0);
+		interpretCommand(FUNCTION_TAG_FILL_RECT, tParameters, 6, tByteBuffer, null, 0);
 
 		// draw 2 border points outside box
 		tCanvas.drawPoint(mScaleFactor * tStartX - 1, mScaleFactor * aStartY - 1, tGraph1Paint); // 1
@@ -1417,7 +1529,7 @@ public class RPCView extends View {
 		tParameters[1] = aStartY - 2;
 		tParameters[3] = aStartY + 12;
 		tParameters[4] = 0xF800; // Color red
-		interpreteCommand(FUNCTION_TAG_DRAW_RECT, tParameters, 6, tByteBuffer, null, 0);
+		interpretCommand(FUNCTION_TAG_DRAW_RECT, tParameters, 6, tByteBuffer, null, 0);
 
 		// fill with red square
 		tParameters[0] = tStartX + 2;
@@ -1425,14 +1537,14 @@ public class RPCView extends View {
 		tParameters[1] = aStartY + 2;
 		tParameters[3] = aStartY + 8;
 		tParameters[4] = 0xF800; // Color red
-		interpreteCommand(FUNCTION_TAG_FILL_RECT, tParameters, 6, tByteBuffer, null, 0);
+		interpretCommand(FUNCTION_TAG_FILL_RECT, tParameters, 6, tByteBuffer, null, 0);
 
 		// fill with black circle
 		tParameters[0] = tStartX + 5;
 		tParameters[1] = aStartY + 5;
 		tParameters[2] = 3; // radius
 		tParameters[3] = 0;
-		interpreteCommand(FUNCTION_TAG_DRAW_CIRCLE, tParameters, 6, tByteBuffer, null, 0);
+		interpretCommand(FUNCTION_TAG_DRAW_CIRCLE, tParameters, 6, tByteBuffer, null, 0);
 
 		// and draw center point
 		tCanvas.drawPoint(mScaleFactor * tStartX + mScaleFactor * 5, mScaleFactor * aStartY + mScaleFactor * 5, tGraph1Paint); // 1
@@ -1446,7 +1558,7 @@ public class RPCView extends View {
 		tParameters[3] = aStartY + 40;
 		tParameters[4] = 0; // Color black
 		tParameters[5] = 5; // Stroke width
-		interpreteCommand(FUNCTION_TAG_DRAW_LINE, tParameters, 6, tByteBuffer, null, 0);
+		interpretCommand(FUNCTION_TAG_DRAW_LINE, tParameters, 6, tByteBuffer, null, 0);
 
 		// draw char + string
 		tParameters[0] = tStartX + 15;
@@ -1455,27 +1567,27 @@ public class RPCView extends View {
 		tParameters[3] = 0; // Color black
 		tParameters[4] = 0x1F; // Background color blue
 		tParameters[5] = tModeCharacter;
-		interpreteCommand(FUNCTION_TAG_DRAW_CHAR, tParameters, 6, tByteBuffer, null, 0);
+		interpretCommand(FUNCTION_TAG_DRAW_CHAR, tParameters, 6, tByteBuffer, null, 0);
 
 		// ISO_8859_15
 		tParameters[0] = SET_CODEPAGE;
 		tParameters[1] = 15;
-		interpreteCommand(FUNCTION_TAG_GLOBAL_SETTINGS, tParameters, 1, tByteBuffer, null, 0);
+		interpretCommand(FUNCTION_TAG_GLOBAL_SETTINGS, tParameters, 1, tByteBuffer, null, 0);
 
 		tParameters[0] = SET_CHARACTER_CODE_MAPPING;
 		tParameters[1] = 0x81;
 		tParameters[2] = 0x03A9; // Omega in UTF16
-		interpreteCommand(FUNCTION_TAG_GLOBAL_SETTINGS, tParameters, 2, tByteBuffer, null, 0);
+		interpretCommand(FUNCTION_TAG_GLOBAL_SETTINGS, tParameters, 2, tByteBuffer, null, 0);
 
 		tParameters[0] = SET_CHARACTER_CODE_MAPPING;
 		tParameters[1] = 0x82;
 		tParameters[2] = 0x2302; // House in UTF16
-		interpreteCommand(FUNCTION_TAG_GLOBAL_SETTINGS, tParameters, 2, tByteBuffer, null, 0);
+		interpretCommand(FUNCTION_TAG_GLOBAL_SETTINGS, tParameters, 2, tByteBuffer, null, 0);
 
 		tParameters[0] = tStartX + 30;
 		tParameters[1] = aStartY;
 		tParameters[2] = 11; // Size
-		interpreteCommand(FUNCTION_TAG_DRAW_STRING, tParameters, 6, tByteBuffer, null, tByteBuffer.length);
+		interpretCommand(FUNCTION_TAG_DRAW_STRING, tParameters, 6, tByteBuffer, null, tByteBuffer.length);
 
 		// generate chart data
 		byte[] tChartBuffer = new byte[mRequestedCanvasHeight / 2];
@@ -1487,7 +1599,7 @@ public class RPCView extends View {
 		tParameters[1] = (mRequestedCanvasHeight / 2);
 		tParameters[2] = 0; // Color black
 		tParameters[3] = 0; // No clearing of old chart
-		interpreteCommand(FUNCTION_TAG_DRAW_CHART, tParameters, 4, tChartBuffer, null, tChartBuffer.length);
+		interpretCommand(FUNCTION_TAG_DRAW_CHART, tParameters, 4, tChartBuffer, null, tChartBuffer.length);
 
 		// Draw Z shaped chart
 		tChartBuffer[0] = (byte) 3;
@@ -1500,7 +1612,7 @@ public class RPCView extends View {
 		tChartBuffer[7] = (byte) ((mRequestedCanvasHeight / 2) - 3);
 
 		tParameters[0] = (aStartY % 30) + tChartBuffer.length;
-		interpreteCommand(FUNCTION_TAG_DRAW_CHART, tParameters, 4, tChartBuffer, null, 8);
+		interpretCommand(FUNCTION_TAG_DRAW_CHART, tParameters, 4, tChartBuffer, null, 8);
 
 		/*
 		 * compare chart + lines
@@ -1523,7 +1635,7 @@ public class RPCView extends View {
 		tParameters[3] = 0; // Color black
 		tParameters[4] = 0x1F; // Background color blue
 		tParameters[5] = tModeCharacter;
-		interpreteCommand(FUNCTION_TAG_DRAW_CHAR, tParameters, 6, tByteBuffer, null, 0);
+		interpretCommand(FUNCTION_TAG_DRAW_CHAR, tParameters, 6, tByteBuffer, null, 0);
 
 		tParameters[4] = 0xF800; // Color red
 		for (int i = 0; i < 10; i++) {
@@ -1531,7 +1643,7 @@ public class RPCView extends View {
 			tParameters[1] = convertByteToInt(tChartBuffer[i]);
 			tParameters[2] = tParameters[0] + 1;
 			tParameters[3] = convertByteToInt(tChartBuffer[i + 1]);
-			interpreteCommand(FUNCTION_TAG_DRAW_LINE, tParameters, 5, tByteBuffer, null, 0);
+			interpretCommand(FUNCTION_TAG_DRAW_LINE, tParameters, 5, tByteBuffer, null, 0);
 		}
 
 		// DrawChart
@@ -1539,7 +1651,7 @@ public class RPCView extends View {
 		tParameters[1] = 0;
 		tParameters[2] = 0; // Color black
 		tParameters[3] = 0; // No clearing of old chart
-		interpreteCommand(FUNCTION_TAG_DRAW_CHART, tParameters, 4, tChartBuffer, null, 11);
+		interpretCommand(FUNCTION_TAG_DRAW_CHART, tParameters, 4, tChartBuffer, null, 11);
 	}
 
 	private void drawLogo(int aStartX, int aStartY, int aScaleDiv) {
@@ -1552,10 +1664,10 @@ public class RPCView extends View {
 		tParameters[2] = 450 / aScaleDiv;
 		tParameters[3] = 120 / aScaleDiv;
 		tParameters[4] = 0x1F; // Color blue
-		interpreteCommand(FUNCTION_TAG_FILL_RECT_REL, tParameters, 5, null, null, 0);
+		interpretCommand(FUNCTION_TAG_FILL_RECT_REL, tParameters, 5, null, null, 0);
 		tParameters[4] = 0; // Color black
 		tParameters[5] = 1; // Stroke width for Draw...
-		interpreteCommand(FUNCTION_TAG_DRAW_RECT_REL, tParameters, 5, null, null, 0);
+		interpretCommand(FUNCTION_TAG_DRAW_RECT_REL, tParameters, 5, null, null, 0);
 
 		// red triangle
 		tParameters[0] = 0xF800; // Color red
@@ -1565,10 +1677,10 @@ public class RPCView extends View {
 		tPathParameters[3] = 440 / aScaleDiv + aStartY;
 		tPathParameters[4] = 450 / aScaleDiv + aStartX;
 		tPathParameters[5] = 330 / aScaleDiv + aStartY;
-		interpreteCommand(FUNCTION_TAG_FILL_PATH, tParameters, 1, null, tPathParameters, 6);
+		interpretCommand(FUNCTION_TAG_FILL_PATH, tParameters, 1, null, tPathParameters, 6);
 		tParameters[0] = 0x00; // Color black
 		tParameters[1] = 1; // Stroke width for Draw...
-		interpreteCommand(FUNCTION_TAG_DRAW_PATH, tParameters, 2, null, tPathParameters, 6);
+		interpretCommand(FUNCTION_TAG_DRAW_PATH, tParameters, 2, null, tPathParameters, 6);
 
 		// yellow circle
 		tParameters[0] = 160 / aScaleDiv + aStartX;
@@ -1576,10 +1688,10 @@ public class RPCView extends View {
 		tParameters[2] = 110 / aScaleDiv;
 		tParameters[3] = 0XFFE0; // Color yellow
 
-		interpreteCommand(FUNCTION_TAG_FILL_CIRCLE, tParameters, 4, null, tPathParameters, 6);
+		interpretCommand(FUNCTION_TAG_FILL_CIRCLE, tParameters, 4, null, tPathParameters, 6);
 		tParameters[3] = 0x00; // Color black
 		tParameters[4] = 1; // Stroke width for Draw..
-		interpreteCommand(FUNCTION_TAG_DRAW_CIRCLE, tParameters, 2, null, tPathParameters, 6);
+		interpretCommand(FUNCTION_TAG_DRAW_CIRCLE, tParameters, 2, null, tPathParameters, 6);
 	}
 
 	public int drawGraphTestPattern() {
@@ -1809,20 +1921,19 @@ public class RPCView extends View {
 	@SuppressLint("DefaultLocale")
 	public void drawFontTest() {
 		float tTextSize = 11;
+		float tTextSizeInfo = 15;
 		Canvas tCanvas = new Canvas(mBitmap);
 
 		Paint tTextPaint = new Paint();
 		tTextPaint.setStyle(Paint.Style.FILL);
 		tTextPaint.setTypeface(Typeface.MONOSPACE);
 		tTextPaint.setTextSize(tTextSize);
-		tTextPaint.setColor(Color.RED);
 
-		// for description
-		Paint tTextPaintInfo = new Paint();
-		tTextPaintInfo.setStyle(Paint.Style.FILL);
-		tTextPaintInfo.setTypeface(Typeface.MONOSPACE);
-		tTextPaintInfo.setTextSize(11);
-		tTextPaintInfo.setColor(Color.BLACK);
+		// for output
+		Paint tInfoText = new Paint();
+		tInfoText.setStyle(Paint.Style.FILL);
+		tInfoText.setTypeface(Typeface.MONOSPACE);
+		tInfoText.setTextSize(tTextSizeInfo);
 
 		Paint tTextBackgroundPaint = new Paint();
 		tTextBackgroundPaint.setStyle(Paint.Style.FILL);
@@ -1836,9 +1947,11 @@ public class RPCView extends View {
 		Path tPath = new Path();
 		RectF tRect = new RectF();
 
+		tInfoText.setColor(Color.RED);
 		tCanvas.drawText("Display Width= " + mActualCanvasWidth + " of " + mActualViewWidth + " Height=" + mActualCanvasHeight
-				+ " of " + mActualViewHeight, 100, tTextSize, tTextPaint);
-		tCanvas.drawText("Font INFO:    SIZE|ASCENT|DESCENT|WIDTH", 100, 2 * tTextSize, tTextPaint);
+				+ " of " + mActualViewHeight, 100, tTextSize, tInfoText);
+		tCanvas.drawText("Font INFO:    SIZE|ASCENT|DESCENT|WIDTH", 100, 2 * tTextSize, tInfoText);
+		tInfoText.setColor(Color.BLACK);
 
 		float startX;
 		float tYPos = 25;
@@ -1849,6 +1962,7 @@ public class RPCView extends View {
 		/*
 		 * Output TextSize-TextWidth for Size 5-75
 		 */
+		Log.i(LOG_TAG, "Font metrics:");
 		int j = 5;
 		for (int k = 0; k < 15; k++) {
 			StringBuilder tFontsizes = new StringBuilder(100);
@@ -1879,10 +1993,16 @@ public class RPCView extends View {
 				tFontsizesMore.append("\r\n");
 				j++;
 			}
-			tYPos += 11;
-			tCanvas.drawText(tFontsizes.toString(), 0, tYPos, tTextPaintInfo);
+			tYPos += tTextSizeInfo;
+			tCanvas.drawText(tFontsizes.toString(), 0, tYPos, tInfoText);
 			Log.i(LOG_TAG, tFontsizesMore.toString());
 		}
+
+		tYPos += tTextSizeInfo;
+		tYPos += tTextSizeInfo;
+		tInfoText.setColor(Color.RED);
+		tCanvas.drawText("draw text with background determined by ascent and decent", 0, tYPos, tInfoText);
+		tYPos += tTextSizeInfo;
 
 		/*
 		 * draw text with background determined by ascent and decent.
@@ -1891,9 +2011,9 @@ public class RPCView extends View {
 		float tEndX;
 		tYPos += 60;
 		startX = 0;
-		tCanvas.drawLine(startX, tYPos, startX + 10, tYPos, tGraph1Paint); // Base
+		tCanvas.drawLine(startX, tYPos, startX + 20, tYPos, tGraph1Paint); // Base
 																			// line
-		startX += 10;
+		startX += 20;
 		for (int i = 0; i < tTextSizesArray.length; i++) {
 			tTextSize = tTextSizesArray[i];
 			tTextPaint.setTextSize(tTextSize);
@@ -1903,18 +2023,21 @@ public class RPCView extends View {
 			tCanvas.drawText(tExampleString, startX, tYPos, tTextPaint);
 			startX = tEndX + 3;
 		}
-		tCanvas.drawLine(startX + 3, tYPos, startX + 10, tYPos, tGraph1Paint); // Base
+		tCanvas.drawLine(startX + 3, tYPos, startX + 20, tYPos, tGraph1Paint); // Base
 																				// line
-
+		tYPos += tTextSizeInfo;
+		tYPos += tTextSizeInfo;
+		tCanvas.drawText("draw text with background determined by real ascent and decent from getTextPath()", 0, tYPos, tInfoText);
+		tYPos += tTextSizeInfo;
 		/*
 		 * draw text with background determined by real ascent and decent - derived from getTextPath().
 		 */
 
 		tYPos += 60;
 		startX = 0;
-		tCanvas.drawLine(startX, tYPos, startX + 10, tYPos, tGraph1Paint); // Base
+		tCanvas.drawLine(startX, tYPos, startX + 20, tYPos, tGraph1Paint); // Base
 																			// line
-		startX += 10;
+		startX += 20;
 		for (int i = 0; i < tTextSizesArray.length; i++) {
 			tTextSize = tTextSizesArray[i];
 			tTextPaint.setTextSize(tTextSize);
@@ -1924,7 +2047,7 @@ public class RPCView extends View {
 			tCanvas.drawText(tExampleString, startX, tYPos, tTextPaint);
 			startX = tEndX + 3;
 		}
-		tCanvas.drawLine(startX + 3, tYPos, startX + 10, tYPos, tGraph1Paint); // Base
+		tCanvas.drawLine(startX + 3, tYPos, startX + 20, tYPos, tGraph1Paint); // Base
 																				// line
 
 	}

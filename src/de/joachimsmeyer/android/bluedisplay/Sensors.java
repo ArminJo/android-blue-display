@@ -1,0 +1,243 @@
+/*
+ * 	SUMMARY
+ * 	Blue Display is an Open Source Android remote Display for Arduino etc.
+ * 	It receives basic draw requests from Arduino etc. over Bluetooth and renders it.
+ * 	It also implements basic GUI elements as buttons and sliders.
+ * 	It sends touch or GUI callback events over Bluetooth back to Arduino.
+ * 
+ *  Copyright (C) 2014  Armin Joachimsmeyer
+ *  armin.joachimsmeyer@gmail.com
+ *  
+ * 	This file is part of BlueDisplay.
+ *  BlueDisplay is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, either version 3 of the License, or
+ *  (at your option) any later version.
+
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program.  If not, see <http://www.gnu.org/licenses/gpl.html>.
+ *  
+ *  This is the view which interprets the global and graphic commands received by serial service.
+ *  It also handles touch events and swipe as well as long touch detection.
+ *  
+ */
+
+package de.joachimsmeyer.android.bluedisplay;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import android.content.pm.ActivityInfo;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
+import android.util.Log;
+import android.view.OrientationEventListener;
+import android.view.Surface;
+
+public class Sensors implements SensorEventListener {
+
+	public static final String LOG_TAG = "Sensors";
+	boolean isAnySensorEnabled = false;
+	static List<SensorInfo> sAvailableSensorList = new ArrayList<SensorInfo>(32); // have seen more than 18 sensors in a device
+
+	class SensorInfo {
+		Sensor mSensor;
+		int mType;
+		int mRate;
+		boolean isActive;
+		float mLastValueX;
+		float mLastValueY;
+		float mLastValueZ;
+		float mSecondLastValueX;
+		float mSecondLastValueY;
+		float mSecondLastValueZ;
+
+		SensorInfo(Sensor aSensor, int aRate, boolean aIsActive) {
+			mSensor = aSensor;
+			mRate = aRate;
+			isActive = aIsActive;
+			mLastValueX = 0;
+			mLastValueY = 0;
+			mLastValueZ = 0;
+			mSecondLastValueX = 0;
+			mSecondLastValueY = 0;
+			mSecondLastValueZ = 0;
+		}
+
+		// Avoid noise (event value is solely switching between 2 values) -> skip value if it is equal last or second last value
+		boolean isInHistory(SensorEvent aEvent) {
+			if ((aEvent.values[0] == mLastValueX || aEvent.values[0] == mSecondLastValueX)
+					&& (aEvent.values[1] == mLastValueY || aEvent.values[1] == mSecondLastValueY)
+					&& (aEvent.values[2] == mLastValueZ || aEvent.values[2] == mSecondLastValueZ)) {
+				return true;
+			}
+			mSecondLastValueX = mLastValueX;
+			mSecondLastValueY = mLastValueY;
+			mSecondLastValueZ = mLastValueZ;
+			mLastValueX = aEvent.values[0];
+			mLastValueY = aEvent.values[1];
+			mLastValueZ = aEvent.values[2];
+			return false;
+		}
+
+	}
+
+	private BlueDisplay mBlueDisplayContext;
+
+	SensorManager mSensorManager;
+
+	public OrientationEventListener mOrientationEventListener;
+	boolean isOrientationEventListenerEnabled = false;
+
+	public Sensors(BlueDisplay aContext, SensorManager aSensorManager) {
+		mBlueDisplayContext = aContext;
+		mSensorManager = aSensorManager;
+		getAllAvailableSensors();
+
+		// to detect direct switching from 90 to 270 degrees and vice versa which does not call onConfigurationChanged()
+		mOrientationEventListener = new OrientationEventListener(mBlueDisplayContext, SensorManager.SENSOR_DELAY_NORMAL) {
+			@Override
+			public void onOrientationChanged(int mAngle) {
+				if (mBlueDisplayContext.mActualScreenOrientation == ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) {
+					// override only if orientation can change
+					if (mAngle > 225 && mAngle < 315 && mBlueDisplayContext.mActualRotation != Surface.ROTATION_90) {
+						Log.i(LOG_TAG, "Override rotation to 90 degree. Angle=" + mAngle);
+						mBlueDisplayContext.mActualRotation = Surface.ROTATION_90;
+					} else if (mAngle > 45 && mAngle < 135 && mBlueDisplayContext.mActualRotation != Surface.ROTATION_270) {
+						Log.i(LOG_TAG, "Override rotation to 270 degree. Angle=" + mAngle);
+						mBlueDisplayContext.mActualRotation = Surface.ROTATION_270;
+					}
+				}
+			}
+		};
+	}
+
+	public void getAllAvailableSensors() {
+		List<Sensor> tSensorsList = mSensorManager.getSensorList(Sensor.TYPE_ALL);
+		for (Sensor tSensor : tSensorsList) {
+			SensorInfo tSensorInfo = new SensorInfo(tSensor, 3, false);
+			sAvailableSensorList.add(tSensorInfo);
+			Log.i(LOG_TAG, "Sensor found: " + tSensor.toString());
+		}
+	}
+
+	boolean isSensorEnabledAndEventValuesNotInHistory(SensorEvent aEvent) {
+		for (SensorInfo tSensorInfo : sAvailableSensorList) {
+			Sensor tSensor = tSensorInfo.mSensor;
+			if (tSensor.getType() == tSensor.getType() && tSensorInfo.isActive) {
+				// Sensor found and active, check for simple noise cancellation
+				if (!tSensorInfo.isInHistory(aEvent))
+					return true;
+			}
+		}
+		return false;
+	}
+
+	/*
+	 * Activate or deactivate sensor To be called from interpret command
+	 */
+	public void setSensor(int aSensorType, boolean DoActivate, int aSensorRate) {
+		if (BlueDisplay.isINFO()) {
+			Log.i(LOG_TAG, "SetSensor sensor=" + aSensorType + " DoActivate=" + DoActivate + " rate=" + aSensorRate);
+		}
+		for (SensorInfo tSensorInfo : sAvailableSensorList) {
+			if (tSensorInfo.mSensor.getType() == aSensorType) {
+				if (aSensorRate > SensorManager.SENSOR_DELAY_NORMAL) {
+					// sensor rate received is in milliseconds -> convert it to microseconds
+					aSensorRate *= 1000;
+				}
+				if (DoActivate) {
+					mSensorManager.registerListener(this, tSensorInfo.mSensor, aSensorRate);
+				} else {
+					mSensorManager.unregisterListener(this, tSensorInfo.mSensor);
+				}
+				tSensorInfo.isActive = DoActivate;
+				if (!isOrientationEventListenerEnabled) {
+					if (mOrientationEventListener.canDetectOrientation()) {
+						Log.i(LOG_TAG, "Enable OrientationEventListener");
+						mOrientationEventListener.enable();
+						isOrientationEventListenerEnabled = true;
+					} else {
+						Log.w(LOG_TAG, "Can't detect orientation");
+					}
+				}
+			}
+		}
+	}
+
+	public static void disableAllSensors() {
+		for (SensorInfo tSensorInfo : sAvailableSensorList) {
+			tSensorInfo.isActive = false;
+		}
+	}
+
+	public void registerAllActiveSensorListeners() {
+		for (SensorInfo tSensorInfo : sAvailableSensorList) {
+			if (tSensorInfo.isActive) {
+				mSensorManager.registerListener(this, tSensorInfo.mSensor, SensorManager.SENSOR_DELAY_UI);
+				if (BlueDisplay.isDEBUG()) {
+					Log.d(LOG_TAG, "Register listener sensor=" + tSensorInfo.mSensor.getName());
+				}
+			}
+		}
+		if (!isOrientationEventListenerEnabled && mOrientationEventListener.canDetectOrientation()) {
+			mOrientationEventListener.enable();
+			isOrientationEventListenerEnabled = true;
+		}
+	}
+
+	public void deregisterAllActiveSensorListeners() {
+		mSensorManager.unregisterListener(this);
+		mOrientationEventListener.disable();
+		isOrientationEventListenerEnabled = false;
+	}
+
+	@Override
+	public void onSensorChanged(SensorEvent aEvent) {
+		int tSensorType = aEvent.sensor.getType();
+		if (isSensorEnabledAndEventValuesNotInHistory(aEvent)) {
+			if (BlueDisplay.isVERBOSE()) {
+				Log.v(LOG_TAG, "onSensorChanged sensorType=" + tSensorType);
+			}
+			if (tSensorType == Sensor.TYPE_ACCELEROMETER || tSensorType == Sensor.TYPE_GRAVITY
+					|| tSensorType == Sensor.TYPE_GYROSCOPE || tSensorType == Sensor.TYPE_LINEAR_ACCELERATION
+					|| tSensorType == Sensor.TYPE_MAGNETIC_FIELD) {
+
+				float ValueX = aEvent.values[0];
+				float ValueY = aEvent.values[1];
+				float ValueZ = aEvent.values[2];
+				if (BlueDisplay.isVERBOSE()) {
+					// timestamp in nanoseconds
+					Log.v(LOG_TAG, "Values=" + ValueX + " " + ValueY + " " + ValueZ + " rotation="
+							+ mBlueDisplayContext.mActualRotation + " TimeStamp=" + aEvent.timestamp / 1000 + "µs");
+				}
+
+				if (mBlueDisplayContext.mActualRotation == Surface.ROTATION_90) {
+					ValueY = ValueX;
+					ValueX = -aEvent.values[1]; // -ValueY
+				} else if (mBlueDisplayContext.mActualRotation == Surface.ROTATION_270) {
+					ValueY = -ValueX;
+					ValueX = aEvent.values[1]; // -ValueY
+				} else if (mBlueDisplayContext.mActualRotation == Surface.ROTATION_180) {
+					ValueX = -ValueX;
+					ValueY = -ValueY;
+				}
+				mBlueDisplayContext.mSerialService.writeSensorEvent(BluetoothSerialService.EVENT_TAG_FIRST_SENSOR_ACTION_CODE
+						+ tSensorType, ValueX, ValueY, ValueZ);
+			}
+		}
+	}
+
+	@Override
+	public void onAccuracyChanged(Sensor sensor, int accuracy) {
+		Log.i(LOG_TAG, "onAccuracyChanged accuracy=" + accuracy + " sensor=" + sensor);
+	}
+
+}

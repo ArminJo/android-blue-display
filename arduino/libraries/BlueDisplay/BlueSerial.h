@@ -33,10 +33,11 @@
  * 6 - Y Position MSB
  * 7 - Sync token
  *
- * Callback message has 13 bytes:
+ * Callback message has 15 bytes:
  * 1 - Gross message length in bytes
  * 2 - Function code
  * 16 bit button index
+ * 16 bit filler
  * 32 bit callback address
  * 32 bit value
  * 13 - Sync token

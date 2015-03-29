@@ -107,11 +107,11 @@ struct Callback {
     void * Handler;
     void * Handler_upperWord; // not used on 16 bit address cpu
 #endif
-    union HandlerValue {
+    union ValueForHandler {
         uint16_t Int16Value;
         uint32_t Int32Value;
         float FloatValue;
-    } HandlerValue;
+    } ValueForHandler;
 };
 
 struct BluetoothEvent {

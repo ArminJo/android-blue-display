@@ -1,7 +1,7 @@
 /*
  * HC-05Initialization.cpp
  *
- * 0. Modify the lines 49 and 50.
+ * 0. Modify the lines 51 and 52.
  * 1. Load this sketch to your Arduino.
  * 2. Disconnect Arduino from power.
  * 3. Connect Arduino rx/tx with HC-05 module tx/rx (crossover!) and do not forget to attach 5V to the module.

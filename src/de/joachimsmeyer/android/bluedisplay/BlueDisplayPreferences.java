@@ -39,8 +39,8 @@ public class BlueDisplayPreferences extends PreferenceActivity implements OnShar
 		}
 		tTitle += tValueSeparator + aPreference.getEntry();
 		aPreference.setTitle(tTitle);
-		if (BlueDisplay.isDEBUG()) {
-			Log.d(LOG_TAG, "Changing title to " + tTitle);
+		if (BlueDisplay.isVERBOSE()) {
+			Log.v(LOG_TAG, "Changing title to " + tTitle);
 		}
 	}
 

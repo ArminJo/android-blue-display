@@ -10,7 +10,7 @@
 
 #include <Arduino.h>
 #include "BlueSerial.h"
-#include "TouchLib.h"
+#include "EventHandler.h"
 
 // Data field types
 const int DATAFIELD_TAG_BYTE = 0x01;
@@ -20,6 +20,9 @@ const int DATAFIELD_TAG_LONG = 0x04;
 const int DATAFIELD_TAG_FLOAT = 0x05;
 const int DATAFIELD_TAG_DOUBLE = 0x06;
 const int LAST_FUNCTION_TAG_DATAFIELD = 0x07;
+
+#define MAX_NUMBER_OF_ARGS 12 // for sending
+#define TOUCH_COMMAND_SIZE_BYTE_MAX  13 // for receiving
 
 // definitions from <wiring_private.h>
 #ifndef cbi
@@ -64,7 +67,7 @@ void initSimpleSerial(uint32_t aBaudRate, bool aUsePairedPin) {
     // 8,68 (- 1) for 230400 8,5% for 8, 3.7% for 9
     // 4,34 (- 1) for 460800 8,5%
     // HC-05 Specified Max Total Error (%) for 8 bit= +3.90/-4.00
-    baud_setting = (((F_CPU / 4) / aBaudRate) - 1) / 2;// /2 after -1 because of better rounding
+    baud_setting = (((F_CPU / 4) / aBaudRate) - 1) / 2;    // /2 after -1 because of better rounding
 
     // assign the baud_setting, a.k.a. ubbr (USART Baud Rate Register)
     UBRR0H = baud_setting >> 8;
@@ -83,7 +86,7 @@ void initSimpleSerial(uint32_t aBaudRate, bool aUsePairedPin) {
  */
 void USART3_send(char aChar) {
 // wait for buffer to become empty
-    while (!((UCSR0A ) & (1 << UDRE0))) {
+    while (!((UCSR0A) & (1 << UDRE0))) {
         ;
     }
     UDR0 = aChar;
@@ -98,8 +101,8 @@ void USART3_send(char aChar) {
  * RECEIVE BUFFER
  */
 #define RECEIVE_TOUCH_OR_DISPLAY_DATA_SIZE 4
-#define RECEIVE_CALLBACK_DATA_SIZE 10
-//Buffer for 10 bytes since no need for length and eventType and SYNC_TOKEN be stored
+#define RECEIVE_CALLBACK_DATA_SIZE TOUCH_CALLBACK_DATA_SIZE
+//Buffer for 12 bytes since no need for length and eventType and SYNC_TOKEN be stored
 uint8_t sReceiveBuffer[RECEIVE_CALLBACK_DATA_SIZE];
 uint8_t sReceiveBufferIndex = 0; // Index of first free position in buffer
 bool sReceiveBufferOutOfSync = false;
@@ -112,7 +115,7 @@ void sendUSARTBufferNoSizeCheck(uint8_t * aParameterBufferPointer, int aParamete
 #ifdef USE_SIMPLE_SERIAL
     while (aParameterBufferLength > 0) {
         // wait for USART send buffer to become empty
-        while (!((UCSR0A ) & (1 << UDRE0))) {
+        while (!((UCSR0A) & (1 << UDRE0))) {
             ;
         }
         //USART_SendData(USART3, *aBytePtr);
@@ -122,7 +125,7 @@ void sendUSARTBufferNoSizeCheck(uint8_t * aParameterBufferPointer, int aParamete
     }
     while (aDataBufferLength > 0) {
         // wait for USART send buffer to become empty
-        while (!((UCSR0A ) & (1 << UDRE0))) {
+        while (!((UCSR0A) & (1 << UDRE0))) {
             ;
         }
         //USART_SendData(USART3, *aBytePtr);
@@ -144,7 +147,7 @@ void sendUSARTBufferNoSizeCheck(uint8_t * aParameterBufferPointer, int aParamete
  * 4. Short n parameters
  */
 void sendUSART5Args(uint8_t aFunctionTag, uint16_t aXStart, uint16_t aYStart, uint16_t aXEnd, uint16_t aYEnd, uint16_t aColor) {
-    uint16_t tParamBuffer[7];
+    uint16_t tParamBuffer[MAX_NUMBER_OF_ARGS];
 
     uint16_t * tBufferPointer = &tParamBuffer[0];
     *tBufferPointer++ = aFunctionTag << 8 | SYNC_TOKEN; // add sync token
@@ -163,11 +166,11 @@ void sendUSART5Args(uint8_t aFunctionTag, uint16_t aXStart, uint16_t aYStart, ui
  * @param aNumberOfArgs currently not more than 12 args are supported
  */
 void sendUSARTArgs(uint8_t aFunctionTag, int aNumberOfArgs, ...) {
-    if (aNumberOfArgs > 12) {
+    if (aNumberOfArgs > MAX_NUMBER_OF_ARGS) {
         return;
     }
 
-    uint16_t tParamBuffer[14];
+    uint16_t tParamBuffer[MAX_NUMBER_OF_ARGS + 2];
     va_list argp;
     uint16_t * tBufferPointer = &tParamBuffer[0];
     *tBufferPointer++ = aFunctionTag << 8 | SYNC_TOKEN; // add sync token
@@ -187,11 +190,11 @@ void sendUSARTArgs(uint8_t aFunctionTag, int aNumberOfArgs, ...) {
  * @param aNumberOfArgs currently not more than 12 args are supported
  */
 void sendUSARTArgsAndByteBuffer(uint8_t aFunctionTag, int aNumberOfArgs, ...) {
-    if (aNumberOfArgs > 12) {
+    if (aNumberOfArgs > MAX_NUMBER_OF_ARGS) {
         return;
     }
 
-    uint16_t tParamBuffer[16];
+    uint16_t tParamBuffer[MAX_NUMBER_OF_ARGS + 4];
     va_list argp;
     uint16_t * tBufferPointer = &tParamBuffer[0];
     *tBufferPointer++ = aFunctionTag << 8 | SYNC_TOKEN; // add sync token
@@ -217,7 +220,7 @@ void sendUSARTArgsAndByteBuffer(uint8_t aFunctionTag, int aNumberOfArgs, ...) {
 void sendUSART5ArgsAndByteBuffer(uint8_t aFunctionTag, uint16_t aXStart, uint16_t aYStart, uint16_t aXEnd, uint16_t aYEnd,
         uint16_t aColor, uint16_t aBufferLength, uint8_t * aBuffer) {
 
-    uint16_t tParamBuffer[9];
+    uint16_t tParamBuffer[MAX_NUMBER_OF_ARGS];
 
     uint16_t * tBufferPointer = &tParamBuffer[0];
     *tBufferPointer++ = aFunctionTag << 8 | SYNC_TOKEN; // add sync token

@@ -18,13 +18,19 @@ TouchLib	KEYWORD1
 # from BlueDisplay
 setFlagsAndSize	KEYWORD2
 setCharacterMapping	KEYWORD2
+playTone	KEYWORD2
+setLongTouchDownTimeout	KEYWORD2
 clearDisplay	KEYWORD2
+drawDisplayDirect	KEYWORD2
 drawPixel	KEYWORD2
 drawLine	KEYWORD2
+drawLineRel	KEYWORD2
 drawLineFastOneX	KEYWORD2
 drawLineWithThickness	KEYWORD2
 drawRect	KEYWORD2
+drawRectRel	KEYWORD2
 fillRect	KEYWORD2
+fillRectRel	KEYWORD2
 drawCircle	KEYWORD2
 fillCircle	KEYWORD2
 drawChar	KEYWORD2
@@ -32,12 +38,52 @@ drawText	KEYWORD2
 drawTextPGM	KEYWORD2
 drawMLText	KEYWORD2
 drawChartByteBuffer	KEYWORD2
-needsRefresh	KEYWORD2
-isConnectionJustBuildUp KEYWORD2
+
+setMaxDisplaySize	KEYWORD2
+setActualDisplaySize	KEYWORD2
+getDisplayWidth	KEYWORD2
+getDisplayHeight	KEYWORD2
+
+getNumber	KEYWORD2
+getNumberWithShortPrompt	KEYWORD2
+getNumberWithShortPromptPGM	KEYWORD2
+getText	KEYWORD2
+
 getTextWidth	KEYWORD2
 getTextAscend	KEYWORD2
 
+# Button stuff
+resetAllButtons	KEYWORD2
+createButton	KEYWORD2
+createButtonPGM	KEYWORD2
+drawButton	KEYWORD2
+drawButtonCaption	KEYWORD2
+setButtonCaption	KEYWORD2
+setButtonCaptionPGM	KEYWORD2
+setButtonValue	KEYWORD2
+setButtonColor	KEYWORD2
+setButtonColorAndDraw	KEYWORD2
+setRedGreenButtonColor	KEYWORD2
+activateButton	KEYWORD2
+deactivateButton	KEYWORD2
+activateAllButtons	KEYWORD2
+deactivateAllButtons	KEYWORD2
+setButtonsGlobalFlags	KEYWORD2
+setButtonsTouchTone	KEYWORD2
+
+# Slider stuff
+resetAllSliders	KEYWORD2
+createSlider	KEYWORD2
+drawSlider	KEYWORD2
+drawSliderBorder	KEYWORD2
+setSliderActualValueAndDraw	KEYWORD2
+activateSlider	KEYWORD2
+deactivateSlider	KEYWORD2
+activateAllSliders	KEYWORD2
+deactivateAllSliders	KEYWORD2
+
 # from BlueSerial
+initSimpleSerial	KEYWORD2
 USART3_sendBuffer	KEYWORD2
 sendUSARTArgs	KEYWORD2
 sendUSART5Args	KEYWORD2
@@ -58,6 +104,7 @@ checkAndHandleTouchEvents	KEYWORD2
 registerSwipeEndCallback	KEYWORD2
 setSwipeEndCallbackEnabled	KEYWORD2
 registerConnectCallback	KEYWORD2
+registerSimpleResizeAndReconnectCallback	KEYWORD2
 registerSimpleConnectCallback	KEYWORD2
 registerResizeCallback	KEYWORD2
 registerSimpleResizeCallback	KEYWORD2
@@ -66,6 +113,8 @@ simpleTouchDownHandler	KEYWORD2
 simpleTouchDownHandlerForSlider	KEYWORD2
 registerTouchMoveCallback	KEYWORD2
 simpleTouchMoveHandlerForSlider	KEYWORD2
+registerTouchUpCallback	KEYWORD2
+registerLongTouchDownCallback	KEYWORD2
 handleEvent	KEYWORD2
 
 #######################################

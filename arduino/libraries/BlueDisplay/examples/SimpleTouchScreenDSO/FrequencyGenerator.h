@@ -15,11 +15,11 @@
 #include <inttypes.h>
 #include <avr/pgmspace.h>
 
-void setupFrequency(void);
-void createFrequencyGui(void);
-void drawFrequencyGui(void);
+void initFrequencyGenerator(void);
+void initFrequencyGeneratorPage(void);
+void drawFrequencyGeneratorPage(void);
 
-extern uint8_t TouchButtonFrequency;
+extern uint8_t TouchButtonFrequencyPage;
 extern const char StringStop[] PROGMEM; // "Stop"
 
 #endif //FREQUENCYGENERATOR_H_

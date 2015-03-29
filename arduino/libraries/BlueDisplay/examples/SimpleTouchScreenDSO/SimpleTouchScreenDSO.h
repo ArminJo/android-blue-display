@@ -23,8 +23,8 @@
 #define HC_05_BAUD_RATE BAUD_115200
 
 // Display size
-#define DISPLAY_HEIGHT 256
-#define DISPLAY_WIDTH 320
+const uint16_t DISPLAY_HEIGHT = 256;
+const uint16_t DISPLAY_WIDTH = 320;
 
 #define THOUSANDS_SEPARATOR '.'
 
@@ -39,14 +39,15 @@
 #define COLOR_DATA_RUN COLOR_BLUE
 #define COLOR_DATA_HOLD COLOR_RED
 // to see old chart values
-#define COLOR_DATA_ERASE_LOW RGB(0xA0,0xFF,0xA0)
-#define COLOR_DATA_ERASE_HIGH RGB(0x20,0xFF,0x20)
+#define COLOR_DATA_HISTORY RGB(0x20,0xFF,0x20)
 
 //Line colors
 #define COLOR_DATA_PICKER COLOR_YELLOW
+#define COLOR_DATA_PICKER_SLIDER RGB(0xFF,0XFF,0xE0) // Light yellow
+#define COLOR_TRIGGER_LINE COLOR_MAGENTA
+#define COLOR_TRIGGER_SLIDER RGB(0xFF,0XF0,0xFF)
 #define COLOR_MAX_MIN_LINE 0X0200 // light green
 #define COLOR_HOR_REF_LINE_LABEL COLOR_BLUE
-#define COLOR_TRIGGER_LINE COLOR_MAGENTA
 #define COLOR_TIMING_LINES RGB(0x00,0x98,0x00)
 
 // GUI element colors
@@ -54,10 +55,33 @@
 #define COLOR_GUI_TRIGGER RGB(0x00,0x00,0xD0) // blue
 #define COLOR_GUI_SOURCE_TIMEBASE RGB(0x00,0x90,0x00)
 #define COLOR_GUI_DISPLAY_CONTROL RGB(0xC8,0xC8,0x00)
+#define COLOR_GUI_SELECTED COLOR_GREEN
+#define COLOR_GUI_NOT_SELECTED COLOR_RED
 
 #define COLOR_INFO_BACKGROUND RGB(0xC8,0xC8,0x00)
 
-#define COLOR_SLIDER RGB(0xD8,0xE8,0xD8)
+#define COLOR_SLIDER RGB(0xD0,0xD0,0xD0)
+
+/*
+ * POSITIONS + SIZES
+ */
+#define FONT_SIZE_INFO_SHORT        TEXT_SIZE_18    // for 1 line info
+#define FONT_SIZE_INFO_LONG         TEXT_SIZE_11    // for 3 lines info
+#define FONT_SIZE_INFO_SHORT_ASC    TEXT_SIZE_18_ASCEND    // for 3 lines info
+#define FONT_SIZE_INFO_LONG_ASC     TEXT_SIZE_11_ASCEND    // for 3 lines info
+#define FONT_SIZE_INFO_LONG_WIDTH   TEXT_SIZE_11_WIDTH    // for 3 lines info
+
+#define SLIDER_SIZE 24
+#define SLIDER_VPICKER_POS_X        0 // Position of slider
+#define SLIDER_VPICKER_INFO_X       (SLIDER_VPICKER_POS_X + SLIDER_SIZE)
+#define SLIDER_VPICKER_INFO_SHORT_Y (FONT_SIZE_INFO_SHORT + FONT_SIZE_INFO_SHORT_ASC)
+#define SLIDER_VPICKER_INFO_LONG_Y  (2 * FONT_SIZE_INFO_LONG + FONT_SIZE_INFO_SHORT_ASC) // since font size is always 18
+
+#define SLIDER_TLEVEL_POS_X         (14 * FONT_SIZE_INFO_LONG_WIDTH) // Position of slider
+#define TRIGGER_LEVEL_INFO_SHORT_X  (SLIDER_TLEVEL_POS_X  + SLIDER_SIZE)
+#define TRIGGER_LEVEL_INFO_LONG_X   ((35 * FONT_SIZE_INFO_LONG_WIDTH) + 1) // +1 since we have a special character in the string before
+#define TRIGGER_LEVEL_INFO_SHORT_Y  (FONT_SIZE_INFO_SHORT + FONT_SIZE_INFO_SHORT_ASC)
+#define TRIGGER_LEVEL_INFO_LONG_Y   FONT_SIZE_INFO_LONG_ASC
 
 #define TRIGGER_MODE_AUTO 0
 #define TRIGGER_MODE_MANUAL 1
@@ -66,9 +90,8 @@
 #define ATTENUATOR_TYPE_NO_ATTENUATOR 0
 #define ATTENUATOR_TYPE_SIMPLE_ATTENUATOR 1
 #define MAX_ADC_CHANNEL_WITH_SIMPLE_ATTENUATOR 2
-#define ATTENUATOR_TYPE_ACTIVE_ATTENUATOR 2
+#define ATTENUATOR_TYPE_ACTIVE_ATTENUATOR 2 // and 3
 #define MAX_ADC_CHANNEL_WITH_ACTIVE_ATTENUATOR 1
-
 
 struct MeasurementControlStruct {
     // State
@@ -137,6 +160,7 @@ struct MeasurementControlStruct {
 extern struct MeasurementControlStruct MeasurementControl;
 
 // values for DisplayPage
+// using enums increases code size by 120 bytes
 #define DISPLAY_PAGE_START 0    // Start GUI
 #define DISPLAY_PAGE_CHART 1    // Chart in analyze and running mode
 #define DISPLAY_PAGE_SETTINGS 2
@@ -152,7 +176,7 @@ struct DisplayControlStruct {
     uint8_t DisplayPage;
     bool DrawWhileAcquire;
     uint8_t showInfoMode;
-    uint8_t EraseColorIndex;
+    bool showHistory;
     uint16_t EraseColor;
 };
 extern DisplayControlStruct DisplayControl;
@@ -160,7 +184,5 @@ extern DisplayControlStruct DisplayControl;
 extern char StringBuffer[50];
 
 extern uint8_t TouchButtonBack;
-
-void FeedbackTone(bool isNoError);
 
 #endif //SIMPLETOUCHSCREENDSO_H_

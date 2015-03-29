@@ -1,5 +1,5 @@
 /*
- *  BlueDisplayExample.ino
+ *  BlueDisplayExample.cpp
  *  Demo of using the BlueDisplay library for HC-05 on Arduino
 
  *  Copyright (C) 2014  Armin Joachimsmeyer
@@ -25,7 +25,7 @@
 
 #include "BlueDisplay.h"
 #include "BlueSerial.h"
-#include "TouchLib.h"
+#include "EventHandler.h"
 
 // Change this if you have reprogrammed the hc05 module for higher baud rate
 //#define HC_05_BAUD_RATE BAUD_9600
@@ -36,10 +36,14 @@
 #define DELAY_START_VALUE 600
 #define DELAY_CHANGE_VALUE 20
 
+#define SLIDER_X_POSITION 80
+
 #define COLOR_DEMO_BACKGROUND COLOR_BLUE
+#define COLOR_CAPTION COLOR_RED
 
 // Pin 13 has an LED connected on most Arduino boards.
-int led = 13;
+const int LED_PIN = 13;
+const int TONE_PIN = 2;
 
 volatile bool doBlink = true;
 volatile int sDelay = 600;
@@ -68,13 +72,15 @@ uint8_t TouchSliderDelay;
 void doDelay(uint8_t aTheTochedSlider, int16_t aSliderValue);
 void printDelayValue(void);
 
-// Callback handler for reconnect and resize
+// Callback handler for (re)connect and resize
 void initDisplay(void);
 void drawGui(void);
+void printDemoString(void);
 
 void setup() {
     // initialize the digital pin as an output.
-    pinMode(led, OUTPUT);
+    pinMode(LED_PIN, OUTPUT);
+    pinMode(TONE_PIN, OUTPUT);
 #ifdef USE_SIMPLE_SERIAL
     initSimpleSerial(HC_05_BAUD_RATE, false);
 #else
@@ -86,55 +92,59 @@ void setup() {
 
     // Register callback handler
     registerSimpleConnectCallback(&initDisplay);
-    registerSimpleResizeAndReconnectCallback(&drawGui);
+    registerSimpleResizeAndConnectCallback(&drawGui);
     drawGui();
+    // to signal that boot has finished
+    tone(TONE_PIN, 2000, 200);
+
 }
 
 void loop() {
     if (doBlink) {
         uint8_t i;
         if (doBlink) {
-            digitalWrite(led, HIGH);  // LED on
+            digitalWrite(LED_PIN, HIGH);  // LED on
             BlueDisplay1.fillCircle(DISPLAY_WIDTH / 2, DISPLAY_HEIGHT / 2, 20, COLOR_RED);
             // wait for delay time but check touch events 8 times while waiting
             for (i = 0; i < 8; ++i) {
                 checkAndHandleEvents();
+                printDemoString();
                 delay(sDelay / 8);
             }
-            digitalWrite(led, LOW);  // LED off
+            digitalWrite(LED_PIN, LOW);  // LED off
             BlueDisplay1.fillCircle(DISPLAY_WIDTH / 2, DISPLAY_HEIGHT / 2, 20, COLOR_DEMO_BACKGROUND);
             for (i = 0; i < 8; ++i) {
                 checkAndHandleEvents();
+                printDemoString();
                 delay(sDelay / 8);
             }
         }
     } else {
         checkAndHandleEvents();
+        printDemoString();
     }
 }
 
 void initDisplay(void) {
     BlueDisplay1.setFlagsAndSize(BD_FLAG_FIRST_RESET_ALL | BD_FLAG_USE_MAX_SIZE | BD_FLAG_TOUCH_BASIC_DISABLE, DISPLAY_WIDTH,
-            DISPLAY_HEIGHT);
+    DISPLAY_HEIGHT);
     const char * tStartStopString = "Start";
     if (doBlink == true) {
         tStartStopString = "Stop";
     }
 
     TouchButtonPlus = BlueDisplay1.createButton(270, 80, 40, 40, COLOR_YELLOW, "+", 33, BUTTON_FLAG_DO_BEEP_ON_TOUCH,
-            DELAY_CHANGE_VALUE, &doPlusMinus);
+    DELAY_CHANGE_VALUE, &doPlusMinus);
     TouchButtonMinus = BlueDisplay1.createButton(10, 80, 40, 40, COLOR_YELLOW, "-", 33, BUTTON_FLAG_DO_BEEP_ON_TOUCH,
             -DELAY_CHANGE_VALUE, &doPlusMinus);
 
     TouchButtonOnOff = BlueDisplay1.createButton(30, 150, 140, 55, COLOR_DEMO_BACKGROUND, tStartStopString, 44,
-            BUTTON_FLAG_DO_BEEP_ON_TOUCH, 0, &doStartStop);
-    // set color and value accordingly
-    BlueDisplay1.setRedGreenButtonColorAndDraw(TouchButtonOnOff, doBlink);
+            BUTTON_FLAG_DO_BEEP_ON_TOUCH | BUTTON_FLAG_TYPE_AUTO_RED_GREEN, 1, &doStartStop);
     TouchButtonValueDirect = BlueDisplay1.createButton(210, 150, 90, 55, COLOR_YELLOW, "...", 44, BUTTON_FLAG_DO_BEEP_ON_TOUCH, 0,
             &doGetDelay);
 
-    TouchSliderDelay = BlueDisplay1.createSlider(80, 40, 12, 150, 100, DELAY_START_VALUE / 10, COLOR_YELLOW, COLOR_GREEN,
-            TOUCHSLIDER_SHOW_BORDER | TOUCHSLIDER_IS_HORIZONTAL, &doDelay);
+    TouchSliderDelay = BlueDisplay1.createSlider(SLIDER_X_POSITION, 40, 12, 150, 100, DELAY_START_VALUE / 10, COLOR_YELLOW,
+    COLOR_GREEN, TOUCHSLIDER_SHOW_BORDER | TOUCHSLIDER_IS_HORIZONTAL, &doDelay);
 }
 
 void drawGui(void) {
@@ -144,8 +154,8 @@ void drawGui(void) {
     BlueDisplay1.drawButton(TouchButtonMinus);
     BlueDisplay1.drawButton(TouchButtonValueDirect);
     BlueDisplay1.drawSlider(TouchSliderDelay);
-    BlueDisplay1.drawText(DISPLAY_WIDTH / 2 - 2 * TEXT_SIZE_22_WIDTH, 40 - 4 - TEXT_SIZE_22_DECEND, "Delay", TEXT_SIZE_22,
-            COLOR_RED, COLOR_DEMO_BACKGROUND);
+    BlueDisplay1.drawText(SLIDER_X_POSITION + 7 * TEXT_SIZE_22_WIDTH, 40 + 3 * 12 + TEXT_SIZE_22_ASCEND, "Delay", TEXT_SIZE_22,
+    COLOR_RED, COLOR_DEMO_BACKGROUND);
     printDelayValue();
 }
 
@@ -158,12 +168,12 @@ void doStartStop(uint8_t aTheTouchedButton, int16_t aValue) {
     doBlink = !aValue;
     if (doBlink) {
         // green stop button
-        BlueDisplay1.setButtonCaption(aTheTouchedButton, "Stop", true);
+        BlueDisplay1.setButtonCaption(aTheTouchedButton, "Stop", false);
     } else {
         // red start button
-        BlueDisplay1.setButtonCaption(aTheTouchedButton, "Start", true);
+        BlueDisplay1.setButtonCaption(aTheTouchedButton, "Start", false);
     }
-    BlueDisplay1.setRedGreenButtonColorAndDraw(aTheTouchedButton, doBlink);
+    BlueDisplay1.setButtonValueAndDraw(aTheTouchedButton, doBlink);
 }
 
 /*
@@ -217,6 +227,52 @@ void doDelay(uint8_t aTheTouchedSlider, int16_t aSliderValue) {
 
 void printDelayValue(void) {
     snprintf(StringBuffer, sizeof StringBuffer, "%4ums", sDelay);
-    BlueDisplay1.drawText(80, 40 + 3 * 12 + TEXT_SIZE_22_ASCEND, StringBuffer, TEXT_SIZE_22, COLOR_WHITE, COLOR_DEMO_BACKGROUND);
+    BlueDisplay1.drawText(SLIDER_X_POSITION, 40 + 3 * 12 + TEXT_SIZE_22_ASCEND, StringBuffer, TEXT_SIZE_22, COLOR_WHITE,
+    COLOR_DEMO_BACKGROUND);
 }
 
+#define MILLIS_PER_CHANGE 20 // gives minimal 2 seconds
+void printDemoString(void) {
+    static float tFadingFactor = 0.0; // 0 -> Background 1 -> Caption
+    static float tInterpolationDelta = 0.01;
+
+    static bool tFadingFactorDirectionFromBackground = true;
+    static long MillisSinceLastChange = millis();
+
+    // Timing
+    if (millis() - MillisSinceLastChange > MILLIS_PER_CHANGE) {
+        MillisSinceLastChange = millis();
+
+        // slow fade near background color
+        if (tFadingFactor <= 0.1) {
+            tInterpolationDelta = 0.002;
+        } else {
+            tInterpolationDelta = 0.01;
+        }
+
+        // manage fading factor
+        if (tFadingFactorDirectionFromBackground) {
+            tFadingFactor += tInterpolationDelta;
+            if (tFadingFactor >= (1.0 - 0.01)) {
+                // toggle direction to background
+                tFadingFactorDirectionFromBackground = !tFadingFactorDirectionFromBackground;
+            }
+        } else {
+            tFadingFactor -= tInterpolationDelta;
+            if (tFadingFactor <= tInterpolationDelta) {
+                // toggle direction
+                tFadingFactorDirectionFromBackground = !tFadingFactorDirectionFromBackground;
+            }
+        }
+
+        // get resulting color
+        uint8_t ColorRed = GET_RED(COLOR_DEMO_BACKGROUND)
+                + ((int16_t) ( GET_RED(COLOR_CAPTION) - GET_RED(COLOR_DEMO_BACKGROUND)) * tFadingFactor);
+        uint8_t ColorGreen = GET_GREEN(COLOR_DEMO_BACKGROUND)
+                + ((int16_t) (GET_GREEN(COLOR_CAPTION) - GET_GREEN(COLOR_DEMO_BACKGROUND)) * tFadingFactor);
+        uint8_t ColorBlue = GET_BLUE(COLOR_DEMO_BACKGROUND)
+                + ((int16_t) ( GET_BLUE(COLOR_CAPTION) - GET_BLUE(COLOR_DEMO_BACKGROUND)) * tFadingFactor);
+        BlueDisplay1.drawText(DISPLAY_WIDTH / 2 - 2 * getTextWidth(36), 4 + getTextAscend(36), "Demo", 36,
+                RGB(ColorRed, ColorGreen, ColorBlue), COLOR_DEMO_BACKGROUND);
+    }
+}

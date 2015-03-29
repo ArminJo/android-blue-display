@@ -4,10 +4,10 @@
  * 	It receives basic draw requests from Arduino etc. over Bluetooth and renders it.
  * 	It also implements basic GUI elements as buttons and sliders.
  * 	It sends touch or GUI callback events over Bluetooth back to Arduino.
- * 
+ *
  *  Copyright (C) 2014  Armin Joachimsmeyer
  *  armin.joachimsmeyer@gmail.com
- *  
+ *
  * 	This file is part of BlueDisplay.
  *  BlueDisplay is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -21,8 +21,8 @@
 
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/gpl.html>.
- *  
- *  
+ *
+ *
  * This class implements simple touch slider compatible with the one available as c++ code for arduino.
  * Usage of the java slider reduces data sent over bluetooth as well as arduino program size.
  */
@@ -45,21 +45,21 @@ public class TouchSlider {
 	int mBarBackgroundColor;
 	int mBarThresholdColor;
 
-	int mPositionX; 		// position of leftmost pixel of slider
-	int mPositionXRight; 	// position of rightmost pixel of slider
-	int mPositionY;			// position of uppermost pixel of slider
-	int mPositionYBottom; 	// position of lowest pixel of slider
-	int mBarWidth;			// width of bar (and main borders) in pixel
-	int mShortBorderWidth;	// half of mBarWidth
-	int mBarLength;
-	int mTouchBorder;
+	int mPositionX; // position of leftmost pixel of slider
+	int mPositionXRight; // position of rightmost pixel of slider
+	int mPositionY; // position of uppermost pixel of slider
+	int mPositionYBottom; // position of lowest pixel of slider
+	int mBarWidth; // width of bar (and main borders) in pixel
+	int mShortBorderWidth; // used internally - half of mBarWidth
+	int mBarLength; // size of slider bar in pixel = maximum slider value
+	int mTouchBorder; // border in pixel, where touches outside slider are recognized - default is 4
 
 	int mOptions;
 	// constants for options
 	private static final int TOUCHSLIDER_SHOW_BORDER = 0x01;
 	private static final int TOUCHSLIDER_VALUE_BY_CALLBACK = 0x02; // if set value will be set by callback handler
 	private static final int TOUCHSLIDER_IS_HORIZONTAL = 0x04;
-	
+
 	int mActualTouchValue;
 	// This value can be different from mActualTouchValue and is provided by callback handler
 	int mActualValue;
@@ -255,7 +255,7 @@ public class TouchSlider {
 	}
 
 	/*
-	 * Check if touch event is in slider if yes - set bar and value call callback function and return true if no - return false
+	 * Check if touch event is in slider. If yes - set bar and value call callback function and return true. If no - return false
 	 */
 	boolean checkIfTouchInSlider(final int aTouchPositionX, final int aTouchPositionY) {
 		int tPositionBorderX = mPositionX - mTouchBorder;
@@ -301,8 +301,9 @@ public class TouchSlider {
 			mActualTouchValue = tActualTouchValue;
 			if (mOnChangeHandlerCallbackAddress != 0) {
 				// call change handler
-				mRPCView.mSerialService.writeEvent(BluetoothSerialService.EVENT_TAG_SLIDER_CALLBACK_ACTION, mListIndex,
-						mOnChangeHandlerCallbackAddress, tActualTouchValue);
+				mRPCView.mBlueDisplayContext.mSerialService.writeGuiCallbackEvent(
+						BluetoothSerialService.EVENT_TAG_SLIDER_CALLBACK_ACTION, mListIndex, mOnChangeHandlerCallbackAddress,
+						tActualTouchValue);
 			}
 			if ((mOptions & TOUCHSLIDER_VALUE_BY_CALLBACK) == 0) {
 				// store value and redraw
@@ -355,153 +356,171 @@ public class TouchSlider {
 		}
 	}
 
-	public static void interpreteCommand(final RPCView aRPCView, int aCommand, int[] aParameters, int aParamsLength,
+	public static void interpretCommand(final RPCView aRPCView, int aCommand, int[] aParameters, int aParamsLength,
 			byte[] aDataBytes, int[] aDataInts, int aDataLength) {
 		int tSliderNumber = -1;
 		TouchSlider tSlider = null;
-		if (aParamsLength > 0 && aCommand != FUNCTION_TAG_SLIDER_ACTIVATE_ALL && aCommand != FUNCTION_TAG_SLIDER_DEACTIVATE_ALL) {
-			tSliderNumber = aParameters[0];
 
-			if (tSliderNumber < sSliderList.size()) {
-				tSlider = sSliderList.get(tSliderNumber);
-				if (aCommand != FUNCTION_TAG_SLIDER_CREATE && (tSlider == null || !tSlider.mIsInitialized)) {
+		/*
+		 * Plausi
+		 */
+		if (aCommand != FUNCTION_TAG_SLIDER_ACTIVATE_ALL && aCommand != FUNCTION_TAG_SLIDER_DEACTIVATE_ALL) {
+			/*
+			 * We need a slider for the command
+			 */
+			if (aParamsLength <= 0) {
+				Log.e(LOG_TAG, "aParamsLength is <=0 but Command=0x" + Integer.toHexString(aCommand) + " is not one of "
+						+ FUNCTION_TAG_SLIDER_ACTIVATE_ALL + " or " + FUNCTION_TAG_SLIDER_DEACTIVATE_ALL);
+				return;
+			} else {
+				tSliderNumber = aParameters[0];
+
+				if (tSliderNumber >= 0 && tSliderNumber < sSliderList.size()) {
+					tSlider = sSliderList.get(tSliderNumber);
+					if (aCommand != FUNCTION_TAG_SLIDER_CREATE && (tSlider == null || !tSlider.mIsInitialized)) {
+						Log.e(LOG_TAG, "Command=0x" + Integer.toHexString(aCommand) + " SliderNr=" + tSliderNumber
+								+ " is null or not initialized.");
+						return;
+					}
+				} else if (aCommand != FUNCTION_TAG_SLIDER_CREATE) {
 					Log.e(LOG_TAG, "Command=0x" + Integer.toHexString(aCommand) + " SliderNr=" + tSliderNumber
-							+ " is null or not initialized.");
+							+ " not found. Only " + sSliderList.size() + " sliders created.");
 					return;
 				}
-			} else if (aCommand != FUNCTION_TAG_SLIDER_CREATE) {
-				Log.e(LOG_TAG, "Command=0x" + Integer.toHexString(aCommand) + " SliderNr=" + tSliderNumber + " not found. Only "
-						+ sSliderList.size() + " sliders created.");
-				return;
 			}
 		}
 
-		switch (aCommand) {
+		try {
+			switch (aCommand) {
 
-		case FUNCTION_TAG_SLIDER_ACTIVATE_ALL:
-			if (BlueDisplay.isINFO()) {
-				Log.i(LOG_TAG, "Activate all sliders");
-			}
-			activateAllSliders();
-			break;
-
-		case FUNCTION_TAG_SLIDER_DEACTIVATE_ALL:
-			if (BlueDisplay.isINFO()) {
-				Log.i(LOG_TAG, "Deactivate all sliders");
-			}
-			deactivateAllSliders();
-			break;
-
-		case FUNCTION_TAG_SLIDER_DRAW:
-			if (BlueDisplay.isINFO()) {
-				Log.i(LOG_TAG, "Draw slider. SliderNr=" + tSliderNumber);
-			}
-			tSlider.drawSlider();
-			break;
-
-		case FUNCTION_TAG_SLIDER_DRAW_BORDER:
-			if (BlueDisplay.isINFO()) {
-				Log.i(LOG_TAG, "Draw border. SliderNr=" + tSliderNumber);
-			}
-			tSlider.drawBorder();
-			break;
-
-		case FUNCTION_TAG_SLIDER_SETTINGS:
-			int tSubcommand = aParameters[1];
-			switch (tSubcommand) {
-			case SLIDER_FLAG_SET_COLOR_THRESHOLD:
-				tSlider.mBarThresholdColor = RPCView.shortToLongColor(aParameters[2]);
+			case FUNCTION_TAG_SLIDER_ACTIVATE_ALL:
 				if (BlueDisplay.isINFO()) {
-					Log.i(LOG_TAG, "Set threshold color=0x" + Integer.toHexString(tSlider.mBarThresholdColor) + " for SliderNr="
-							+ tSliderNumber);
+					Log.i(LOG_TAG, "Activate all sliders");
 				}
-				break;
-			case SLIDER_FLAG_SET_COLOR_BAR_BACKGROUND:
-				tSlider.mBarBackgroundColor = RPCView.shortToLongColor(aParameters[2]);
-				if (BlueDisplay.isINFO()) {
-					Log.i(LOG_TAG, "Set bar background color=0x" + Integer.toHexString(tSlider.mBarBackgroundColor)
-							+ " for SliderNr=" + tSliderNumber);
-				}
-				break;
-			case SLIDER_FLAG_SET_COLOR_BAR:
-				tSlider.mBarColor = RPCView.shortToLongColor(aParameters[2]);
-				if (BlueDisplay.isINFO()) {
-					Log.i(LOG_TAG, "Set bar color=0x" + Integer.toHexString(tSlider.mBarColor) + " for SliderNr=" + tSliderNumber);
-				}
-				break;
-			case SLIDER_FLAG_SET_VALUE_AND_DRAW_BAR:
-				if (BlueDisplay.isINFO()) {
-					Log.i(LOG_TAG, "Set value=" + aParameters[2] + " for SliderNr=" + tSliderNumber);
-				}
-				tSlider.mActualValue = aParameters[2];
-				tSlider.drawBar();
-				break;
-			case SLIDER_FLAG_SET_POSITION:
-				if (BlueDisplay.isINFO()) {
-					Log.i(LOG_TAG, "Set position=" + aParameters[2] + " / " + aParameters[3] + " for SliderNr=" + tSliderNumber);
-				}
-				tSlider.mPositionX = aParameters[2];
-				tSlider.mPositionY = aParameters[3];
+				activateAllSliders();
 				break;
 
-			case SLIDER_FLAG_SET_ACTIVE:
+			case FUNCTION_TAG_SLIDER_DEACTIVATE_ALL:
 				if (BlueDisplay.isINFO()) {
-					Log.i(LOG_TAG, "Set active=true for SliderNr=" + tSliderNumber);
+					Log.i(LOG_TAG, "Deactivate all sliders");
 				}
-				tSlider.mIsActive = true;
-				break;
-				
-			case SLIDER_FLAG_RESET_ACTIVE:
-				if (BlueDisplay.isINFO()) {
-					Log.i(LOG_TAG, "Set active=false for SliderNr=" + tSliderNumber);
-				}
-				tSlider.mIsActive = false;
+				deactivateAllSliders();
 				break;
 
-			}
-			break;
+			case FUNCTION_TAG_SLIDER_DRAW:
+				if (BlueDisplay.isINFO()) {
+					Log.i(LOG_TAG, "Draw slider. SliderNr=" + tSliderNumber);
+				}
+				tSlider.drawSlider();
+				break;
 
-		case FUNCTION_TAG_SLIDER_CREATE:
-			int tOnChangeHandlerCallbackAddress = aParameters[10];
-			if (aParamsLength == 12) {
-				// 32 bit callback address
-				tOnChangeHandlerCallbackAddress = tOnChangeHandlerCallbackAddress | (aParameters[11] << 16);
-			}
-			if (BlueDisplay.isINFO()) {
-				Log.i(LOG_TAG,
-						"Create slider. SliderNr=" + tSliderNumber + ", new TouchSlider(" + aParameters[1] + ", " + aParameters[2]
-								+ ", " + aParameters[3] + ", " + aParameters[4] + ", " + aParameters[5] + ", " + aParameters[6]
-								+ ", color=0x" + Integer.toHexString(RPCView.shortToLongColor(aParameters[7])) + ", bar color=0x"
-								+ Integer.toHexString(RPCView.shortToLongColor(aParameters[8])) + ", "
-								+ Integer.toHexString(aParameters[9]) + ", 0x"
-								+ Integer.toHexString(tOnChangeHandlerCallbackAddress) + ")");
-			}
-			if (tSlider == null) {
-				/*
-				 * create new slider
-				 */
-				tSlider = new TouchSlider();
-				if (tSliderNumber < sSliderList.size()) {
-					sSliderList.set(tSliderNumber, tSlider);
+			case FUNCTION_TAG_SLIDER_DRAW_BORDER:
+				if (BlueDisplay.isINFO()) {
+					Log.i(LOG_TAG, "Draw border. SliderNr=" + tSliderNumber);
+				}
+				tSlider.drawBorder();
+				break;
+
+			case FUNCTION_TAG_SLIDER_SETTINGS:
+				int tSubcommand = aParameters[1];
+				switch (tSubcommand) {
+				case SLIDER_FLAG_SET_COLOR_THRESHOLD:
+					tSlider.mBarThresholdColor = RPCView.shortToLongColor(aParameters[2]);
+					if (BlueDisplay.isINFO()) {
+						Log.i(LOG_TAG, "Set threshold color= " + RPCView.shortToColorString(tSlider.mBarThresholdColor)
+								+ " for SliderNr=" + tSliderNumber);
+					}
+					break;
+				case SLIDER_FLAG_SET_COLOR_BAR_BACKGROUND:
+					tSlider.mBarBackgroundColor = RPCView.shortToLongColor(aParameters[2]);
+					if (BlueDisplay.isINFO()) {
+						Log.i(LOG_TAG, "Set bar background color= " + RPCView.shortToColorString(tSlider.mBarBackgroundColor)
+								+ " for SliderNr=" + tSliderNumber);
+					}
+					break;
+				case SLIDER_FLAG_SET_COLOR_BAR:
+					tSlider.mBarColor = RPCView.shortToLongColor(aParameters[2]);
+					if (BlueDisplay.isINFO()) {
+						Log.i(LOG_TAG, "Set bar color= " + RPCView.shortToColorString(tSlider.mBarColor) + " for SliderNr="
+								+ tSliderNumber);
+					}
+					break;
+				case SLIDER_FLAG_SET_VALUE_AND_DRAW_BAR:
+					// Log on Info level!
+					if (BlueDisplay.isDEBUG()) {
+						Log.d(LOG_TAG, "Set value=" + aParameters[2] + " for SliderNr=" + tSliderNumber);
+					}
+					tSlider.mActualValue = aParameters[2];
+					tSlider.drawBar();
+					break;
+				case SLIDER_FLAG_SET_POSITION:
+					if (BlueDisplay.isINFO()) {
+						Log.i(LOG_TAG, "Set position=" + aParameters[2] + " / " + aParameters[3] + " for SliderNr=" + tSliderNumber);
+					}
+					tSlider.mPositionX = aParameters[2];
+					tSlider.mPositionY = aParameters[3];
+					break;
+
+				case SLIDER_FLAG_SET_ACTIVE:
+					if (BlueDisplay.isINFO()) {
+						Log.i(LOG_TAG, "Set active=true for SliderNr=" + tSliderNumber);
+					}
+					tSlider.mIsActive = true;
+					break;
+
+				case SLIDER_FLAG_RESET_ACTIVE:
+					if (BlueDisplay.isINFO()) {
+						Log.i(LOG_TAG, "Set active=false for SliderNr=" + tSliderNumber);
+					}
+					tSlider.mIsActive = false;
+					break;
+
+				}
+				break;
+
+			case FUNCTION_TAG_SLIDER_CREATE:
+				int tOnChangeHandlerCallbackAddress = aParameters[10];
+				if (aParamsLength == 12) {
+					// 32 bit callback address
+					tOnChangeHandlerCallbackAddress = tOnChangeHandlerCallbackAddress | (aParameters[11] << 16);
+				}
+				if (BlueDisplay.isINFO()) {
+					Log.i(LOG_TAG,
+							"Create slider. SliderNr=" + tSliderNumber + ", new TouchSlider(" + aParameters[1] + ", "
+									+ aParameters[2] + ", " + aParameters[3] + ", " + aParameters[4] + ", " + aParameters[5] + ", "
+									+ aParameters[6] + ", color= " + RPCView.shortToColorString(aParameters[7]) + ", bar color= "
+									+ RPCView.shortToColorString(aParameters[8]) + ", " + Integer.toHexString(aParameters[9])
+									+ ", 0x" + Integer.toHexString(tOnChangeHandlerCallbackAddress) + ")");
+				}
+				if (tSlider == null) {
+					/*
+					 * create new slider
+					 */
+					tSlider = new TouchSlider();
+					if (tSliderNumber < sSliderList.size()) {
+						sSliderList.set(tSliderNumber, tSlider);
+					} else {
+						tSliderNumber = sSliderList.size();
+						sSliderList.add(tSlider);
+						Log.w(LOG_TAG, "Slider with index " + tSliderNumber + " appended at end of list. List size now "
+								+ sSliderList.size());
+					}
+					tSlider.mListIndex = tSliderNumber;
 				} else {
-					tSliderNumber = sSliderList.size();
-					sSliderList.add(tSlider);
-					Log.w(LOG_TAG,
-							"Slider with index " + tSliderNumber + " appended at end of list. List size now " + sSliderList.size());
+					tSlider.initSlider(aRPCView, aParameters[1], aParameters[2], aParameters[3], aParameters[4], aParameters[5],
+							aParameters[6], RPCView.shortToLongColor(aParameters[7]), RPCView.shortToLongColor(aParameters[8]),
+							aParameters[9], tOnChangeHandlerCallbackAddress);
 				}
-				tSlider.mListIndex = tSliderNumber;
-			} else {
-				tSlider.initSlider(aRPCView, aParameters[1], aParameters[2], aParameters[3], aParameters[4], aParameters[5],
-						aParameters[6], RPCView.shortToLongColor(aParameters[7]), RPCView.shortToLongColor(aParameters[8]),
-						aParameters[9], tOnChangeHandlerCallbackAddress);
+				break;
+
+			default:
+				Log.e(LOG_TAG, "unknown command 0x" + Integer.toHexString(aCommand) + " received. paramsLength=" + aParamsLength
+						+ " dataLenght=" + aDataLength);
+				break;
 			}
-			break;
-
-		default:
-			Log.e(LOG_TAG, "unknown command 0x" + Integer.toHexString(aCommand) + " received. paramsLength=" + aParamsLength
+		} catch (Exception e) {
+			Log.e(LOG_TAG, "Exception catched for command 0x" + Integer.toHexString(aCommand) + ". paramsLength=" + aParamsLength
 					+ " dataLenght=" + aDataLength);
-			break;
 		}
-
 	}
 }

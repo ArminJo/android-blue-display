@@ -60,18 +60,19 @@ import android.app.AlertDialog;
 import android.app.Dialog;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
+import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
+import android.hardware.SensorManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
 import android.preference.PreferenceManager;
 import android.text.Editable;
 import android.text.InputType;
-import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.Menu;
@@ -95,9 +96,11 @@ public class BlueDisplay extends Activity {
 	private String mConnectedDeviceName = null;
 
 	// Debugging
+	static boolean isDevelopmentTesting = false;
+	// static boolean isDevelopmentTesting = true;
 	static final String LOG_TAG = "BlueDisplay";
 	private static final String LOGLEVEL_KEY = "loglevel";
-	private static int mLoglevel = Log.WARN; // 6=ERROR 5=WARN, 4=INFO, 3=DEBUG
+	private static int mLoglevel = Log.INFO; // 6=ERROR 5=WARN, 4=INFO, 3=DEBUG
 												// 2=VERBOSE
 
 	public static void setLogLevel(int aNewLevel) {
@@ -116,13 +119,18 @@ public class BlueDisplay extends Activity {
 		return (mLoglevel <= Log.VERBOSE);
 	}
 
+	public static boolean isDEVELPMENT_TESTING() {
+		return (isDevelopmentTesting);
+	}
+
 	// Message types sent from the BluetoothSerialService Handler
 	public static final int MESSAGE_STATE_CHANGE = 1;
 	public static final int MESSAGE_READ = 2;
 	public static final int MESSAGE_WRITE = 3;
 	public static final int MESSAGE_DEVICE_NAME = 4;
-	public static final int MESSAGE_TOAST = 5;
-	public static final int MESSAGE_UPDATE_VIEW = 6;
+	public static final int MESSAGE_DISCONNECT = 5;
+	public static final int MESSAGE_TOAST = 6;
+	public static final int MESSAGE_UPDATE_VIEW = 7;
 
 	// Message sent by RPCView
 	public static final int REQUEST_INPUT_DATA = 10;
@@ -146,17 +154,24 @@ public class BlueDisplay extends Activity {
 	/*
 	 * Bluetooth socket handler
 	 */
-	private static BluetoothSerialService mSerialService = null;
+	public BluetoothSerialService mSerialService = null;
 
-	private boolean mShowEnableBTDialog; // We show the enable Bluetooth dialog
+	/*
+	 * Sensor listener
+	 */
+	public Sensors mSensorEventListener;
+
+	private boolean mInEnableBT; // We try to enable Bluetooth
 
 	// State variable is declared in BluetoothSerialService
 	private static final String SHOW_TOUCH_COORDINATES_KEY = "show_touch_mode";
 	private static final String ALLOW_INSECURE_CONNECTIONS_KEY = "allowinsecureconnections";
 
 	private static final String SCREENORIENTATION_KEY = "screenorientation";
-	private int mPreferredScreenOrientation;
+	int mPreferredScreenOrientation;
 	protected int mActualScreenOrientation;
+	protected String mActualScreenOrientationString = "";
+	protected int mActualRotation;
 
 	MenuItem mMenuItemConnect;
 	// private MenuItem mMenuItemStartStopLogging;
@@ -170,7 +185,9 @@ public class BlueDisplay extends Activity {
 	@Override
 	public void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
-		Log.i(LOG_TAG, "+++ ON CREATE +++");
+		if (BlueDisplay.isINFO()) {
+			Log.i(LOG_TAG, "+++ ON CREATE +++");
+		}
 
 		/*
 		 * Create RPCView
@@ -181,19 +198,16 @@ public class BlueDisplay extends Activity {
 		mRPCView.setFocusableInTouchMode(true);
 		mRPCView.requestFocus();
 
-		getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-
 		/*
 		 * Bluetooth
 		 */
 		mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
 		if (mBluetoothAdapter == null) {
-			if (!isDEBUG()) {
+			if (!isVERBOSE()) {
 				// finishDialogNoBluetooth();
 			}
 		} else {
 			mSerialService = new BluetoothSerialService(this, mHandlerBT);
-			mRPCView.setSerialService(mSerialService);
 			if (mSerialService.getState() == BluetoothSerialService.STATE_NONE && mBluetoothAdapter.isEnabled()) {
 				Set<BluetoothDevice> tDeviceset = mBluetoothAdapter.getBondedDevices();
 				if (tDeviceset.size() == 1) {
@@ -217,72 +231,86 @@ public class BlueDisplay extends Activity {
 		PreferenceManager.setDefaultValues(this, R.xml.preferences, false);
 		readPreferences();
 
-		mShowEnableBTDialog = false;
+		setActualScreenOrientation(mPreferredScreenOrientation, true);
+
+		mInEnableBT = false;
 		// mRPCView.showTestpage();
-		Log.i(LOG_TAG, "+++ DONE IN ON CREATE +++");
+
+		/*
+		 * List sensors
+		 */
+		mSensorEventListener = new Sensors(this, (SensorManager) getSystemService(Context.SENSOR_SERVICE));
+		if (BlueDisplay.isINFO()) {
+			Log.i(LOG_TAG, "+++ DONE IN ON CREATE +++");
+		}
 	}
 
 	@Override
 	public void onStart() {
 		super.onStart();
-		Log.i(LOG_TAG, "++ ON START ++");
+		if (BlueDisplay.isDEBUG()) {
+			Log.i(LOG_TAG, "++ ON START ++");
+		}
 	}
 
+	@SuppressLint("InlinedApi")
 	@Override
 	public synchronized void onResume() {
 		super.onResume();
-		Log.i(LOG_TAG, "+ ON RESUME +");
+		if (BlueDisplay.isDEBUG()) {
+			Log.i(LOG_TAG, "+ ON RESUME +");
+		}
 
-		if (!mShowEnableBTDialog) {
+		if (!mInEnableBT) {
 			if ((mBluetoothAdapter != null) && (!mBluetoothAdapter.isEnabled())) {
-				Log.i(LOG_TAG, "Open dialog \"activate bluetooth\"");
-				AlertDialog.Builder tBuilder = new AlertDialog.Builder(this);
-				tBuilder.setMessage(R.string.alert_dialog_turn_on_bt).setIcon(android.R.drawable.ic_dialog_alert)
-						.setTitle(R.string.alert_dialog_warning_title).setCancelable(false)
-						.setPositiveButton(R.string.alert_dialog_yes, new DialogInterface.OnClickListener() {
-							public void onClick(DialogInterface dialog, int id) {
-								Intent enableIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
-								startActivityForResult(enableIntent, REQUEST_ENABLE_BT);
-								mShowEnableBTDialog = false;
-								// dialog.dismiss();
-							}
-						}).setNegativeButton(R.string.alert_dialog_no, new DialogInterface.OnClickListener() {
-							public void onClick(DialogInterface dialog, int id) {
-								mShowEnableBTDialog = false;
-								finishDialogNoBluetooth();
-							}
-						});
-				AlertDialog tAlertDialog = tBuilder.create();
-				mShowEnableBTDialog = true;
-				tAlertDialog.show();
+				Log.i(LOG_TAG, "Activate bluetooth");
+				Intent enableIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
+				startActivityForResult(enableIntent, REQUEST_ENABLE_BT);
+				mInEnableBT = true;
 			}
 		}
+		int tOldPreferredScreenOrientation = mPreferredScreenOrientation;
 		readPreferences();
-		setRequestedOrientation(mPreferredScreenOrientation);
+		if (tOldPreferredScreenOrientation != mPreferredScreenOrientation) {
+			setActualScreenOrientation(mPreferredScreenOrientation, true);
+		}
+
+		mActualRotation = getWindowManager().getDefaultDisplay().getRotation();
+		mSensorEventListener.registerAllActiveSensorListeners();
+
 		mRPCView.invalidate();
 	}
 
 	@Override
 	public void onWindowFocusChanged(boolean hasFocus) {
-		Log.i(LOG_TAG, "+ onWindowFocusChanged focus=" + hasFocus);
+		if (BlueDisplay.isINFO()) {
+			Log.i(LOG_TAG, "+ onWindowFocusChanged focus=" + hasFocus);
+		}
 	}
 
 	@Override
 	public synchronized void onPause() {
 		super.onPause();
-		Log.i(LOG_TAG, "- ON PAUSE -");
+		if (BlueDisplay.isINFO()) {
+			Log.i(LOG_TAG, "- ON PAUSE -");
+		}
+		mSensorEventListener.deregisterAllActiveSensorListeners();
 	}
 
 	@Override
 	public void onStop() {
 		super.onStop();
-		Log.i(LOG_TAG, "-- ON STOP --");
+		if (BlueDisplay.isINFO()) {
+			Log.i(LOG_TAG, "-- ON STOP --");
+		}
 	}
 
 	@Override
 	public void onDestroy() {
 		super.onDestroy();
-		Log.i(LOG_TAG, "--- ON DESTROY ---");
+		if (BlueDisplay.isINFO()) {
+			Log.i(LOG_TAG, "--- ON DESTROY ---");
+		}
 		if (mSerialService != null) {
 			mSerialService.stop();
 		}
@@ -293,16 +321,34 @@ public class BlueDisplay extends Activity {
 	public void onConfigurationChanged(Configuration newConfig) {
 		super.onConfigurationChanged(newConfig);
 
-		if (mActualScreenOrientation != newConfig.orientation) {
-			mActualScreenOrientation = newConfig.orientation;
+		setActualScreenOrientation(newConfig.orientation, false);
+		mActualRotation = getWindowManager().getDefaultDisplay().getRotation();
+		if (BlueDisplay.isINFO()) {
+			Log.i(LOG_TAG, "--- ON ConfigurationChanged --- " + mActualScreenOrientationString + " rotation=" + mActualRotation);
 		}
+	}
 
-		// output value
-		String tOrientation = "portrait";
-		if (newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE) {
-			tOrientation = "landscape";
+	/**
+	 * 
+	 * @param aNewOrientation
+	 * @param doRequest
+	 *            false if called by onConfigurationChanged, since orientation has already changed because of a former request
+	 */
+	void setActualScreenOrientation(int aNewOrientation, boolean doRequest) {
+		mActualScreenOrientation = aNewOrientation;
+		if (doRequest) {
+			setRequestedOrientation(aNewOrientation);
 		}
-		Log.i(LOG_TAG, "--- ON ConfigurationChanged --- " + tOrientation);
+		String tOrientation = "portrait";
+		if (mActualScreenOrientation == ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE) {
+			tOrientation = "landscape";
+		} else if (mActualScreenOrientation == ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) {
+			tOrientation = "undefined";
+		}
+		mActualScreenOrientationString = tOrientation;
+		if (BlueDisplay.isINFO()) {
+			Log.i(LOG_TAG, "Set orientation to " + mActualScreenOrientationString);
+		}
 	}
 
 	/*
@@ -310,7 +356,9 @@ public class BlueDisplay extends Activity {
 	 */
 	@Override
 	public boolean onCreateOptionsMenu(Menu menu) {
-		Log.i(LOG_TAG, "--- ON CreateOptionsMenu ---");
+		if (BlueDisplay.isINFO()) {
+			Log.i(LOG_TAG, "--- ON CreateOptionsMenu ---");
+		}
 		MenuInflater inflater = getMenuInflater();
 		inflater.inflate(R.menu.option_menu, menu);
 		mMenuItemConnect = menu.getItem(0);
@@ -330,8 +378,8 @@ public class BlueDisplay extends Activity {
 	@SuppressLint("SimpleDateFormat")
 	@Override
 	public boolean onOptionsItemSelected(MenuItem item) {
-		if (isDEBUG()) {
-			Log.d(LOG_TAG, "Item " + item.getTitle());
+		if (isVERBOSE()) {
+			Log.v(LOG_TAG, "Item " + item.getTitle());
 		}
 		switch (item.getItemId()) {
 		case R.id.menu_connect:
@@ -340,7 +388,7 @@ public class BlueDisplay extends Activity {
 				Intent serverIntent = new Intent(this, DeviceListActivity.class);
 				startActivityForResult(serverIntent, REQUEST_CONNECT_DEVICE);
 			} else if (mSerialService.getState() == BluetoothSerialService.STATE_CONNECTED) {
-				// disconnect -> stop running service
+				// disconnect -> stop running service + reset locked orientation in turn
 				mSerialService.stop();
 			}
 			return true;
@@ -388,7 +436,9 @@ public class BlueDisplay extends Activity {
 			return true;
 
 		case R.id.menu_show_statistics:
-			Log.i(LOG_TAG, mSerialService.getStatisticsString());
+			if (BlueDisplay.isINFO()) {
+				Log.i(LOG_TAG, mSerialService.getStatisticsString());
+			}
 			showStatisticsMessage();
 			return true;
 		case R.id.menu_about:
@@ -411,8 +461,8 @@ public class BlueDisplay extends Activity {
 		public void handleMessage(Message msg) {
 			switch (msg.what) {
 			case MESSAGE_STATE_CHANGE:
-				if (isDEBUG()) {
-					Log.d(LOG_TAG, "MESSAGE_STATE_CHANGE: " + msg.arg1);
+				if (isVERBOSE()) {
+					Log.v(LOG_TAG, "MESSAGE_STATE_CHANGE: " + msg.arg1);
 				}
 				switch (msg.arg1) {
 				case BluetoothSerialService.STATE_CONNECTED:
@@ -435,6 +485,7 @@ public class BlueDisplay extends Activity {
 					break;
 				}
 				break;
+
 			case MESSAGE_DEVICE_NAME:
 				// save the connected device's name
 				mConnectedDeviceName = msg.getData().getString(DEVICE_NAME);
@@ -443,24 +494,39 @@ public class BlueDisplay extends Activity {
 				}
 				Toast.makeText(getApplicationContext(), getString(R.string.toast_connected_to) + " " + mConnectedDeviceName,
 						Toast.LENGTH_SHORT).show();
+				// set window to always on
+				getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 				break;
-			case MESSAGE_TOAST:
+
+			case MESSAGE_DISCONNECT:
 				if (isDEBUG()) {
-					Log.d(LOG_TAG, "MESSAGE_TOAST");
+					Log.d(LOG_TAG, "MESSAGE_DISCONNECT: " + mConnectedDeviceName);
+				}
+				Toast.makeText(getApplicationContext(), getString(R.string.toast_connection_lost) + " " + mConnectedDeviceName,
+						Toast.LENGTH_SHORT).show();
+				// reset locked orientation
+				setActualScreenOrientation(mPreferredScreenOrientation, true);
+				// set window to normal (not persistent) state
+				getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+				break;
+
+			case MESSAGE_TOAST:
+				if (isVERBOSE()) {
+					Log.v(LOG_TAG, "MESSAGE_TOAST");
 				}
 				Toast.makeText(getApplicationContext(), msg.getData().getString(TOAST), Toast.LENGTH_SHORT).show();
 				break;
 
 			case MESSAGE_UPDATE_VIEW:
-				if (isDEBUG()) {
-					Log.d(LOG_TAG, "MESSAGE_UPDATE_VIEW");
+				if (isVERBOSE()) {
+					Log.v(LOG_TAG, "MESSAGE_UPDATE_VIEW");
 				}
 				mRPCView.invalidate();
 				break;
 
 			case REQUEST_INPUT_DATA:
-				if (isDEBUG()) {
-					Log.d(LOG_TAG, "REQUEST_INPUT_DATA");
+				if (isVERBOSE()) {
+					Log.v(LOG_TAG, "REQUEST_INPUT_DATA");
 				}
 				showInputDialog(msg.getData().getBoolean(NUMBER_FLAG), msg.getData().getInt(CALLBACK_ADDRESS), msg.getData()
 						.getString(BlueDisplay.DIALOG_PROMPT));
@@ -499,6 +565,10 @@ public class BlueDisplay extends Activity {
 					Log.d(LOG_TAG, "BT not enabled");
 				}
 				finishDialogNoBluetooth();
+			} else {
+				// Launch the DeviceListActivity to choose device
+				Intent serverIntent = new Intent(this, DeviceListActivity.class);
+				startActivityForResult(serverIntent, REQUEST_CONNECT_DEVICE);
 			}
 			break;
 
@@ -571,7 +641,8 @@ public class BlueDisplay extends Activity {
 				float tValue;
 				try {
 					tValue = Float.parseFloat(tNumber.toString());
-					mSerialService.writeEvent(BluetoothSerialService.EVENT_TAG_NUMBER_CALLBACK, aCallbackAddress, tValue);
+					mSerialService.writeNumberCallbackEvent(BluetoothSerialService.EVENT_TAG_NUMBER_CALLBACK, aCallbackAddress,
+							tValue);
 				} catch (NumberFormatException e) {
 					tValue = Float.NaN;
 					Log.w(LOG_TAG, "Entered data \"" + tNumber + "\" is no float");
@@ -609,10 +680,6 @@ public class BlueDisplay extends Activity {
 		tAlertDialog.show();
 	}
 
-	public void fillDisplayMetrics(DisplayMetrics aMetrics) {
-		getWindowManager().getDefaultDisplay().getMetrics(aMetrics);
-	}
-
 	/****************
 	 * PREFERENCES
 	 ****************/
@@ -638,9 +705,8 @@ public class BlueDisplay extends Activity {
 		default:
 			mPreferredScreenOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
 		}
-		setRequestedOrientation(mPreferredScreenOrientation);
 
-		mLoglevel = Integer.parseInt(tSharedPreferences.getString(LOGLEVEL_KEY, "" + Log.WARN));
+		mLoglevel = Integer.parseInt(tSharedPreferences.getString(LOGLEVEL_KEY, Log.INFO + ""));
 
 		if (mSerialService != null) {
 			mSerialService.setAllowInsecureConnections(tSharedPreferences.getBoolean(ALLOW_INSECURE_CONNECTIONS_KEY,
@@ -648,15 +714,15 @@ public class BlueDisplay extends Activity {
 		}
 		if (mRPCView != null) {
 			// don't use setter methods since they modify the preference too
-			//mRPCView.mTouchMoveEnable = tSharedPreferences.getBoolean(TOUCH_MOVE_KEY, mRPCView.isTouchMoveEnable());
+			// mRPCView.mTouchMoveEnable = tSharedPreferences.getBoolean(TOUCH_MOVE_KEY, mRPCView.isTouchMoveEnable());
 			mRPCView.mShowTouchCoordinates = tSharedPreferences.getBoolean(SHOW_TOUCH_COORDINATES_KEY, false);
 		}
 	}
 
-//	public void setTouchMoveModePreference(boolean aNewMode) {
-//		Editor tEditor = PreferenceManager.getDefaultSharedPreferences(this).edit();
-//		tEditor.putBoolean(TOUCH_MOVE_KEY, aNewMode);
-//		tEditor.apply();
-//	}
+	// public void setTouchMoveModePreference(boolean aNewMode) {
+	// Editor tEditor = PreferenceManager.getDefaultSharedPreferences(this).edit();
+	// tEditor.putBoolean(TOUCH_MOVE_KEY, aNewMode);
+	// tEditor.apply();
+	// }
 
 }

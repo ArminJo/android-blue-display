@@ -184,16 +184,16 @@ void handleEvent(struct BluetoothEvent * aEvent) {
     if (tEventType == EVENT_TAG_BUTTON_CALLBACK_ACTION) {
         sTouchIsStillDown = false; // to disable local touch up detection
         void (*tCallback)(uint16_t, int16_t) = (void (*)(uint16_t, int16_t)) aEvent->EventData.CallbackInfo.Handler;
-        tCallback(aEvent->EventData.CallbackInfo.ObjectIndex, aEvent->EventData.CallbackInfo.HandlerValue.Int16Value);
+        tCallback(aEvent->EventData.CallbackInfo.ObjectIndex, aEvent->EventData.CallbackInfo.ValueForHandler.Int16Value);
 
     } else if (tEventType == EVENT_TAG_SLIDER_CALLBACK_ACTION) {
         sTouchIsStillDown = false; // to disable local touch up detection
         void (*tCallback)(uint16_t, int16_t) = (void (*)(uint16_t, int16_t))aEvent->EventData.CallbackInfo.Handler;
-        tCallback(aEvent->EventData.CallbackInfo.ObjectIndex, aEvent->EventData.CallbackInfo.HandlerValue.Int16Value);
+        tCallback(aEvent->EventData.CallbackInfo.ObjectIndex, aEvent->EventData.CallbackInfo.ValueForHandler.Int16Value);
 
     } else if (tEventType == EVENT_TAG_NUMBER_CALLBACK) {
         void (*tCallback)(float) = (void (*)(float))aEvent->EventData.CallbackInfo.Handler;
-        tCallback(aEvent->EventData.CallbackInfo.HandlerValue.FloatValue);
+        tCallback(aEvent->EventData.CallbackInfo.ValueForHandler.FloatValue);
 
     } else if (tEventType == EVENT_TAG_SWIPE_CALLBACK_ACTION) {
         sTouchIsStillDown = false;
