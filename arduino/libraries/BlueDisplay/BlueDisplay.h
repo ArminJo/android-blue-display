@@ -107,6 +107,76 @@ uint8_t getTextMiddle(uint8_t aTextSize);
 uint8_t getLocalTextSize(uint8_t aTextSize);
 
 /*
+ * BUTTONS
+ */
+#define BUTTON_AUTO_RED_GREEN_FALSE_COLOR COLOR_RED
+#define BUTTON_AUTO_RED_GREEN_TRUE_COLOR COLOR_GREEN
+#define BUTTON_DEFAULT_SPACING 16
+#define BUTTON_DEFAULT_SPACING_HALF 8
+#define BUTTON_DEFAULT_SPACING_QUARTER 4
+/*
+ * Layout for 320 x 240 screen size
+ */
+#define LAYOUT_320_WIDTH 320
+#define LAYOUT_240_HEIGHT 240
+#define LAYOUT_256_HEIGHT 256
+/*
+ * WIDTHS
+ */
+#define BUTTON_WIDTH_2 152 // for 2 buttons horizontal - 19 characters
+#define BUTTON_WIDTH_2_POS_2 (BUTTON_WIDTH_2 + BUTTON_DEFAULT_SPACING)
+//
+#define BUTTON_WIDTH_3 96 // for 3 buttons horizontal - 12 characters
+#define BUTTON_WIDTH_3_POS_2 (BUTTON_WIDTH_3 + BUTTON_DEFAULT_SPACING)
+#define BUTTON_WIDTH_3_POS_3 (DISPLAY_WIDTH - BUTTON_WIDTH_3)
+//
+#define BUTTON_WIDTH_4 68 // for 4 buttons horizontal - 8 characters
+#define BUTTON_WIDTH_4_POS_2 (BUTTON_WIDTH_4 + BUTTON_DEFAULT_SPACING)
+#define BUTTON_WIDTH_4_POS_3 (2*(BUTTON_WIDTH_4 + BUTTON_DEFAULT_SPACING))
+#define BUTTON_WIDTH_4_POS_4 (LAYOUT_320_WIDTH - BUTTON_WIDTH_4)
+//
+#define BUTTON_WIDTH_5 51 // for 5 buttons horizontal 51,2  - 6 characters
+#define BUTTON_WIDTH_5_POS_2 (BUTTON_WIDTH_5 + BUTTON_DEFAULT_SPACING)
+#define BUTTON_WIDTH_5_POS_3 (2*(BUTTON_WIDTH_5 + BUTTON_DEFAULT_SPACING))
+#define BUTTON_WIDTH_5_POS_4 (3*(BUTTON_WIDTH_5 + BUTTON_DEFAULT_SPACING))
+#define BUTTON_WIDTH_5_POS_5 (LAYOUT_320_WIDTH - BUTTON_WIDTH_5)
+//
+#define BUTTON_WIDTH_2_5 120 //  for 2 buttons horizontal plus one small with BUTTON_WIDTH_5 (118,5)- 15 characters
+#define BUTTON_WIDTH_2_5_POS_2   (BUTTON_WIDTH_2_5 + BUTTON_DEFAULT_SPACING -1)
+#define BUTTON_WIDTH_2_5_POS_2_5 (LAYOUT_320_WIDTH - BUTTON_WIDTH_5)
+//
+#define BUTTON_WIDTH_6 40 // for 6 buttons horizontal
+#define BUTTON_WIDTH_6_POS_2 (BUTTON_WIDTH_6 + BUTTON_DEFAULT_SPACING)
+#define BUTTON_WIDTH_6_POS_3 (2*(BUTTON_WIDTH_6 + BUTTON_DEFAULT_SPACING))
+#define BUTTON_WIDTH_6_POS_4 (3*(BUTTON_WIDTH_6 + BUTTON_DEFAULT_SPACING))
+#define BUTTON_WIDTH_6_POS_5 (4*(BUTTON_WIDTH_6 + BUTTON_DEFAULT_SPACING))
+#define BUTTON_WIDTH_6_POS_6 (LAYOUT_320_WIDTH - BUTTON_WIDTH_6)
+//
+#define BUTTON_WIDTH_8 33 // for 8 buttons horizontal
+#define BUTTON_WIDTH_10 28 // for 10 buttons horizontal
+/*
+ * HEIGHTS
+ */
+#define BUTTON_HEIGHT_4 48 // for 4 buttons vertical
+#define BUTTON_HEIGHT_4_LINE_2 (BUTTON_HEIGHT_4 + BUTTON_DEFAULT_SPACING)
+#define BUTTON_HEIGHT_4_LINE_3 (2*(BUTTON_HEIGHT_4 + BUTTON_DEFAULT_SPACING))
+#define BUTTON_HEIGHT_4_LINE_4 (LAYOUT_240_HEIGHT - BUTTON_HEIGHT_4)
+//
+#define BUTTON_HEIGHT_5_256 39 // for 5 buttons vertical and  DISPLAY_HEIGHT == 256
+#define BUTTON_HEIGHT_5_256_LINE_2 (BUTTON_HEIGHT_5 + BUTTON_DEFAULT_SPACING)
+#define BUTTON_HEIGHT_5_256_LINE_3 (2*(BUTTON_HEIGHT_5 + BUTTON_DEFAULT_SPACING))
+#define BUTTON_HEIGHT_5_256_LINE_4 (3*(BUTTON_HEIGHT_5 + BUTTON_DEFAULT_SPACING))
+#define BUTTON_HEIGHT_5_256_LINE_5 (LAYOUT_256_HEIGHT - BUTTON_HEIGHT_5)
+//
+#define BUTTON_HEIGHT_5 35 // for 5 buttons vertical
+#define BUTTON_HEIGHT_5_LINE_2 (BUTTON_HEIGHT_5 + BUTTON_DEFAULT_SPACING)
+#define BUTTON_HEIGHT_5_LINE_3 (2*(BUTTON_HEIGHT_5 + BUTTON_DEFAULT_SPACING))
+#define BUTTON_HEIGHT_5_LINE_4 (3*(BUTTON_HEIGHT_5 + BUTTON_DEFAULT_SPACING))
+#define BUTTON_HEIGHT_5_LINE_5 (LAYOUT_240_HEIGHT - BUTTON_HEIGHT_5)
+//
+#define BUTTON_HEIGHT_6 26 // for 6 buttons vertical 26,66..
+
+/*
  * Flags for BlueDisplay functions
  */
 // Sub functions for SET_FLAGS_AND_SIZE
@@ -188,6 +258,12 @@ public:
             Color_TypeDef aBGColor);
     void drawMLText(uint16_t aPosX, uint16_t aPosY, const char *aStringPtr, uint8_t aTextSize, Color_TypeDef aFGColor,
             Color_TypeDef aBGColor);
+
+    void setPrintfSizeAndColorAndFlag(int aPrintSize, Color_TypeDef aPrintColor, Color_TypeDef aPrintBackgroundColor,
+            bool aClearOnNewScreen);
+    void setPrintfPosition(int aPosX, int aPosY);
+    void setPrintfPositionLineColumn(int aLineNumber, int aColumnNumber);
+    void writeString(const char *aStringPtr, uint8_t aStringLength);
 
     void debugMessage(const char *aStringPtr);
 

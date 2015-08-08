@@ -108,8 +108,8 @@ void initFrequencyGeneratorPage(void) {
         tFrequency = pgm_read_word(tFrequencyPtr);
         sprintf_P(StringBuffer, PSTR("%u"), tFrequency);
         tButtonIndex = BlueDisplay1.createButton(tXPos,
-        DISPLAY_HEIGHT - BUTTON_HEIGHT_4 - BUTTON_HEIGHT_5 - BUTTON_HEIGHT_6 - 2 * BUTTON_DEFAULT_SPACING, BUTTON_WIDTH_10,
-        BUTTON_HEIGHT_6, COLOR_BLUE, StringBuffer, TEXT_SIZE_11, 0, tFrequency, &doSetFixedFrequency);
+                DISPLAY_HEIGHT - BUTTON_HEIGHT_4 - BUTTON_HEIGHT_5 - BUTTON_HEIGHT_6 - 2 * BUTTON_DEFAULT_SPACING, BUTTON_WIDTH_10,
+                BUTTON_HEIGHT_6, COLOR_BLUE, StringBuffer, TEXT_SIZE_11, 0, tFrequency, &doSetFixedFrequency);
         tXPos += BUTTON_WIDTH_10 + BUTTON_DEFAULT_SPACING_QUARTER;
         tFrequencyPtr++;
     }
@@ -119,9 +119,9 @@ void initFrequencyGeneratorPage(void) {
     tXPos = 0;
     int tYPos = BlueDisplay1.getDisplayHeight() - BUTTON_HEIGHT_4 - BUTTON_HEIGHT_5 - BUTTON_DEFAULT_SPACING;
     for (int i = 0; i < NUMBER_OF_FREQUENCY_RANGE_BUTTONS; ++i) {
-        uint16_t tButtonColor = COLOR_GUI_NOT_SELECTED;
+        uint16_t tButtonColor = BUTTON_AUTO_RED_GREEN_FALSE_COLOR;
         if (i == BUTTON_INDEX_SELECTED_INITIAL) {
-            tButtonColor = COLOR_GUI_SELECTED;
+            tButtonColor = BUTTON_AUTO_RED_GREEN_TRUE_COLOR;
         }
         TouchButtonFrequencyRanges[i] = BlueDisplay1.createButtonPGM(tXPos, tYPos, BUTTON_WIDTH_5 + BUTTON_DEFAULT_SPACING_HALF,
         BUTTON_HEIGHT_5, tButtonColor, FrequencyButtonStrings[i],
@@ -198,9 +198,9 @@ void doShowFrequencyPage(uint8_t aTheTouchedButton, int16_t aValue) {
  */
 void doChangeFrequencyFactor(uint8_t aTheTouchedButton, int16_t aValue) {
     if (ActiveTouchButtonFrequencyRange != aTheTouchedButton) {
-        BlueDisplay1.setButtonColorAndDraw(ActiveTouchButtonFrequencyRange, COLOR_GUI_NOT_SELECTED);
+        BlueDisplay1.setButtonColorAndDraw(ActiveTouchButtonFrequencyRange, BUTTON_AUTO_RED_GREEN_FALSE_COLOR);
         ActiveTouchButtonFrequencyRange = aTheTouchedButton;
-        BlueDisplay1.setButtonColorAndDraw(aTheTouchedButton, COLOR_GUI_SELECTED);
+        BlueDisplay1.setButtonColorAndDraw(aTheTouchedButton, BUTTON_AUTO_RED_GREEN_TRUE_COLOR);
         // Handling of 10 Hz button
         if (aValue == INDEX_OF_10HZ) {
             is10HzRange = true;

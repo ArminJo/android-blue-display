@@ -55,8 +55,6 @@ const uint16_t DISPLAY_WIDTH = 320;
 #define COLOR_GUI_TRIGGER RGB(0x00,0x00,0xD0) // blue
 #define COLOR_GUI_SOURCE_TIMEBASE RGB(0x00,0x90,0x00)
 #define COLOR_GUI_DISPLAY_CONTROL RGB(0xC8,0xC8,0x00)
-#define COLOR_GUI_SELECTED COLOR_GREEN
-#define COLOR_GUI_NOT_SELECTED COLOR_RED
 
 #define COLOR_INFO_BACKGROUND RGB(0xC8,0xC8,0x00)
 
@@ -87,11 +85,16 @@ const uint16_t DISPLAY_WIDTH = 320;
 #define TRIGGER_MODE_MANUAL 1
 #define TRIGGER_MODE_FREE 2
 
+
+/*
+ * EXTERNAL ATTENUATOR
+ */
 #define ATTENUATOR_TYPE_NO_ATTENUATOR 0
-#define ATTENUATOR_TYPE_SIMPLE_ATTENUATOR 1
-#define MAX_ADC_CHANNEL_WITH_SIMPLE_ATTENUATOR 2
+#define ATTENUATOR_TYPE_FIXED_ATTENUATOR 1  // assume manual AC/DC switch
+#define NUMBER_OF_CHANNEL_WITH_FIXED_ATTENUATOR 3 // Channel0 = /1, Ch1= /10, Ch2= /100
+
 #define ATTENUATOR_TYPE_ACTIVE_ATTENUATOR 2 // and 3
-#define MAX_ADC_CHANNEL_WITH_ACTIVE_ATTENUATOR 1
+#define NUMBER_OF_CHANNEL_WITH_ACTIVE_ATTENUATOR 2
 
 struct MeasurementControlStruct {
     // State
@@ -109,9 +112,9 @@ struct MeasurementControlStruct {
     char ADCInputMUXChannelChar;
     uint8_t AttenuatorType; //ATTENUATOR_TYPE_NO_ATTENUATOR, ATTENUATOR_TYPE_SIMPLE_ATTENUATOR, ATTENUATOR_TYPE_ACTIVE_ATTENUATOR
     bool ChannelHasActiveAttenuator;
-    bool ChannelHasACDC; // has AC / DC switch - only for channels with active or passive attenuators
-    bool isACMode; // AC mode for attenuator channels
-    bool storeForACMode;
+    bool ChannelHasACDCSwitch; // has AC / DC switch - only for channels with active or passive attenuators
+    bool ChannelIsACMode; // AC Mode for actual channel
+    bool isACMode; // user AC mode setting
     uint16_t RawDSOReadingACZero;
 
     // Trigger

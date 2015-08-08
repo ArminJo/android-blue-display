@@ -1,5 +1,5 @@
 /bin
 /.settings
 /gen
-/BlueDisplay*.apk
+/BlueDisplay?*.apk
 /lint.xml

@@ -59,11 +59,18 @@ const int FUNCTION_TAG_FILL_RECT = 0x27;
 const int FUNCTION_TAG_DRAW_CIRCLE = 0x28;
 const int FUNCTION_TAG_FILL_CIRCLE = 0x29;
 
+const int FUNCTION_TAG_WRITE_SETTINGS = 0x34;
+// Flags for WRITE_SETTINGS
+const int WRITE_FLAG_SET_SIZE_AND_COLORS_AND_FLAGS = 0x00;
+const int WRITE_FLAG_SET_POSITION = 0x01;
+const int WRITE_FLAG_SET_LINE_COLUMN = 0x02;
+
 const int LAST_FUNCTION_TAG_WITHOUT_DATA = 0x5F;
 
 // Function with variable data size
 const int FUNCTION_TAG_DRAW_STRING = 0x60;
 const int FUNCTION_TAG_DEBUG_STRING = 0x61;
+const int FUNCTION_TAG_WRITE_STRING = 0x62;
 
 const int FUNCTION_TAG_GET_NUMBER_WITH_SHORT_PROMPT = 0x64;
 const int FUNCTION_TAG_GET_NUMBER_WITH_SHORT_PROMPT_AND_INITIAL_VALUE = 0x65;
@@ -373,6 +380,57 @@ uint16_t BlueDisplay::drawText(uint16_t aPosX, uint16_t aPosY, const char *aStri
     return tRetValue;
 }
 
+/*
+ * for printf implementation
+ */
+void BlueDisplay::setPrintfSizeAndColorAndFlag(int aPrintSize, Color_TypeDef aPrintColor, Color_TypeDef aPrintBackgroundColor,
+bool aClearOnNewScreen) {
+#ifdef LOCAL_DISPLAY_EXISTS
+    printSetOptions(aPrintSize, aPrintColor, aPrintBackgroundColor, aClearOnNewScreen);
+#endif
+    if (USART_isBluetoothPaired()) {
+        sendUSARTArgs(FUNCTION_TAG_WRITE_SETTINGS, 5, WRITE_FLAG_SET_SIZE_AND_COLORS_AND_FLAGS, aPrintSize, aPrintColor,
+                aPrintBackgroundColor, aClearOnNewScreen);
+    }
+}
+
+void BlueDisplay::setPrintfPosition(int aPosX, int aPosY) {
+#ifdef LOCAL_DISPLAY_EXISTS
+    printSetPosition(aPosX, aPosY);
+#endif
+    if (USART_isBluetoothPaired()) {
+        sendUSARTArgs(FUNCTION_TAG_WRITE_SETTINGS, 3, WRITE_FLAG_SET_POSITION, aPosX, aPosY);
+    }
+}
+
+void BlueDisplay::setPrintfPositionLineColumn(int aLineNumber, int aColumnNumber) {
+#ifdef LOCAL_DISPLAY_EXISTS
+    printSetPositionLineColumn(aLineNumber, aColumnNumber);
+#endif
+    if (USART_isBluetoothPaired()) {
+        sendUSARTArgs(FUNCTION_TAG_WRITE_SETTINGS, 3, WRITE_FLAG_SET_LINE_COLUMN, aLineNumber, aColumnNumber);
+    }
+}
+
+void BlueDisplay::writeString(const char *aStringPtr, uint8_t aStringLength) {
+#ifdef LOCAL_DISPLAY_EXISTS
+    myPrint(aStringPtr, aStringLength);
+#endif
+    if (USART_isBluetoothPaired()) {
+        sendUSARTArgsAndByteBuffer(FUNCTION_TAG_WRITE_STRING, 0, aStringLength, (uint8_t*) aStringPtr);
+    }
+}
+
+// for use in syscalls.c
+extern "C" void writeStringC(const char *aStringPtr, uint8_t aStringLength) {
+#ifdef LOCAL_DISPLAY_EXISTS
+    myPrint(aStringPtr, aStringLength);
+#endif
+    if (USART_isBluetoothPaired()) {
+        sendUSARTArgsAndByteBuffer(FUNCTION_TAG_WRITE_STRING, 0, aStringLength, (uint8_t*) aStringPtr);
+    }
+}
+
 /**
  * Output String as error log
  */
@@ -462,7 +520,10 @@ void BlueDisplay::refreshVector(struct ThickLine * aLine, int16_t aNewRelEndX, i
         // Draw new line
         /**
          * clipping
+         * Ignore warning since we know that values are positive when compared :-)
          */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wsign-compare"
         if (tNewEndX < 0) {
             tNewEndX = 0;
         } else if (tNewEndX > mReferenceDisplaySize.XWidth - 1) {
@@ -475,6 +536,7 @@ void BlueDisplay::refreshVector(struct ThickLine * aLine, int16_t aNewRelEndX, i
         } else if (tNewEndY > mReferenceDisplaySize.YHeight - 1) {
             tNewEndY = mReferenceDisplaySize.YHeight - 1;
         }
+#pragma GCC diagnostic pop
         aLine->EndY = tNewEndY;
 
         drawLineWithThickness(aLine->StartX, aLine->StartY, tNewEndX, tNewEndY, aLine->Thickness, aLine->Color);

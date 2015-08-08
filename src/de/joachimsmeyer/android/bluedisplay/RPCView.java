@@ -91,6 +91,18 @@ public class RPCView extends View {
 	private Paint mGraphPaintStroke1Fill; // for circle, rectangles and path
 	private Paint mGraphPaintStrokeScaleFactor; // for pixel, line and chart
 	private Paint mGraphPaintStrokeSettable; // user settable for pixel, line and chart
+
+	/*
+	 * All values are input values (for scale factor = 1.0)
+	 */
+	private int mTextPrintTextActualPosX; // for printf implementation
+	private int mTextPrintTextActualPosY; // for printf implementation
+	private int mTextPrintTextSize; // for printf implementation
+
+	private Paint mTextPrintPaint; // for printf implementation
+	private int mTextPrintBackgroundColor = Color.BLACK; // for printf implementation
+	private boolean mTextPrintDoClearScreenOnWrap = true; // for printf implementation
+
 	private Canvas mCanvas;
 	private Path mPath = new Path();
 
@@ -155,7 +167,7 @@ public class RPCView extends View {
 	public static final int FIRST_FUNCTION_TAG_BUTTON = 0x40;
 	public static final int LAST_FUNCTION_TAG_BUTTON = 0x4F;
 
-	// Button functions 40-4F
+	// Slider functions 50-5F
 	public static final int FIRST_FUNCTION_TAG_SLIDER = 0x50;
 	public static final int LAST_FUNCTION_TAG_SLIDER = 0x5F;
 
@@ -228,9 +240,16 @@ public class RPCView extends View {
 	private final static int FUNCTION_TAG_DRAW_CIRCLE = 0x28;
 	private final static int FUNCTION_TAG_FILL_CIRCLE = 0x29;
 
+	private final static int FUNCTION_TAG_WRITE_SETTINGS = 0x34;
+	// Flags for WRITE_SETTINGS
+	private final static int WRITE_FLAG_SET_SIZE_AND_COLORS_AND_FLAGS = 0x00;
+	private final static int WRITE_FLAG_SET_POSITION = 0x01;
+	private final static int WRITE_FLAG_SET_LINE_COLUMN = 0x02;
+
 	// Variable parameter length
 	private final static int FUNCTION_TAG_DRAW_STRING = 0x60;
 	private final static int FUNCTION_TAG_DEBUG_STRING = 0x61;
+	private final static int FUNCTION_TAG_WRITE_STRING = 0x62;
 
 	private final static int FUNCTION_TAG_GET_NUMBER_WITH_SHORT_PROMPT = 0x64;
 
@@ -242,7 +261,7 @@ public class RPCView extends View {
 	private static final int LONG_TOUCH_DOWN = 0;
 
 	/*
-	 * Action code to action string mappings
+	 * Action code to action string mappings for log output
 	 */
 	public static final SparseArray<String> sActionMappings = new SparseArray<String>(16);
 
@@ -262,7 +281,8 @@ public class RPCView extends View {
 		sActionMappings.put(BluetoothSerialService.EVENT_TAG_FIRST_SENSOR_ACTION_CODE + Sensor.TYPE_ACCELEROMETER, "Accelerometer");
 		sActionMappings.put(BluetoothSerialService.EVENT_TAG_FIRST_SENSOR_ACTION_CODE + Sensor.TYPE_GRAVITY, "Gravity");
 		sActionMappings.put(BluetoothSerialService.EVENT_TAG_FIRST_SENSOR_ACTION_CODE + Sensor.TYPE_GYROSCOPE, "Gyroscope");
-		sActionMappings.put(BluetoothSerialService.EVENT_TAG_FIRST_SENSOR_ACTION_CODE + Sensor.TYPE_LINEAR_ACCELERATION, "LinAccelation");
+		sActionMappings.put(BluetoothSerialService.EVENT_TAG_FIRST_SENSOR_ACTION_CODE + Sensor.TYPE_LINEAR_ACCELERATION,
+				"LinAccelation");
 		sActionMappings.put(BluetoothSerialService.EVENT_TAG_FIRST_SENSOR_ACTION_CODE + Sensor.TYPE_MAGNETIC_FIELD, "Magnetic");
 	}
 
@@ -294,11 +314,19 @@ public class RPCView extends View {
 		mTextPaint.setTypeface(Typeface.MONOSPACE);
 		mTextPaint.setStyle(Paint.Style.FILL);
 
+		mTextPrintPaint = new Paint();
+		mTextPrintPaint.setStrokeWidth(1);
+		mTextPrintPaint.setStyle(Paint.Style.FILL);
+		mTextPrintPaint.setTypeface(Typeface.MONOSPACE);
+		// default values
+		mTextPrintPaint.setTextSize(11);
+		mTextPrintPaint.setColor(Color.BLACK);
+
 		mInfoPaint = new Paint();
 		mInfoPaint.setTypeface(Typeface.MONOSPACE);
 		mInfoPaint.setStyle(Paint.Style.FILL);
 		mInfoPaint.setTextSize(22);
-		mInfoPaint.setColor(Color.BLACK);
+		mInfoPaint.setColor(Color.WHITE);
 
 		mTextBackgroundPaint = new Paint();
 		mTextBackgroundPaint.setStrokeWidth(1);
@@ -390,7 +418,7 @@ public class RPCView extends View {
 	public boolean onTouchEvent(MotionEvent aEvent) {
 		float tDistanceFromTouchDown = 0;
 		boolean doNotRemoveLongTouchDownMessage = false; // Flag for suppressing micro moves on long touch down
-		
+
 		int tMaskedAction = aEvent.getActionMasked();
 
 		if (BlueDisplay.isVERBOSE()) {
@@ -443,7 +471,11 @@ public class RPCView extends View {
 			mTouchIsActive = false;
 			mMultiTouchDetected = false;
 			break;
+		}
 
+		if (mSkipProcessingUntilTouchUp) {
+			// do not process ACTION_MOVE
+			return true;
 		}
 
 		if (mIsLongTouchEnabled && !doNotRemoveLongTouchDownMessage) {
@@ -769,6 +801,19 @@ public class RPCView extends View {
 		return aByte;
 	}
 
+	int printNewline() {
+		int tPrintY = mTextPrintTextActualPosY + mTextPrintTextSize;
+		if (tPrintY >= mRequestedCanvasHeight) {
+			// wrap around to top of screen
+			tPrintY = 0;
+			if (mTextPrintDoClearScreenOnWrap) {
+				mCanvas.drawColor(mTextPrintBackgroundColor);
+			}
+		}
+		mTextPrintTextActualPosX = 0;
+		return tPrintY;
+	}
+
 	public void interpretCommand(int aCommand, int[] aParameters, int aParamsLength, byte[] aDataBytes, int[] aDataInts,
 			int aDataLength) {
 
@@ -825,6 +870,9 @@ public class RPCView extends View {
 					mToneGenerator = new ToneGenerator(AudioManager.STREAM_SYSTEM, ToneGenerator.MAX_VOLUME);
 				}
 				mToneGenerator.startTone(tTone);
+				if (BlueDisplay.isINFO()) {
+					Log.i(LOG_TAG, "Play tone type=" + tTone);
+				}
 				break;
 
 			case FUNCTION_TAG_GET_NUMBER:
@@ -944,6 +992,50 @@ public class RPCView extends View {
 							+ " received. paramsLength=" + aParamsLength + " dataLenght=" + aDataLength);
 					break;
 
+				}
+				break;
+
+			case FUNCTION_TAG_WRITE_SETTINGS:
+				tSubcommand = aParameters[0];
+				switch (tSubcommand) {
+				case WRITE_FLAG_SET_SIZE_AND_COLORS_AND_FLAGS:
+					mTextPrintTextSize = aParameters[1];
+					mTextPrintPaint.setTextSize(mTextPrintTextSize * mScaleFactor);
+					mTextPrintPaint.setColor(shortToLongColor(aParameters[2]));
+					mTextPrintBackgroundColor = shortToLongColor(aParameters[3]);
+					if (aParameters[4] > 0) {
+						mTextPrintDoClearScreenOnWrap = true;
+					} else {
+						mTextPrintDoClearScreenOnWrap = false;
+					}
+					if (BlueDisplay.isINFO()) {
+						Log.i(LOG_TAG, "Set printf size=" + aParameters[1] + " color=" + shortToColorString(aParameters[2])
+								+ " backgroundcolor=" + shortToColorString(aParameters[3]) + " clearOnWrap="
+								+ mTextPrintDoClearScreenOnWrap);
+					}
+					break;
+
+				case WRITE_FLAG_SET_POSITION:
+					mTextPrintTextActualPosX = aParameters[1];
+					mTextPrintTextActualPosY = aParameters[2];
+					if (BlueDisplay.isINFO()) {
+						Log.i(LOG_TAG, "Set printf start position to: " + mTextPrintTextActualPosX + " / "
+								+ mTextPrintTextActualPosY);
+					}
+					break;
+
+				case WRITE_FLAG_SET_LINE_COLUMN:
+					mTextPrintTextActualPosX = (int) (aParameters[1] * mTextPrintTextSize * 0.6);
+					mTextPrintTextActualPosY = aParameters[2] * mTextPrintTextSize;
+					if (BlueDisplay.isINFO()) {
+						Log.i(LOG_TAG, "Set printf start position to: " + aParameters[1] + " / " + aParameters[2] + " = "
+								+ mTextPrintTextActualPosX + " / " + mTextPrintTextActualPosY);
+					}
+					break;
+
+				default:
+					Log.e(LOG_TAG, "Write settings: unknown subcommand 0x" + Integer.toHexString(tSubcommand)
+							+ " received. paramsLength=" + aParamsLength + " dataLenght=" + aDataLength);
 				}
 				break;
 
@@ -1203,6 +1295,104 @@ public class RPCView extends View {
 				Log.i(LOG_TAG, "Debug=" + tStringParameter);
 				break;
 
+			case FUNCTION_TAG_WRITE_STRING:
+				myConvertChars(aDataBytes, sCharsArray, aDataLength);
+				tStringParameter = new String(sCharsArray, 0, aDataLength);
+
+				if (BlueDisplay.isINFO()) {
+					Log.i(LOG_TAG, "writeString(\"" + tStringParameter.replaceAll("\n", "\\n") + "\"");
+				}
+				char tChar;
+				int tActualCharacterIndex = 0;
+				int tWordStart = 0;
+				int tPrintBufferStart = 0;
+				int tPrintBufferEnd = aDataLength;
+				int tTextUnscaledWidth = (int) (mTextPrintTextSize * 0.6);
+				int tLineLengthInChars = (int) (mRequestedCanvasWidth / tTextUnscaledWidth);
+				boolean doFlushAndNewline = false;
+				int tColumn = (int) (mTextPrintTextActualPosX / tTextUnscaledWidth);
+				// ascend for background color.
+				tAscend = (float) (mTextPrintPaint.getTextSize() * 0.76);
+				while (true) {
+					// check for terminate condition
+					if (tActualCharacterIndex >= tPrintBufferEnd) {
+						// check if last character was newline and string was already printed
+						if (tPrintBufferStart < tPrintBufferEnd) {
+							tYStart = mTextPrintTextActualPosY * mScaleFactor;
+							tXStart = mTextPrintTextActualPosX * mScaleFactor;
+							int tIntegerTextSize = (int) (mTextPrintPaint.getTextSize() + 0.5);
+							tIntegerTextSize = (int) ((tIntegerTextSize * 0.6) + 0.5);
+							float tTextLength = (tPrintBufferEnd - tPrintBufferStart) * tIntegerTextSize;
+
+							// draw background
+							mTextBackgroundPaint.setColor(mTextPrintBackgroundColor);
+							mCanvas.drawRect(tXStart, tYStart, tXStart + tTextLength, tYStart + mTextPrintPaint.getTextSize(),
+									mTextBackgroundPaint);
+							// draw char / string
+							mCanvas.drawText(tStringParameter, tPrintBufferStart, tPrintBufferEnd - 1, tXStart, tYStart + tAscend,
+									mTextPrintPaint);
+						}
+						break;
+					}
+					tChar = sCharsArray[tActualCharacterIndex++];
+
+					if (tChar == '\n') {
+						// new line -> start of a new word
+						tWordStart = tActualCharacterIndex;
+						// signal flush and newline
+						doFlushAndNewline = true;
+					} else if (tChar == '\r') {
+						// skip but start of a new word
+						tWordStart = tActualCharacterIndex;
+					} else if (tChar == ' ') {
+						// start of a new word
+						tWordStart = tActualCharacterIndex;
+						if (tColumn == 0) {
+							// skip from printing if first character in line
+							tPrintBufferStart = tActualCharacterIndex;
+						}
+					} else {
+						if (tColumn >= tLineLengthInChars) {
+							// character does not fit in line -> print it at next line
+							doFlushAndNewline = true;
+							int tWordlength = (tActualCharacterIndex - tWordStart);
+							if (tWordlength > tLineLengthInChars) {
+								// word too long for a line just print char on next line
+								// just draw "buffer" to old line, make newline and process character again
+								tActualCharacterIndex--;
+							} else {
+								// draw buffer till word start, print a newline and process word again
+								tActualCharacterIndex = tWordStart;
+							}
+						}
+					}
+					if (doFlushAndNewline) {
+						tXStart = mTextPrintTextActualPosX * mScaleFactor;
+						tYStart = mTextPrintTextActualPosY * mScaleFactor;
+						int tIntegerTextSize = (int) (mTextPrintPaint.getTextSize() + 0.5);
+						tIntegerTextSize = (int) ((tIntegerTextSize * 0.6) + 0.5);
+						// do not count the newline or space
+						float tTextLength = ((tActualCharacterIndex - 1) - tPrintBufferStart) * tIntegerTextSize;
+
+						mTextBackgroundPaint.setColor(mTextPrintBackgroundColor);
+						mCanvas.drawRect(tXStart, tYStart, tXStart + tTextLength, tYStart + mTextPrintPaint.getTextSize(),
+								mTextBackgroundPaint);
+						// draw char / string
+						mCanvas.drawText(tStringParameter, tPrintBufferStart, tActualCharacterIndex - 1, tXStart,
+								tYStart + tAscend, mTextPrintPaint);
+
+						tPrintBufferStart = tActualCharacterIndex;
+						mTextPrintTextActualPosY = printNewline();
+						mTextPrintTextActualPosX = 0; // set it explicitly since compiler may hold mTextPrintTextActualPosX in
+														// register
+						tColumn = 0;
+						doFlushAndNewline = false;
+					} else {
+						tColumn++;
+					}
+				}
+				break;
+
 			case FUNCTION_TAG_DRAW_CHAR:
 			case FUNCTION_TAG_DRAW_STRING:
 
@@ -1288,7 +1478,7 @@ public class RPCView extends View {
 			}
 		} catch (Exception e) {
 			Log.e(LOG_TAG, "Exception catched for command 0x" + Integer.toHexString(aCommand) + ". paramsLength=" + aParamsLength
-					+ " dataLenght=" + aDataLength);
+					+ " dataLenght=" + aDataLength + " Exception=" + e);
 		}
 		// long tEnd = System.nanoTime();
 		// Log.i(LOG_TAG, "Interpret=" + (tEnd - tStart));
