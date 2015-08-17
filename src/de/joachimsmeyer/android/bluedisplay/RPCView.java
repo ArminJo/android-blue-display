@@ -1527,7 +1527,7 @@ public class RPCView extends View {
 
 	protected void resetAll() {
 		TouchButton.resetButtons(this);
-		TouchSlider.deactivateAllSliders();
+		TouchSlider.resetSliders(this);
 		Sensors.disableAllSensors();
 		resetFlags();
 		initCharMappingArray();

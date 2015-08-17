@@ -33,6 +33,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import android.graphics.Color;
+import android.media.ToneGenerator;
 import android.util.Log;
 
 public class TouchSlider {
@@ -65,7 +66,7 @@ public class TouchSlider {
 	int mActualValue;
 
 	int mThresholdValue;
-	int mListIndex; // index in sButtonList
+	int mListIndex; // index in sSliderList
 	int mOnChangeHandlerCallbackAddress;
 	boolean mIsActive;
 	boolean mIsInitialized;
@@ -94,21 +95,16 @@ public class TouchSlider {
 	private static final int FUNCTION_TAG_SLIDER_ACTIVATE_ALL = 0x58;
 	private static final int FUNCTION_TAG_SLIDER_DEACTIVATE_ALL = 0x59;
 
-	/*
-	 * setup 10 empty sliders for direct addressing
-	 */
-	static {
-		for (int i = 0; i < SLIDER_LIST_INITIAL_SIZE; i++) {
-			TouchSlider tNewSlider = new TouchSlider();
-			int tSliderNumber = sSliderList.size();
-			sSliderList.add(tNewSlider);
-			tNewSlider.mListIndex = tSliderNumber;
-		}
-	}
-
 	TouchSlider() {
 		mIsInitialized = false;
 		mTouchBorder = 4;
+	}
+
+	/**
+	 * Static convenience method - reset all button lists and button flags
+	 */
+	static void resetSliders(final RPCView aRPCView) {
+		sSliderList.clear();
 	}
 
 	void initSlider(final RPCView aRPCView, final int aPositionX, final int aPositionY, final int aBarWidth, final int aBarLength,
@@ -479,19 +475,12 @@ public class TouchSlider {
 				break;
 
 			case FUNCTION_TAG_SLIDER_CREATE:
-				int tOnChangeHandlerCallbackAddress = aParameters[10];
+				int tOnChangeHandlerCallbackAddress = aParameters[10] & 0x0000FFFF;
 				if (aParamsLength == 12) {
 					// 32 bit callback address
 					tOnChangeHandlerCallbackAddress = tOnChangeHandlerCallbackAddress | (aParameters[11] << 16);
 				}
-				if (BlueDisplay.isINFO()) {
-					Log.i(LOG_TAG,
-							"Create slider. SliderNr=" + tSliderNumber + ", new TouchSlider(" + aParameters[1] + ", "
-									+ aParameters[2] + ", " + aParameters[3] + ", " + aParameters[4] + ", " + aParameters[5] + ", "
-									+ aParameters[6] + ", color= " + RPCView.shortToColorString(aParameters[7]) + ", bar color= "
-									+ RPCView.shortToColorString(aParameters[8]) + ", " + Integer.toHexString(aParameters[9])
-									+ ", 0x" + Integer.toHexString(tOnChangeHandlerCallbackAddress) + ")");
-				}
+
 				if (tSlider == null) {
 					/*
 					 * create new slider
@@ -502,15 +491,27 @@ public class TouchSlider {
 					} else {
 						tSliderNumber = sSliderList.size();
 						sSliderList.add(tSlider);
-						Log.w(LOG_TAG, "Slider with index " + tSliderNumber + " appended at end of list. List size now "
-								+ sSliderList.size());
+						if (BlueDisplay.isDEBUG()) {
+							Log.d(LOG_TAG, "Slider with index " + tSliderNumber + " appended at end of list. List size now "
+									+ sSliderList.size());
+						}
 					}
 					tSlider.mListIndex = tSliderNumber;
-				} else {
-					tSlider.initSlider(aRPCView, aParameters[1], aParameters[2], aParameters[3], aParameters[4], aParameters[5],
-							aParameters[6], RPCView.shortToLongColor(aParameters[7]), RPCView.shortToLongColor(aParameters[8]),
-							aParameters[9], tOnChangeHandlerCallbackAddress);
 				}
+				
+				if (BlueDisplay.isINFO()) {
+					Log.i(LOG_TAG,
+							"Create slider. SliderNr=" + tSliderNumber + ", new TouchSlider(" + aParameters[1] + ", "
+									+ aParameters[2] + ", " + aParameters[3] + ", " + aParameters[4] + ", " + aParameters[5] + ", "
+									+ aParameters[6] + ", color= " + RPCView.shortToColorString(aParameters[7]) + ", bar color= "
+									+ RPCView.shortToColorString(aParameters[8]) + ", " + Integer.toHexString(aParameters[9])
+									+ ", 0x" + Integer.toHexString(tOnChangeHandlerCallbackAddress) + ")");
+				}
+
+				tSlider.initSlider(aRPCView, aParameters[1], aParameters[2], aParameters[3], aParameters[4], aParameters[5],
+						aParameters[6], RPCView.shortToLongColor(aParameters[7]), RPCView.shortToLongColor(aParameters[8]),
+						aParameters[9], tOnChangeHandlerCallbackAddress);
+
 				break;
 
 			default:

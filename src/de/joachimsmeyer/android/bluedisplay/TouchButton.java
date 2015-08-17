@@ -173,7 +173,6 @@ public class TouchButton {
 
 		mIsActive = false;
 		mIsInitialized = true;
-
 	}
 
 	void drawButton() {
@@ -487,6 +486,7 @@ public class TouchButton {
 					tButton.drawButton();
 				}
 				break;
+
 			case BUTTON_FLAG_SET_COLOR_CAPTION_AND_DRAW:
 			case BUTTON_FLAG_SET_COLOR_CAPTION:
 				tButton.mCaptionColor = RPCView.shortToLongColor(aParameters[2]);
@@ -498,17 +498,20 @@ public class TouchButton {
 					tButton.drawButton();
 				}
 				break;
+
 			case BUTTON_FLAG_SET_VALUE:
 			case BUTTON_FLAG_SET_VALUE_AND_DRAW:
 				tButton.mValue = aParameters[2] & 0x0000FFFF;
 				if (aParamsLength == 4) {
 					tButton.mValue = tButton.mValue | (aParameters[3] << 16);
 				}
-				if (tButton.mValue != 0) {
-					tButton.mValue = 1;
-					tButton.mButtonColor = Color.GREEN;
-				} else {
-					tButton.mButtonColor = Color.RED;
+				if (tButton.mIsRedGreen) {
+					if (tButton.mValue != 0) {
+						tButton.mValue = 1;
+						tButton.mButtonColor = Color.GREEN;
+					} else {
+						tButton.mButtonColor = Color.RED;
+					}
 				}
 				if (BlueDisplay.isINFO()) {
 					Log.i(LOG_TAG, "Set value=" + aParameters[2] + " for" + tButtonCaption + tButtonNumber);
@@ -517,6 +520,7 @@ public class TouchButton {
 					tButton.drawButton();
 				}
 				break;
+
 			case BUTTON_FLAG_SET_POSITION:
 			case BUTTON_FLAG_SET_POSITION_AND_DRAW:
 				if (BlueDisplay.isINFO()) {
@@ -562,7 +566,7 @@ public class TouchButton {
 			aRPCView.myConvertChars(aDataBytes, RPCView.sCharsArray, aDataLength);
 			tButtonCaption = new String(RPCView.sCharsArray, 0, aDataLength);
 			tString = tButtonCaption.replaceAll("\n", " | ");
-			int tCallbackAddress = aParameters[8];
+			int tCallbackAddress = aParameters[8] & 0x0000FFFF;
 			if (aParamsLength == 10) {
 				// 32 bit callback address
 				tCallbackAddress = tCallbackAddress | (aParameters[9] << 16);
