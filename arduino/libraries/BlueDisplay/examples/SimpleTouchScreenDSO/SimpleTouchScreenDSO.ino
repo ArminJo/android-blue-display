@@ -1,6 +1,5 @@
 /*
- *
- *  Created on: 29.03.2012
+ *      Created on: 29.03.2012
  *      Author: Armin Joachimsmeyer
  *      Email: armin.joachimsmeyer@gmail.com
  *      License: GPL v3 (http://www.gnu.org/licenses/gpl.html)
@@ -75,6 +74,10 @@
  * 2. The voltage picker value may not reflect the real sample value (e.g. shown for min/max)
  */
 
+/*
+ * IMPORTANT do not use Arduino serial. here otherwise the usart interrupt kills the timing.
+ */
+
 //#define DEBUG
 #include <Arduino.h>
 
@@ -128,9 +131,9 @@
 /**********************
  * Buttons
  *********************/
-uint8_t TouchButtonStartStop;
+BDButton TouchButtonStartStop;
 
-uint8_t TouchButtonAutoTriggerOnOff;
+BDButton TouchButtonAutoTriggerOnOff;
 
 // the warning "only initialized variables can be placed into program memory area"
 // is because of a known bug of the gnu avr complier version
@@ -138,21 +141,21 @@ const char AutoTriggerButtonStringAuto[] PROGMEM = "Trigger auto";
 const char AutoTriggerButtonStringManual[] PROGMEM = "Trigger man";
 const char AutoTriggerButtonStringFree[] PROGMEM = "Trigger free";
 
-uint8_t TouchButtonAutoOffsetOnOff;
+BDButton TouchButtonAutoOffsetOnOff;
 const char AutoOffsetButtonStringAuto[] PROGMEM = "Offset auto";
 const char AutoOffsetButtonString0[] PROGMEM = "Offset 0V";
 
-uint8_t TouchButtonADCReference;
+BDButton TouchButtonADCReference;
 const char ReferenceButtonVCC[] PROGMEM = "Ref VCC";
 const char ReferenceButton1_1V[] PROGMEM = "Ref 1.1V";
 
-uint8_t TouchButtonAcDc;
+BDButton TouchButtonAcDc;
 const char AcDcButtonDC[] PROGMEM = "DC";
 const char AcDcButtonAC[] PROGMEM = "AC";
 
-uint8_t TouchButtonChannels[NUMBER_OF_CHANNEL_WITH_FIXED_ATTENUATOR];
-uint8_t TouchButtonChannelSelect;
-uint8_t TouchButtonChannelMode;
+BDButton TouchButtonChannels[NUMBER_OF_CHANNEL_WITH_FIXED_ATTENUATOR];
+BDButton TouchButtonChannelSelect;
+BDButton TouchButtonChannelMode;
 
 #define ADC_TEMPERATURE_CHANNEL 8
 #define ADC_1_1_VOLT_CHANNEL 0x0E
@@ -166,29 +169,29 @@ const char ChannelDivBy100ButtonString[] PROGMEM = "\xF7" "100";
 const char * const ChannelDivByButtonStrings[] = { ChannelDivBy1ButtonString, ChannelDivBy10ButtonString,
         ChannelDivBy100ButtonString };
 
-uint8_t TouchButtonSettings;
-uint8_t TouchButtonBack;
+BDButton TouchButtonSettings;
+BDButton TouchButtonBack;
 
-uint8_t TouchButtonSingleshot;
+BDButton TouchButtonSingleshot;
 #define SINGLESHOT_PPRINT_VALUE_X (37 * TEXT_SIZE_11_WIDTH)
 
-uint8_t TouchButtonAutoRangeOnOff;
+BDButton TouchButtonAutoRangeOnOff;
 const char AutoRangeButtonStringAuto[] PROGMEM = "Range auto";
 const char AutoRangeButtonStringManual[] PROGMEM = "Range man";
 
-uint8_t TouchButtonSlope;
+BDButton TouchButtonSlope;
 char SlopeButtonString[] = "Slope A";
 // the index of the slope indicator in char array
 #define SLOPE_STRING_INDEX 6
 
-uint8_t TouchButtonChartHistoryOnOff;
+BDButton TouchButtonChartHistoryOnOff;
 
 /*
  * Slider for trigger level and voltage picker
  */
-uint8_t TouchSliderTriggerLevel;
+BDSlider TouchSliderTriggerLevel;
 
-uint8_t TouchSliderVoltagePicker;
+BDSlider TouchSliderVoltagePicker;
 uint8_t LastPickerValue;
 
 /*****************************
@@ -418,20 +421,20 @@ void longTouchDownHandler(struct XYPosition * const aTochPosition);
 void swipeEndHandler(struct Swipe * const aSwipeInfo);
 
 // BUTTON handler section
-void doAcDc(uint8_t aTheTouchedButton, int16_t aValue);
-void doBack(uint8_t aTheTouchedButton, int16_t aValue);
-void doTriggerAutoManualFree(uint8_t aTheTouchedButton, int16_t aValue);
-void doRangeMode(uint8_t aTheTouchedButton, int16_t aValue);
-void doTriggerSlope(uint8_t aTheTouchedButton, int16_t aValue);
-void doAutoOffsetOnOff(uint8_t aTheTouchedButton, int16_t aValue);
-void doADCReference(uint8_t aTheTouchedButton, int16_t aValue);
-void doChannelSelect(uint8_t aTheTouchedButton, int16_t aValue);
-void doTriggerSingleshot(uint8_t aTheTouchedButton, int16_t aValue);
-void doStartStop(uint8_t aTheTouchedButton, int16_t aValue);
-void doChartHistory(uint8_t aTheTouchedButton, int16_t aValue);
-void doTriggerLevel(uint8_t aTheTouchedSlider, const int16_t aValue);
-void doVoltagePicker(uint8_t aTheTouchedSlider, const int16_t aValue);
-void doShowSettingsPage(uint8_t aTheTouchedButton, int16_t aValue);
+void doAcDc(BDButton * aTheTouchedButton, int16_t aValue);
+void doBack(BDButton * aTheTouchedButton, int16_t aValue);
+void doTriggerAutoManualFree(BDButton * aTheTouchedButton, int16_t aValue);
+void doRangeMode(BDButton * aTheTouchedButton, int16_t aValue);
+void doTriggerSlope(BDButton * aTheTouchedButton, int16_t aValue);
+void doAutoOffsetOnOff(BDButton * aTheTouchedButton, int16_t aValue);
+void doADCReference(BDButton * aTheTouchedButton, int16_t aValue);
+void doChannelSelect(BDButton * aTheTouchedButton, int16_t aValue);
+void doTriggerSingleshot(BDButton * aTheTouchedButton, int16_t aValue);
+void doStartStop(BDButton * aTheTouchedButton, int16_t aValue);
+void doChartHistory(BDButton * aTheTouchedButton, int16_t aValue);
+void doShowSettingsPage(BDButton * aTheTouchedButton, int16_t aValue);
+void doTriggerLevel(BDSlider * aTheTouchedSlider, uint16_t aValue);
+void doVoltagePicker(BDSlider * aTheTouchedSlider, uint16_t aValue);
 
 // Button caption section
 void setChannelButtonsCaption(void);
@@ -468,7 +471,7 @@ float getFloatFromDisplayValue(uint8_t aDisplayValue);
 //Hardware support section
 float getTemperature(void);
 void setVCCValue(void);
-void setChannel(uint8_t aChannel);
+void setChannel(uint8_t aChannel, bool doGui);
 void setPrescaleFactor(uint8_t aFactor);
 void setReference(uint8_t aReference);
 void initTimer2(void);
@@ -544,7 +547,7 @@ void setup() {
     } else if (tAttenuatorType >= ATTENUATOR_TYPE_ACTIVE_ATTENUATOR) {
         initTimer2(); // start timer2 for generating VEE (negative Voltage for external hardware)
     }
-    setChannel(tStartChannel);
+    setChannel(tStartChannel, false);
     /*
      * setChannel calls setInputRange(2,2) and this sets:
      * OffsetValue
@@ -1420,26 +1423,26 @@ uint16_t getAttenuatorFactor(void) {
 void createGUI(void) {
     BlueDisplay1.setButtonsGlobalFlags(USE_UP_EVENTS_FOR_BUTTONS); // since swipe recognition needs it
 // Button for Singleshot (and settings/back)
-    TouchButtonSingleshot = BlueDisplay1.createButtonPGM(BUTTON_WIDTH_3_POS_3, 0, BUTTON_WIDTH_3, BUTTON_HEIGHT_4,
+    TouchButtonSingleshot.initPGM(BUTTON_WIDTH_3_POS_3, 0, BUTTON_WIDTH_3, BUTTON_HEIGHT_4_256,
     COLOR_GUI_CONTROL, PSTR("Single"), TEXT_SIZE_11, BUTTON_FLAG_DO_BEEP_ON_TOUCH, 0, &doTriggerSingleshot);
 
-    TouchButtonBack = BlueDisplay1.createButtonPGM(BUTTON_WIDTH_3_POS_3, 0, BUTTON_WIDTH_3, BUTTON_HEIGHT_4, COLOR_GUI_CONTROL,
-            PSTR("Back"), TEXT_SIZE_22, BUTTON_FLAG_DO_BEEP_ON_TOUCH, 0, &doBack);
+    TouchButtonBack.initPGM(BUTTON_WIDTH_3_POS_3, 0, BUTTON_WIDTH_3, BUTTON_HEIGHT_4_256, COLOR_GUI_CONTROL, PSTR("Back"),
+    TEXT_SIZE_22, BUTTON_FLAG_DO_BEEP_ON_TOUCH, 0, &doBack);
 
 // big start stop button
-    TouchButtonStartStop = BlueDisplay1.createButtonPGM(BUTTON_WIDTH_3_POS_3, BUTTON_HEIGHT_4_LINE_2, BUTTON_WIDTH_3,
-            2 * BUTTON_HEIGHT_4 + BUTTON_DEFAULT_SPACING, COLOR_GUI_CONTROL, PSTR("Start/Stop"), TEXT_SIZE_11,
+    TouchButtonStartStop.initPGM(BUTTON_WIDTH_3_POS_3, BUTTON_HEIGHT_4_256_LINE_2, BUTTON_WIDTH_3,
+            (2 * BUTTON_HEIGHT_4_256) + BUTTON_DEFAULT_SPACING, COLOR_GUI_CONTROL, PSTR("Start/Stop"), TEXT_SIZE_11,
             BUTTON_FLAG_DO_BEEP_ON_TOUCH, 0, &doStartStop);
 
 // Button for settings page
-    TouchButtonSettings = BlueDisplay1.createButtonPGM(BUTTON_WIDTH_3_POS_3, BUTTON_HEIGHT_4_LINE_4, BUTTON_WIDTH_3,
-    BUTTON_HEIGHT_4, COLOR_GUI_CONTROL, PSTR("Settings"), TEXT_SIZE_11, BUTTON_FLAG_DO_BEEP_ON_TOUCH, 0, &doShowSettingsPage);
+    TouchButtonSettings.initPGM(BUTTON_WIDTH_3_POS_3, BUTTON_HEIGHT_4_256_LINE_4, BUTTON_WIDTH_3,
+    BUTTON_HEIGHT_4_256, COLOR_GUI_CONTROL, PSTR("Settings"), TEXT_SIZE_11, BUTTON_FLAG_DO_BEEP_ON_TOUCH, 0, &doShowSettingsPage);
 
     /*
      * History
      */
 // Button for chart history (erase color)
-    TouchButtonChartHistoryOnOff = BlueDisplay1.createButtonPGM(0, 0, BUTTON_WIDTH_3, BUTTON_HEIGHT_4, COLOR_RED, PSTR("History"),
+    TouchButtonChartHistoryOnOff.initPGM(0, 0, BUTTON_WIDTH_3, BUTTON_HEIGHT_4_256, COLOR_RED, PSTR("History"),
     TEXT_SIZE_11, BUTTON_FLAG_DO_BEEP_ON_TOUCH | BUTTON_FLAG_TYPE_AUTO_RED_GREEN, 0, &doChartHistory);
 
     /*
@@ -1447,23 +1450,23 @@ void createGUI(void) {
      */
 
     // Button for auto trigger on off
-    TouchButtonAutoTriggerOnOff = BlueDisplay1.createButton(BUTTON_WIDTH_3_POS_2, 0, BUTTON_WIDTH_3, BUTTON_HEIGHT_4,
+    TouchButtonAutoTriggerOnOff.init(BUTTON_WIDTH_3_POS_2, 0, BUTTON_WIDTH_3, BUTTON_HEIGHT_4_256,
     COLOR_GUI_TRIGGER, "", TEXT_SIZE_11, BUTTON_FLAG_DO_BEEP_ON_TOUCH, 0, &doTriggerAutoManualFree);
     setTriggerAutoOnOffButtonCaption();
 
     // Button for range
-    TouchButtonAutoRangeOnOff = BlueDisplay1.createButton(BUTTON_WIDTH_3_POS_2, BUTTON_HEIGHT_4_LINE_2, BUTTON_WIDTH_3,
-    BUTTON_HEIGHT_4, COLOR_GUI_TRIGGER, "", TEXT_SIZE_11, BUTTON_FLAG_DO_BEEP_ON_TOUCH, 0, &doRangeMode);
+    TouchButtonAutoRangeOnOff.init(BUTTON_WIDTH_3_POS_2, BUTTON_HEIGHT_4_256_LINE_2, BUTTON_WIDTH_3,
+    BUTTON_HEIGHT_4_256, COLOR_GUI_TRIGGER, "", TEXT_SIZE_11, BUTTON_FLAG_DO_BEEP_ON_TOUCH, 0, &doRangeMode);
     setAutoRangetButtonCaption();
 
 // Button for slope
-    TouchButtonSlope = BlueDisplay1.createButton(BUTTON_WIDTH_3_POS_2, BUTTON_HEIGHT_4_LINE_3, BUTTON_WIDTH_3, BUTTON_HEIGHT_4,
+    TouchButtonSlope.init(BUTTON_WIDTH_3_POS_2, BUTTON_HEIGHT_4_256_LINE_3, BUTTON_WIDTH_3, BUTTON_HEIGHT_4_256,
     COLOR_GUI_TRIGGER, "", TEXT_SIZE_11, BUTTON_FLAG_DO_BEEP_ON_TOUCH, 0, &doTriggerSlope);
     setSlopeButtonCaption();
 
 // Button for auto offset on off
-    TouchButtonAutoOffsetOnOff = BlueDisplay1.createButton(BUTTON_WIDTH_3_POS_2, BUTTON_HEIGHT_4_LINE_4, BUTTON_WIDTH_3,
-    BUTTON_HEIGHT_4, COLOR_GUI_TRIGGER, "", TEXT_SIZE_11, BUTTON_FLAG_DO_BEEP_ON_TOUCH, 0, &doAutoOffsetOnOff);
+    TouchButtonAutoOffsetOnOff.init(BUTTON_WIDTH_3_POS_2, BUTTON_HEIGHT_4_256_LINE_4, BUTTON_WIDTH_3,
+    BUTTON_HEIGHT_4_256, COLOR_GUI_TRIGGER, "", TEXT_SIZE_11, BUTTON_FLAG_DO_BEEP_ON_TOUCH, 0, &doAutoOffsetOnOff);
     setAutoOffsetButtonCaption();
 
     /*
@@ -1471,31 +1474,31 @@ void createGUI(void) {
      */
 
 // Button for AC / DC
-    TouchButtonAcDc = BlueDisplay1.createButton(0, BUTTON_HEIGHT_4_LINE_2, BUTTON_WIDTH_3, BUTTON_HEIGHT_4,
+    TouchButtonAcDc.init(0, BUTTON_HEIGHT_4_256_LINE_2, BUTTON_WIDTH_3, BUTTON_HEIGHT_4_256,
     COLOR_GUI_SOURCE_TIMEBASE, "", TEXT_SIZE_22, BUTTON_FLAG_DO_BEEP_ON_TOUCH, 0, &doAcDc);
     setACModeButtonCaption();
 
 // Button for channel 0
-    TouchButtonChannels[0] = BlueDisplay1.createButton(BUTTON_WIDTH_3_POS_3, BUTTON_HEIGHT_4_LINE_2, BUTTON_WIDTH_6,
-    BUTTON_HEIGHT_4, BUTTON_AUTO_RED_GREEN_FALSE_COLOR, "", TEXT_SIZE_11, BUTTON_FLAG_DO_BEEP_ON_TOUCH, 0, &doChannelSelect);
+    TouchButtonChannels[0].init(BUTTON_WIDTH_3_POS_3, BUTTON_HEIGHT_4_256_LINE_2, BUTTON_WIDTH_6,
+    BUTTON_HEIGHT_4_256, BUTTON_AUTO_RED_GREEN_FALSE_COLOR, "", TEXT_SIZE_11, BUTTON_FLAG_DO_BEEP_ON_TOUCH, 0, &doChannelSelect);
 
 // Button for channel 1
-    TouchButtonChannels[1] = BlueDisplay1.createButton(DISPLAY_WIDTH - BUTTON_WIDTH_6, BUTTON_HEIGHT_4_LINE_2, BUTTON_WIDTH_6,
-    BUTTON_HEIGHT_4, BUTTON_AUTO_RED_GREEN_FALSE_COLOR, "", TEXT_SIZE_11, BUTTON_FLAG_DO_BEEP_ON_TOUCH, 1, &doChannelSelect);
+    TouchButtonChannels[1].init(DISPLAY_WIDTH - BUTTON_WIDTH_6, BUTTON_HEIGHT_4_256_LINE_2, BUTTON_WIDTH_6,
+    BUTTON_HEIGHT_4_256, BUTTON_AUTO_RED_GREEN_FALSE_COLOR, "", TEXT_SIZE_11, BUTTON_FLAG_DO_BEEP_ON_TOUCH, 1, &doChannelSelect);
 
 // Button for channel 2
-    TouchButtonChannels[2] = BlueDisplay1.createButton(BUTTON_WIDTH_3_POS_3, BUTTON_HEIGHT_4_LINE_3, BUTTON_WIDTH_6,
-    BUTTON_HEIGHT_4, BUTTON_AUTO_RED_GREEN_FALSE_COLOR, "", TEXT_SIZE_11, BUTTON_FLAG_DO_BEEP_ON_TOUCH, 2, &doChannelSelect);
+    TouchButtonChannels[2].init(BUTTON_WIDTH_3_POS_3, BUTTON_HEIGHT_4_256_LINE_3, BUTTON_WIDTH_6,
+    BUTTON_HEIGHT_4_256, BUTTON_AUTO_RED_GREEN_FALSE_COLOR, "", TEXT_SIZE_11, BUTTON_FLAG_DO_BEEP_ON_TOUCH, 2, &doChannelSelect);
     setChannelButtonsCaption();
 
 // Button for channel select
-    TouchButtonChannelSelect = BlueDisplay1.createButtonPGM(DISPLAY_WIDTH - BUTTON_WIDTH_6, BUTTON_HEIGHT_4_LINE_3, BUTTON_WIDTH_6,
-    BUTTON_HEIGHT_4, BUTTON_AUTO_RED_GREEN_FALSE_COLOR, Channel3ButtonString, TEXT_SIZE_11, BUTTON_FLAG_DO_BEEP_ON_TOUCH, 42,
+    TouchButtonChannelSelect.initPGM(DISPLAY_WIDTH - BUTTON_WIDTH_6, BUTTON_HEIGHT_4_256_LINE_3, BUTTON_WIDTH_6,
+    BUTTON_HEIGHT_4_256, BUTTON_AUTO_RED_GREEN_FALSE_COLOR, Channel3ButtonString, TEXT_SIZE_11, BUTTON_FLAG_DO_BEEP_ON_TOUCH, 42,
             &doChannelSelect);
 
 // Button for reference voltage switching
-    TouchButtonADCReference = BlueDisplay1.createButton(BUTTON_WIDTH_3_POS_3, BUTTON_HEIGHT_4_LINE_4, BUTTON_WIDTH_3,
-    BUTTON_HEIGHT_4, COLOR_GUI_SOURCE_TIMEBASE, "", TEXT_SIZE_11, BUTTON_FLAG_DO_BEEP_ON_TOUCH, 0, &doADCReference);
+    TouchButtonADCReference.init(BUTTON_WIDTH_3_POS_3, BUTTON_HEIGHT_4_256_LINE_4, BUTTON_WIDTH_3,
+    BUTTON_HEIGHT_4_256, COLOR_GUI_SOURCE_TIMEBASE, "", TEXT_SIZE_11, BUTTON_FLAG_DO_BEEP_ON_TOUCH, 0, &doADCReference);
     setReferenceButtonCaption();
 
     /*
@@ -1503,14 +1506,14 @@ void createGUI(void) {
      */
     // make slider slightly visible
     // slider for voltage picker
-    TouchSliderVoltagePicker = BlueDisplay1.createSlider(SLIDER_VPICKER_POS_X, 0, SLIDER_SIZE, DISPLAY_HEIGHT, DISPLAY_HEIGHT, 0, 0,
+    TouchSliderVoltagePicker.init(SLIDER_VPICKER_POS_X, 0, SLIDER_SIZE, DISPLAY_HEIGHT, DISPLAY_HEIGHT, 0, 0,
     COLOR_DATA_PICKER_SLIDER, TOUCHSLIDER_VALUE_BY_CALLBACK, &doVoltagePicker);
-    BlueDisplay1.setSliderColorBarBackground(TouchSliderVoltagePicker, COLOR_DATA_PICKER_SLIDER);
+    TouchSliderVoltagePicker.setBarBackgroundColor(COLOR_DATA_PICKER_SLIDER);
 
     // slider for trigger level
-    TouchSliderTriggerLevel = BlueDisplay1.createSlider(SLIDER_TLEVEL_POS_X, 0, SLIDER_SIZE, DISPLAY_HEIGHT, DISPLAY_HEIGHT, 0, 0,
+    TouchSliderTriggerLevel.init(SLIDER_TLEVEL_POS_X, 0, SLIDER_SIZE, DISPLAY_HEIGHT, DISPLAY_HEIGHT, 0, 0,
     COLOR_TRIGGER_SLIDER, TOUCHSLIDER_VALUE_BY_CALLBACK, &doTriggerLevel);
-    BlueDisplay1.setSliderColorBarBackground(TouchSliderTriggerLevel, COLOR_TRIGGER_SLIDER);
+    TouchSliderTriggerLevel.setBarBackgroundColor( COLOR_TRIGGER_SLIDER);
 }
 
 void drawStartGui(void) {
@@ -1519,9 +1522,9 @@ void drawStartGui(void) {
     BlueDisplay1.deactivateAllButtons();
     BlueDisplay1.deactivateAllSliders();
 
-    BlueDisplay1.drawButton(TouchButtonStartStop);
-    BlueDisplay1.drawButton(TouchButtonSingleshot);
-    BlueDisplay1.drawButton(TouchButtonSettings);
+    TouchButtonStartStop.drawButton();
+    TouchButtonSingleshot.drawButton();
+    TouchButtonSettings.drawButton();
 }
 
 void drawDSOSettingsPageGui(void) {
@@ -1532,14 +1535,14 @@ void drawDSOSettingsPageGui(void) {
     BlueDisplay1.deactivateAllSliders();
 
     if (MeasurementControl.ChannelHasACDCSwitch) {
-        BlueDisplay1.drawButton(TouchButtonAcDc);
+        TouchButtonAcDc.drawButton();
     }
-    BlueDisplay1.drawButton(TouchButtonAutoTriggerOnOff);
-    BlueDisplay1.drawButton(TouchButtonBack);
-    BlueDisplay1.drawButton(TouchButtonSlope);
-    BlueDisplay1.drawButton(TouchButtonAutoRangeOnOff);
+    TouchButtonAutoTriggerOnOff.drawButton();
+    TouchButtonBack.drawButton();
+    TouchButtonSlope.drawButton();
+    TouchButtonAutoRangeOnOff.drawButton();
     if (!MeasurementControl.ChannelIsACMode) {
-        BlueDisplay1.drawButton(TouchButtonAutoOffsetOnOff);
+        TouchButtonAutoOffsetOnOff.drawButton();
     }
 
     /*
@@ -1552,18 +1555,18 @@ void drawDSOSettingsPageGui(void) {
         } else {
             tButtonColor = BUTTON_AUTO_RED_GREEN_FALSE_COLOR;
         }
-        BlueDisplay1.setButtonColorAndDraw(TouchButtonChannels[i], tButtonColor);
+        TouchButtonChannels[i].setButtonColorAndDraw(tButtonColor);
     }
     if (MeasurementControl.ADCInputMUXChannel >= NUMBER_OF_CHANNEL_WITH_FIXED_ATTENUATOR) {
         tButtonColor = BUTTON_AUTO_RED_GREEN_TRUE_COLOR;
     } else {
         tButtonColor = BUTTON_AUTO_RED_GREEN_FALSE_COLOR;
     }
-    BlueDisplay1.setButtonColorAndDraw(TouchButtonChannelSelect, tButtonColor);
+    TouchButtonChannelSelect.setButtonColorAndDraw(tButtonColor);
 
-    BlueDisplay1.drawButton(TouchButtonADCReference);
-    BlueDisplay1.drawButton(TouchButtonChartHistoryOnOff);
-    BlueDisplay1.drawButton(TouchButtonFrequencyPage);
+    TouchButtonADCReference.drawButton();
+    TouchButtonChartHistoryOnOff.drawButton();
+    TouchButtonFrequencyPage.drawButton();
 }
 
 /*
@@ -1573,14 +1576,14 @@ void activatePartOfGui(void) {
 // first deactivate all
     BlueDisplay1.deactivateAllButtons();
 
-    BlueDisplay1.activateButton(TouchButtonStartStop);
-    BlueDisplay1.activateButton(TouchButtonSingleshot);
-    BlueDisplay1.activateButton(TouchButtonSettings);
-    BlueDisplay1.activateButton(TouchButtonChartHistoryOnOff);
+    TouchButtonStartStop.activate();
+    TouchButtonSingleshot.activate();
+    TouchButtonSettings.activate();
+    TouchButtonChartHistoryOnOff.activate();
 
-    BlueDisplay1.drawSlider(TouchSliderVoltagePicker);
+    TouchSliderVoltagePicker.drawSlider();
     if (MeasurementControl.TriggerMode == TRIGGER_MODE_MANUAL) {
-        BlueDisplay1.drawSlider(TouchSliderTriggerLevel);
+        TouchSliderTriggerLevel.drawSlider();
     }
 }
 
@@ -1696,7 +1699,7 @@ void swipeEndHandler(struct Swipe * const aSwipeInfo) {
             }
         } else {
             if (aSwipeInfo->SwipeMainDirectionIsX) {
-                //if (aSwipeInfo.TouchStartY > BUTTON_HEIGHT_4_LINE_3) {
+                //if (aSwipeInfo.TouchStartY > BUTTON_HEIGHT_4_256_LINE_3) {
                 /*
                  * Scroll
                  */
@@ -1722,14 +1725,14 @@ void swipeEndHandler(struct Swipe * const aSwipeInfo) {
 /*
  * toggle between DC and AC mode
  */
-void doAcDc(uint8_t aTheTouchedButton, int16_t aValue) {
+void doAcDc(BDButton * aTheTouchedButton, int16_t aValue) {
     setACMode(!MeasurementControl.ChannelIsACMode);
 }
 
 /*
  * toggle between automatic and manual trigger voltage value
  */
-void doTriggerAutoManualFree(uint8_t aTheTouchedButton, int16_t aValue) {
+void doTriggerAutoManualFree(BDButton * aTheTouchedButton, int16_t aValue) {
     uint8_t tNewMode = MeasurementControl.TriggerMode + 1;
     if (tNewMode == TRIGGER_MODE_FREE) {
         // set TriggerTimeoutSampleCount to zero for free running
@@ -1745,7 +1748,7 @@ void doTriggerAutoManualFree(uint8_t aTheTouchedButton, int16_t aValue) {
     setTriggerAutoOnOffButtonCaption();
 }
 
-void doRangeMode(uint8_t aTheTouchedButton, int16_t aValue) {
+void doRangeMode(BDButton * aTheTouchedButton, int16_t aValue) {
     MeasurementControl.RangeAutomatic = !MeasurementControl.RangeAutomatic;
     setAutoRangetButtonCaption();
 }
@@ -1753,7 +1756,7 @@ void doRangeMode(uint8_t aTheTouchedButton, int16_t aValue) {
 /*
  * toggle between ascending and descending trigger slope
  */
-void doTriggerSlope(uint8_t aTheTouchedButton, int16_t aValue) {
+void doTriggerSlope(BDButton * aTheTouchedButton, int16_t aValue) {
     MeasurementControl.TriggerSlopeRising = (!MeasurementControl.TriggerSlopeRising);
     setSlopeButtonCaption();
 }
@@ -1762,14 +1765,14 @@ void doTriggerSlope(uint8_t aTheTouchedButton, int16_t aValue) {
  * toggle between auto and 0 Volt offset
  * No auto offset in AC Mode
  */
-void doAutoOffsetOnOff(uint8_t aTheTouchedButton, int16_t aValue) {
+void doAutoOffsetOnOff(BDButton * aTheTouchedButton, int16_t aValue) {
     setOffsetAutomatic(!MeasurementControl.OffsetAutomatic);
 }
 
 /*
  * toggle between 5 and 1.1 Volt reference
  */
-void doADCReference(uint8_t aTheTouchedButton, int16_t aValue) {
+void doADCReference(BDButton * aTheTouchedButton, int16_t aValue) {
     uint8_t tNewReference = MeasurementControl.ADCReference;
     if (MeasurementControl.ADCReference == DEFAULT) {
         tNewReference = INTERNAL;
@@ -1787,7 +1790,7 @@ void doADCReference(uint8_t aTheTouchedButton, int16_t aValue) {
 /*
  * Cycle through all external and internal adc channels
  */
-void doChannelSelect(uint8_t aTheTouchedButton, int16_t aValue) {
+void doChannelSelect(BDButton * aTheTouchedButton, int16_t aValue) {
     if (aValue > 20) {
         // channel increment button here
         uint8_t tOldValue = MeasurementControl.ADCInputMUXChannel;
@@ -1798,17 +1801,17 @@ void doChannelSelect(uint8_t aTheTouchedButton, int16_t aValue) {
             aValue = NUMBER_OF_CHANNEL_WITH_FIXED_ATTENUATOR;
         }
     }
-    setChannel(aValue);
+    setChannel(aValue, true);
 }
 
 /*
  * show gui of settings screen
  */
-void doShowSettingsPage(uint8_t aTheTouchedButton, int16_t aValue) {
+void doShowSettingsPage(BDButton * aTheTouchedButton, int16_t aValue) {
     drawDSOSettingsPageGui();
 }
 
-void doBack(uint8_t aTheTouchedButton, int16_t aValue) {
+void doBack(BDButton * aTheTouchedButton, int16_t aValue) {
     if (DisplayControl.DisplayPage == DISPLAY_PAGE_FREQUENCY) {
         drawDSOSettingsPageGui();
     } else if (DisplayControl.DisplayPage == DISPLAY_PAGE_SETTINGS) {
@@ -1826,7 +1829,7 @@ void doBack(uint8_t aTheTouchedButton, int16_t aValue) {
 /*
  * set to singleshot mode and draw an indicating "S"
  */
-void doTriggerSingleshot(uint8_t aTheTouchedButton, int16_t aValue) {
+void doTriggerSingleshot(BDButton * aTheTouchedButton, int16_t aValue) {
     MeasurementControl.isSingleShotMode = true;
     BlueDisplay1.clearDisplay(COLOR_BACKGROUND_DSO);
     DisplayControl.DisplayPage = DISPLAY_PAGE_CHART;
@@ -1845,7 +1848,7 @@ void doTriggerSingleshot(uint8_t aTheTouchedButton, int16_t aValue) {
     MeasurementControl.isRunning = true;
 }
 
-void doStartStop(uint8_t aTheTouchedButton, int16_t aValue) {
+void doStartStop(BDButton * aTheTouchedButton, int16_t aValue) {
     if (MeasurementControl.isRunning) {
         /*
          * Stop here
@@ -1889,11 +1892,11 @@ void doStartStop(uint8_t aTheTouchedButton, int16_t aValue) {
 /*
  * Toggle history mode
  */
-void doChartHistory(uint8_t aTheTouchedButton, int16_t aValue) {
+void doChartHistory(BDButton * aTheTouchedButton, int16_t aValue) {
     DisplayControl.showHistory = !aValue;
-    BlueDisplay1.setButtonValue(aTheTouchedButton, DisplayControl.showHistory);
+    aTheTouchedButton->setValue(DisplayControl.showHistory);
     if (DisplayControl.DisplayPage == DISPLAY_PAGE_SETTINGS) {
-        BlueDisplay1.drawButton(aTheTouchedButton);
+        aTheTouchedButton->drawButton();
     }
 
     if (DisplayControl.showHistory) {
@@ -1956,7 +1959,7 @@ void PrintTriggerInfo(void) {
 /*
  * The value printed has a resolution of 0,00488 * scale factor
  */
-void doTriggerLevel(uint8_t aTheTouchedSlider, int16_t aValue) {
+void doTriggerLevel(BDSlider * aTheTouchedSlider, uint16_t aValue) {
 // in auto-trigger mode show only computed value and do not modify it
     if (MeasurementControl.TriggerMode != TRIGGER_MODE_MANUAL) {
 // already shown :-)
@@ -1985,7 +1988,7 @@ void doTriggerLevel(uint8_t aTheTouchedSlider, int16_t aValue) {
 /*
  * The value printed has a resolution of 0,00488 * scale factor
  */
-void doVoltagePicker(uint8_t aTheTouchedSlider, int16_t aValue) {
+void doVoltagePicker(BDSlider * aTheTouchedSlider, uint16_t aValue) {
     char tVoltageBuffer[6];
     if (LastPickerValue == aValue) {
         return;
@@ -2025,12 +2028,11 @@ void doVoltagePicker(uint8_t aTheTouchedSlider, int16_t aValue) {
 void setChannelButtonsCaption(void) {
     for (uint8_t i = 0; i < NUMBER_OF_CHANNEL_WITH_FIXED_ATTENUATOR; ++i) {
         if (MeasurementControl.AttenuatorType == ATTENUATOR_TYPE_FIXED_ATTENUATOR) {
-            BlueDisplay1.setButtonCaptionPGM(TouchButtonChannels[i], ChannelDivByButtonStrings[i],
+            TouchButtonChannels[i].setCaptionPGM(ChannelDivByButtonStrings[i],
                     (DisplayControl.DisplayPage == DISPLAY_PAGE_SETTINGS));
         } else {
             ChannelSelectButtonString[CHANNEL_STRING_INDEX] = 0x30 + i;
-            BlueDisplay1.setButtonCaption(TouchButtonChannels[i], ChannelSelectButtonString,
-                    (DisplayControl.DisplayPage == DISPLAY_PAGE_SETTINGS));
+            TouchButtonChannels[i].setCaptionPGM(ChannelSelectButtonString, (DisplayControl.DisplayPage == DISPLAY_PAGE_SETTINGS));
         }
     }
 }
@@ -2042,7 +2044,7 @@ void setReferenceButtonCaption(void) {
     } else {
         tCaption = ReferenceButton1_1V;
     }
-    BlueDisplay1.setButtonCaptionPGM(TouchButtonADCReference, tCaption, (DisplayControl.DisplayPage == DISPLAY_PAGE_SETTINGS));
+    TouchButtonADCReference.setCaptionPGM(tCaption, (DisplayControl.DisplayPage == DISPLAY_PAGE_SETTINGS));
 }
 
 void setACModeButtonCaption(void) {
@@ -2052,7 +2054,7 @@ void setACModeButtonCaption(void) {
     } else {
         tCaption = AcDcButtonDC;
     }
-    BlueDisplay1.setButtonCaptionPGM(TouchButtonAcDc, tCaption, false); // false, since complete page is drawn after setting
+    TouchButtonAcDc.setCaptionPGM(tCaption); // do not draw, since complete page is drawn after setting
 }
 
 void setTriggerAutoOnOffButtonCaption(void) {
@@ -2064,7 +2066,7 @@ void setTriggerAutoOnOffButtonCaption(void) {
     } else {
         tCaption = AutoTriggerButtonStringFree;
     }
-    BlueDisplay1.setButtonCaptionPGM(TouchButtonAutoTriggerOnOff, tCaption, (DisplayControl.DisplayPage == DISPLAY_PAGE_SETTINGS));
+    TouchButtonAutoTriggerOnOff.setCaptionPGM(tCaption, (DisplayControl.DisplayPage == DISPLAY_PAGE_SETTINGS));
 }
 
 void setAutoOffsetButtonCaption(void) {
@@ -2074,7 +2076,7 @@ void setAutoOffsetButtonCaption(void) {
     } else {
         tCaption = AutoOffsetButtonString0;
     }
-    BlueDisplay1.setButtonCaptionPGM(TouchButtonAutoOffsetOnOff, tCaption, (DisplayControl.DisplayPage == DISPLAY_PAGE_SETTINGS));
+    TouchButtonAutoOffsetOnOff.setCaptionPGM(tCaption, (DisplayControl.DisplayPage == DISPLAY_PAGE_SETTINGS));
 }
 
 void setAutoRangetButtonCaption(void) {
@@ -2084,7 +2086,7 @@ void setAutoRangetButtonCaption(void) {
     } else {
         tCaption = AutoRangeButtonStringManual;
     }
-    BlueDisplay1.setButtonCaptionPGM(TouchButtonAutoRangeOnOff, tCaption, (DisplayControl.DisplayPage == DISPLAY_PAGE_SETTINGS));
+    TouchButtonAutoRangeOnOff.setCaptionPGM(tCaption, (DisplayControl.DisplayPage == DISPLAY_PAGE_SETTINGS));
 }
 
 void setSlopeButtonCaption(void) {
@@ -2095,7 +2097,7 @@ void setSlopeButtonCaption(void) {
         tChar = 'D';
     }
     SlopeButtonString[SLOPE_STRING_INDEX] = tChar;
-    BlueDisplay1.setButtonCaption(TouchButtonSlope, SlopeButtonString, (DisplayControl.DisplayPage == DISPLAY_PAGE_SETTINGS));
+    TouchButtonSlope.setCaption(SlopeButtonString, (DisplayControl.DisplayPage == DISPLAY_PAGE_SETTINGS));
 }
 
 /************************************************************************
@@ -2438,6 +2440,9 @@ void printInfo(void) {
     }
 
     if (DisplayControl.showInfoMode == INFO_MODE_LONG_INFO) {
+        /*
+         * Long version
+         */
         sprintf_P(StringBuffer, PSTR("%3u%cs %c Ch%c %s %s %s P2P%sV %sV %c"), tTimebaseUnitsPerGrid, tTimebaseUnitChar, tSlopeChar,
                 MeasurementControl.ADCInputMUXChannelChar, tMinStringBuffer, tAverageStringBuffer, tMaxStringBuffer,
                 tP2PStringBuffer, tTriggerStringBuffer, tReferenceChar);
@@ -2489,7 +2494,8 @@ void printVCCAndTemperature(void) {
         float tTemp = getTemperature();
         dtostrf(tTemp, 4, 1, &StringBuffer[40]);
         sprintf_P(StringBuffer, PSTR("%s Volt %s\xB0" "C"), &StringBuffer[30], &StringBuffer[40]);
-        BlueDisplay1.drawText(BUTTON_WIDTH_3_POS_2, BUTTON_HEIGHT_4_LINE_4 - (TEXT_SIZE_11_DECEND + 3), StringBuffer, TEXT_SIZE_11,
+        BlueDisplay1.drawText(BUTTON_WIDTH_3_POS_2, BUTTON_HEIGHT_4_256_LINE_4 - (TEXT_SIZE_11_DECEND + 3), StringBuffer,
+        TEXT_SIZE_11,
         COLOR_BLACK, COLOR_BACKGROUND_DSO);
     }
 }
@@ -2739,7 +2745,7 @@ float getTemperature(void) {
  * For active attenuator also:
  * ChannelHasAttenuator
  *  */
-void setChannel(uint8_t aChannel) {
+void setChannel(uint8_t aChannel, bool doGUI) {
     MeasurementControl.ShiftValue = 2;
     if (aChannel == 16) {
         // do wrap around
@@ -2801,18 +2807,20 @@ void setChannel(uint8_t aChannel) {
 
 // set channel number in caption
     ChannelSelectButtonString[CHANNEL_STRING_INDEX] = MeasurementControl.ADCInputMUXChannelChar;
-    BlueDisplay1.setButtonCaption(TouchButtonChannelSelect, ChannelSelectButtonString, false);
+    if (doGUI) {
+        // do not touch gui before Setup is done
+        TouchButtonChannelSelect.setCaption(ChannelSelectButtonString);
 
-    /*
-     * Refresh page if necessary
-     */
-    setReferenceButtonCaption();
-    // check it here since it is also called by setup
-    if (DisplayControl.DisplayPage == DISPLAY_PAGE_SETTINGS) {
-        // manage AC/DC and auto offset buttons
-        drawDSOSettingsPageGui();
+        /*
+         * Refresh page if necessary
+         */
+        setReferenceButtonCaption();
+        // check it here since it is also called by setup
+        if (DisplayControl.DisplayPage == DISPLAY_PAGE_SETTINGS) {
+            // manage AC/DC and auto offset buttons
+            drawDSOSettingsPageGui();
+        }
     }
-
 }
 
 void setPrescaleFactor(uint8_t aFactor) {

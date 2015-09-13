@@ -12,10 +12,7 @@
 #ifndef SIMPLETOUCHSCREENDSO_H_
 #define SIMPLETOUCHSCREENDSO_H_
 
-// use simple serial otherwise the usart interrupt kills the timing
-#ifndef USE_SIMPLE_SERIAL
-#define USE_SIMPLE_SERIAL
-#endif
+#include "BDButton.h"
 
 /*
  * Change this if you have reprogrammed the hc05 module for other baud rate
@@ -84,7 +81,6 @@ const uint16_t DISPLAY_WIDTH = 320;
 #define TRIGGER_MODE_AUTO 0
 #define TRIGGER_MODE_MANUAL 1
 #define TRIGGER_MODE_FREE 2
-
 
 /*
  * EXTERNAL ATTENUATOR
@@ -186,6 +182,6 @@ extern DisplayControlStruct DisplayControl;
 
 extern char StringBuffer[50];
 
-extern uint8_t TouchButtonBack;
+extern BDButton TouchButtonBack;
 
 #endif //SIMPLETOUCHSCREENDSO_H_

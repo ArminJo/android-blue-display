@@ -32,33 +32,55 @@ package de.joachimsmeyer.android.bluedisplay;
 import java.util.ArrayList;
 import java.util.List;
 
+import android.annotation.SuppressLint;
 import android.graphics.Color;
 import android.media.AudioManager;
 import android.media.ToneGenerator;
+import android.os.Handler;
+import android.os.Message;
 import android.util.Log;
 
 public class TouchButton {
 
 	// Logging
-	private static final String LOG_TAG = "BlueTouchButton";
+	private static final String LOG_TAG = "BT";
 
 	RPCView mRPCView;
 	int mButtonColor;
-	int mCaptionColor;
 	int mPositionX;
 	int mPositionY;
 	int mCaptionPositionX;
 	int mCaptionPositionY;
 	int mWidth;
 	int mHeight;
+
 	int mCaptionSize;
+	int mCaptionColor;
 	String mEscapedCaption; // contains the caption for Logging e.g. with \n replaced by " | "
 	String[] mCaptionStrings; // contains the array of caption strings for multiline Captions
+
 	int mValue;
 	int mListIndex; // index in sButtonList
 	int mCallbackAddress;
 	boolean mDoBeep;
 	boolean mIsRedGreen;
+
+	/*
+	 * Autorepeat stuff
+	 */
+	boolean mIsAutorepeatButton;
+	int mMillisFirstAutorepeatDelay;
+	int mMillisFirstAutorepeatRate;
+	int mFirstAutorepeatCount;
+	int mMillisSecondAutorepeatRate;
+	// For timer
+	static int sAutorepeatState;
+	private static final int BUTTON_AUTOREPEAT_FIRST_PERIOD = 1;
+	private static final int BUTTON_AUTOREPEAT_SECOND_PERIOD = 2;
+	static int sAutorepeatCount;
+	// static int sMillisFirstAutorepeatRate;
+	// static int sMillisSecondAutorepeatRate;
+
 	boolean mIsActive;
 	boolean mIsInitialized;
 	static int sTouchBeepIndex = ToneGenerator.TONE_CDMA_KEYPAD_VOLUME_KEY_LITE;
@@ -75,6 +97,7 @@ public class TouchButton {
 	private static final int FUNCTION_TAG_BUTTON_DRAW = 0x40;
 	private static final int FUNCTION_TAG_BUTTON_DRAW_CAPTION = 0x41;
 	private static final int FUNCTION_TAG_BUTTON_SETTINGS = 0x42;
+	private static final int FUNCTION_TAG_BUTTON_REMOVE = 0x43;
 
 	// static functions
 	private static final int FUNCTION_TAG_BUTTON_ACTIVATE_ALL = 0x48;
@@ -87,10 +110,10 @@ public class TouchButton {
 	private static final int FUNCTION_TAG_BUTTON_SET_CAPTION_AND_DRAW_BUTTON = 0x73;
 
 	// Flags for BUTTON_SETTINGS
-	private static final int BUTTON_FLAG_SET_COLOR_BUTTON = 0x00;
-	private static final int BUTTON_FLAG_SET_COLOR_BUTTON_AND_DRAW = 0x01;
-	private static final int BUTTON_FLAG_SET_COLOR_CAPTION = 0x02;
-	private static final int BUTTON_FLAG_SET_COLOR_CAPTION_AND_DRAW = 0x03;
+	private static final int BUTTON_FLAG_SET_BUTTON_COLOR = 0x00;
+	private static final int BUTTON_FLAG_SET_BUTTON_COLOR_AND_DRAW = 0x01;
+	private static final int BUTTON_FLAG_SET_CAPTION_COLOR = 0x02;
+	private static final int BUTTON_FLAG_SET_CAPTION_COLOR_AND_DRAW = 0x03;
 	private static final int BUTTON_FLAG_SET_VALUE = 0x04;
 	private static final int BUTTON_FLAG_SET_VALUE_AND_DRAW = 0x05;
 	private static final int BUTTON_FLAG_SET_COLOR_AND_VALUE = 0x06;
@@ -99,6 +122,7 @@ public class TouchButton {
 	private static final int BUTTON_FLAG_SET_POSITION_AND_DRAW = 0x09;
 	private static final int BUTTON_FLAG_SET_ACTIVE = 0x10;
 	private static final int BUTTON_FLAG_RESET_ACTIVE = 0x11;
+	private static final int BUTTON_FLAG_SET_AUTOREPEAT_TIMING = 0x12;
 
 	// Flags for BUTTON_GLOBAL_SETTINGS
 	private static final int USE_UP_EVENTS_FOR_BUTTONS = 0x01;
@@ -108,6 +132,7 @@ public class TouchButton {
 	private static final int BUTTON_FLAG_DO_BEEP_ON_TOUCH = 0x01;
 	// Red if value == 0 else green
 	private static final int BUTTON_FLAG_TYPE_AUTO_RED_GREEN = 0x02;
+	private static final int BUTTON_FLAG_TYPE_AUTOREPEAT = 0x04;
 
 	TouchButton() {
 		// empty button
@@ -154,6 +179,8 @@ public class TouchButton {
 		int tFlags = aCaptionSizeAndFlags >> 8;
 		mDoBeep = false;
 		mIsRedGreen = false;
+		mIsAutorepeatButton = false;
+		mMillisFirstAutorepeatDelay = 0;
 
 		if ((tFlags & BUTTON_FLAG_DO_BEEP_ON_TOUCH) != 0) {
 			if (mToneGenerator == null) {
@@ -170,15 +197,25 @@ public class TouchButton {
 				mButtonColor = Color.RED;
 			}
 		}
+		if ((tFlags & BUTTON_FLAG_TYPE_AUTOREPEAT) != 0) {
+			mIsAutorepeatButton = true;
+		}
 
 		mIsActive = false;
 		mIsInitialized = true;
 	}
 
 	void drawButton() {
+		mIsActive = true;
 		// Draw rect
 		mRPCView.fillRectRel(mPositionX, mPositionY, mWidth, mHeight, mButtonColor);
 		drawCaption();
+	}
+
+	void removeButton(int tBackgroundColor) {
+		// Clear rect
+		mRPCView.fillRectRel(mPositionX, mPositionY, mWidth, mHeight, tBackgroundColor);
+		mIsActive = false;
 	}
 
 	private void positionCaption() {
@@ -189,30 +226,32 @@ public class TouchButton {
 				 */
 				if (mCaptionSize * mCaptionStrings.length >= mHeight) {
 					// Font height to big
-					Log.w(LOG_TAG, "caption\"" + mEscapedCaption + "\" with " + mCaptionStrings.length + " lines to high");
+					MyLog.w(LOG_TAG, "caption\"" + mEscapedCaption + "\" with " + mCaptionStrings.length + " lines to high");
 					mCaptionPositionY = mPositionY + (int) (0.76 * mCaptionSize); // Fallback - start at top + ascend
 				} else {
-					mCaptionPositionY = (mPositionY + ((mHeight - mCaptionSize * (mCaptionStrings.length - 1)) / 2) + (int) (0.262 * mCaptionSize));
+					mCaptionPositionY = (mPositionY + ((mHeight - mCaptionSize * (mCaptionStrings.length)) / 2) + (int) (0.76 * mCaptionSize));
 				}
 				mCaptionPositionX = -1; // to indicate multiline caption
 
 			} else {
-				// try to position the string in the middle of the box
+				/*
+				 * Single line caption - just try to position the string in the middle of the box
+				 */
 				int tLength = (int) (0.6 * mCaptionSize * mEscapedCaption.length());
 				if (tLength >= mWidth) {
 					// String too long here
 					mCaptionPositionX = mPositionX;
-					Log.w(LOG_TAG, "caption\"" + mEscapedCaption + "\" to long");
+					MyLog.w(LOG_TAG, "caption\"" + mEscapedCaption + "\" to long");
 				} else {
 					mCaptionPositionX = mPositionX + ((mWidth - tLength) / 2);
 				}
 
 				if (mCaptionSize >= mHeight) {
 					// Font height to big
-					Log.w(LOG_TAG, "caption\"" + mEscapedCaption + "\" to high");
+					MyLog.w(LOG_TAG, "caption\"" + mEscapedCaption + "\" to high");
 				}
-				// (0.262 * mCaptionSize) is ((Ascend - Decent)/2) needed for positioning center of font middle of font height
-				mCaptionPositionY = (int) (mPositionY + (mHeight / 2) + (0.262 * mCaptionSize));
+				// (0.76 * mCaptionSize) is Ascend
+				mCaptionPositionY = (int) (mPositionY + ((mHeight - mCaptionSize) / 2) + (0.76 * mCaptionSize));
 			}
 		}
 	}
@@ -242,7 +281,7 @@ public class TouchButton {
 					}
 					mRPCView.drawTextWithBackground(tCaptionPositionX, TPosY, mCaptionStrings[i], mCaptionSize, mCaptionColor,
 							mButtonColor);
-					TPosY += mCaptionSize;
+					TPosY += mCaptionSize + 1; // for space between lines otherwise we see "g" truncated
 				}
 			}
 		}
@@ -254,15 +293,14 @@ public class TouchButton {
 
 		// check values
 		if (aPositionX + mWidth > mRPCView.mRequestedCanvasWidth) {
-			Log.e(LOG_TAG, mEscapedCaption + " Button x-position/width " + aPositionX + "+" + mWidth + " wrong. Set width to:"
+			MyLog.e(LOG_TAG, mEscapedCaption + " Button x-position/width " + aPositionX + "+" + mWidth + " wrong. Set width to:"
 					+ (mRPCView.mRequestedCanvasWidth - aPositionX));
 			mWidth = mRPCView.mRequestedCanvasWidth - aPositionX;
 		}
 		if (aPositionY + mHeight > mRPCView.mRequestedCanvasHeight) {
-			Log.e(LOG_TAG, mEscapedCaption + " Button y-position/height " + aPositionY + "+" + mHeight + " wrong. Set height to:"
+			MyLog.e(LOG_TAG, mEscapedCaption + " Button y-position/height " + aPositionY + "+" + mHeight + " wrong. Set height to:"
 					+ (mRPCView.mRequestedCanvasHeight - aPositionY));
 			mHeight = mRPCView.mRequestedCanvasHeight - aPositionY;
-
 		}
 	}
 
@@ -280,6 +318,20 @@ public class TouchButton {
 				}
 				mRPCView.mBlueDisplayContext.mSerialService.writeGuiCallbackEvent(
 						BluetoothSerialService.EVENT_TAG_BUTTON_CALLBACK_ACTION, mListIndex, mCallbackAddress, mValue);
+				/*
+				 * Handle autorepeat
+				 */
+				if (mIsAutorepeatButton) {
+					if (mMillisFirstAutorepeatDelay == 0) {
+						Log.w(LOG_TAG, "Autorepeat button " + mEscapedCaption + " without timing!");
+					} else {
+						sAutorepeatState = BUTTON_AUTOREPEAT_FIRST_PERIOD;
+						sAutorepeatCount = mFirstAutorepeatCount;
+						// sMillisFirstAutorepeatRate = mMillisFirstAutorepeatRate;
+						// sMillisSecondAutorepeatRate = mMillisSecondAutorepeatRate;
+						mAutorepeatHandler.sendEmptyMessageDelayed(0, mMillisFirstAutorepeatDelay);
+					}
+				}
 			}
 			return true;
 		}
@@ -339,6 +391,30 @@ public class TouchButton {
 		return true;
 	}
 
+	@SuppressLint("HandlerLeak")
+	private final Handler mAutorepeatHandler = new Handler() {
+		@Override
+		public void handleMessage(Message msg) {
+			if (mRPCView.mTouchIsActive) {
+				// send click
+				if (mDoBeep) {
+					mToneGenerator.startTone(sTouchBeepIndex);
+				}
+				mRPCView.mBlueDisplayContext.mSerialService.writeGuiCallbackEvent(
+						BluetoothSerialService.EVENT_TAG_BUTTON_CALLBACK_ACTION, mListIndex, mCallbackAddress, mValue);
+				if (sAutorepeatState == BUTTON_AUTOREPEAT_FIRST_PERIOD) {
+					sAutorepeatCount--;
+					if (sAutorepeatCount <= 0) {
+						sAutorepeatState = BUTTON_AUTOREPEAT_SECOND_PERIOD;
+					}
+					sendEmptyMessageDelayed(0, mMillisFirstAutorepeatRate);
+				} else {
+					sendEmptyMessageDelayed(0, mMillisSecondAutorepeatRate);
+				}
+			}
+		}
+	};
+
 	public static void interpretCommand(final RPCView aRPCView, int aCommand, int[] aParameters, int aParamsLength,
 			byte[] aDataBytes, int[] aDataInts, int aDataLength) {
 		int tButtonNumber = -1; // to have it initialized ;-)
@@ -355,7 +431,7 @@ public class TouchButton {
 			 * We need a button for the command
 			 */
 			if (aParamsLength <= 0) {
-				Log.e(LOG_TAG, "aParamsLength is <=0 but Command=0x" + Integer.toHexString(aCommand) + " is not one of "
+				MyLog.e(LOG_TAG, "aParamsLength is <=0 but Command=0x" + Integer.toHexString(aCommand) + " is not one of "
 						+ FUNCTION_TAG_BUTTON_ACTIVATE_ALL + ", " + FUNCTION_TAG_BUTTON_DEACTIVATE_ALL + " or "
 						+ FUNCTION_TAG_BUTTON_GLOBAL_SETTINGS);
 				return;
@@ -365,15 +441,15 @@ public class TouchButton {
 					// get button for create with existent button number
 					tButton = sButtonList.get(tButtonNumber);
 					if (aCommand != FUNCTION_TAG_BUTTON_CREATE && (tButton == null || !tButton.mIsInitialized)) {
-						Log.e(LOG_TAG, "Command=0x" + Integer.toHexString(aCommand) + " ButtonNr=" + tButtonNumber
+						MyLog.e(LOG_TAG, "Command=0x" + Integer.toHexString(aCommand) + " ButtonNr=" + tButtonNumber
 								+ " is null or not initialized.");
 						return;
 					}
-					if (BlueDisplay.isINFO()) {
+					if (MyLog.isINFO()) {
 						tButtonCaption = " \"" + tButton.mEscapedCaption + "\". ButtonNr=";
 					}
 				} else if (aCommand != FUNCTION_TAG_BUTTON_CREATE) {
-					Log.e(LOG_TAG, "Command=0x" + Integer.toHexString(aCommand) + " ButtonNr=" + tButtonNumber
+					MyLog.e(LOG_TAG, "Command=0x" + Integer.toHexString(aCommand) + " ButtonNr=" + tButtonNumber
 							+ " not found. Only " + sButtonList.size() + " buttons created.");
 					return;
 				}
@@ -383,15 +459,15 @@ public class TouchButton {
 		switch (aCommand) {
 
 		case FUNCTION_TAG_BUTTON_ACTIVATE_ALL:
-			if (BlueDisplay.isINFO()) {
-				Log.i(LOG_TAG, "Activate all buttons");
+			if (MyLog.isINFO()) {
+				MyLog.i(LOG_TAG, "Activate all buttons");
 			}
 			activateAllButtons();
 			break;
 
 		case FUNCTION_TAG_BUTTON_DEACTIVATE_ALL:
-			if (BlueDisplay.isINFO()) {
-				Log.i(LOG_TAG, "Deactivate all buttons");
+			if (MyLog.isINFO()) {
+				MyLog.i(LOG_TAG, "Deactivate all buttons");
 			}
 			deactivateAllButtons();
 			break;
@@ -428,26 +504,35 @@ public class TouchButton {
 					}
 				}
 			}
-			if (BlueDisplay.isINFO()) {
+			if (MyLog.isINFO()) {
 				tString = "";
 				if (aRPCView.mUseUpEventForButtons) {
 					tString = " UseUpEventForButtons";
 				}
-				Log.i(LOG_TAG, "Global settings. Flags=0x" + Integer.toHexString(aParameters[0]) + tString + ". Touch tone volume="
-						+ mActualToneVolume + ", index=" + sTouchBeepIndex);
+				MyLog.i(LOG_TAG, "Global settings. Flags=0x" + Integer.toHexString(aParameters[0]) + tString
+						+ ". Touch tone volume=" + mActualToneVolume + ", index=" + sTouchBeepIndex);
 			}
 			break;
 
 		case FUNCTION_TAG_BUTTON_DRAW:
-			if (BlueDisplay.isINFO()) {
-				Log.i(LOG_TAG, "Draw button" + tButtonCaption + tButtonNumber);
+			if (MyLog.isINFO()) {
+				MyLog.i(LOG_TAG, "Draw button" + tButtonCaption + tButtonNumber);
 			}
 			tButton.drawButton();
 			break;
 
+		case FUNCTION_TAG_BUTTON_REMOVE:
+			int tBackgroundColor = RPCView.shortToLongColor(aParameters[2]);
+			if (MyLog.isINFO()) {
+				MyLog.i(LOG_TAG, "Remove button background color= " + RPCView.shortToColorString(tBackgroundColor) + " for"
+						+ tButtonCaption + tButtonNumber);
+			}
+			tButton.removeButton(tBackgroundColor);
+			break;
+
 		case FUNCTION_TAG_BUTTON_DRAW_CAPTION:
-			if (BlueDisplay.isINFO()) {
-				Log.i(LOG_TAG, "Draw caption" + tButtonCaption + tButtonNumber);
+			if (MyLog.isINFO()) {
+				MyLog.i(LOG_TAG, "Draw caption=" + tButtonCaption + tButtonNumber);
 			}
 			tButton.drawCaption();
 			break;
@@ -457,8 +542,8 @@ public class TouchButton {
 			aRPCView.myConvertChars(aDataBytes, RPCView.sCharsArray, aDataLength);
 			tString = new String(RPCView.sCharsArray, 0, aDataLength);
 			tButton.mEscapedCaption = tString.replaceAll("\n", " | ");
-			if (BlueDisplay.isINFO()) {
-				Log.i(LOG_TAG, "Set caption=\"" + tButton.mEscapedCaption + "\" for" + tButtonCaption + tButtonNumber);
+			if (MyLog.isINFO()) {
+				MyLog.i(LOG_TAG, "Set caption=\"" + tButton.mEscapedCaption + "\" for" + tButtonCaption + tButtonNumber);
 			}
 			tButton.mCaptionStrings = tString.split("\n");
 			tButton.positionCaption();
@@ -470,31 +555,31 @@ public class TouchButton {
 		case FUNCTION_TAG_BUTTON_SETTINGS:
 			int tSubcommand = aParameters[1];
 			switch (tSubcommand) {
-			case BUTTON_FLAG_SET_COLOR_BUTTON:
-			case BUTTON_FLAG_SET_COLOR_BUTTON_AND_DRAW:
+			case BUTTON_FLAG_SET_BUTTON_COLOR:
+			case BUTTON_FLAG_SET_BUTTON_COLOR_AND_DRAW:
 				tButton.mButtonColor = RPCView.shortToLongColor(aParameters[2]);
-				if (BlueDisplay.isINFO()) {
+				if (MyLog.isINFO()) {
 					String tFunction = " for";
-					if (tSubcommand == BUTTON_FLAG_SET_COLOR_BUTTON_AND_DRAW) {
+					if (tSubcommand == BUTTON_FLAG_SET_BUTTON_COLOR_AND_DRAW) {
 						tFunction = " and draw for";
 					}
-					Log.i(LOG_TAG, "Set button color= " + RPCView.shortToColorString(tButton.mButtonColor) + tFunction
+					MyLog.i(LOG_TAG, "Set button color= " + RPCView.shortToColorString(tButton.mButtonColor) + tFunction
 							+ tButtonCaption + tButtonNumber);
 
 				}
-				if (tSubcommand == BUTTON_FLAG_SET_COLOR_BUTTON_AND_DRAW) {
+				if (tSubcommand == BUTTON_FLAG_SET_BUTTON_COLOR_AND_DRAW) {
 					tButton.drawButton();
 				}
 				break;
 
-			case BUTTON_FLAG_SET_COLOR_CAPTION_AND_DRAW:
-			case BUTTON_FLAG_SET_COLOR_CAPTION:
+			case BUTTON_FLAG_SET_CAPTION_COLOR_AND_DRAW:
+			case BUTTON_FLAG_SET_CAPTION_COLOR:
 				tButton.mCaptionColor = RPCView.shortToLongColor(aParameters[2]);
-				if (BlueDisplay.isINFO()) {
-					Log.i(LOG_TAG, "Set caption color= " + RPCView.shortToColorString(tButton.mCaptionColor) + " for"
+				if (MyLog.isINFO()) {
+					MyLog.i(LOG_TAG, "Set caption color= " + RPCView.shortToColorString(tButton.mCaptionColor) + " for"
 							+ tButtonCaption + tButtonNumber);
 				}
-				if (tSubcommand == BUTTON_FLAG_SET_COLOR_CAPTION_AND_DRAW) {
+				if (tSubcommand == BUTTON_FLAG_SET_CAPTION_COLOR_AND_DRAW) {
 					tButton.drawButton();
 				}
 				break;
@@ -513,8 +598,8 @@ public class TouchButton {
 						tButton.mButtonColor = Color.RED;
 					}
 				}
-				if (BlueDisplay.isINFO()) {
-					Log.i(LOG_TAG, "Set value=" + aParameters[2] + " for" + tButtonCaption + tButtonNumber);
+				if (MyLog.isINFO()) {
+					MyLog.i(LOG_TAG, "Set value=" + aParameters[2] + " for" + tButtonCaption + tButtonNumber);
 				}
 				if (tSubcommand == BUTTON_FLAG_SET_VALUE_AND_DRAW) {
 					tButton.drawButton();
@@ -523,11 +608,13 @@ public class TouchButton {
 
 			case BUTTON_FLAG_SET_POSITION:
 			case BUTTON_FLAG_SET_POSITION_AND_DRAW:
-				if (BlueDisplay.isINFO()) {
-					Log.i(LOG_TAG, "Set position=" + aParameters[2] + " / " + aParameters[3] + ". " + tButtonCaption
+				if (MyLog.isINFO()) {
+					MyLog.i(LOG_TAG, "Set position=" + aParameters[2] + " / " + aParameters[3] + ". " + tButtonCaption
 							+ tButtonNumber);
 				}
 				tButton.setPosition(aParameters[2], aParameters[3]);
+				// set new caption position
+				tButton.positionCaption();
 				if (tSubcommand == BUTTON_FLAG_SET_POSITION_AND_DRAW) {
 					tButton.drawButton();
 				}
@@ -537,8 +624,8 @@ public class TouchButton {
 			case BUTTON_FLAG_SET_COLOR_AND_VALUE_AND_DRAW:
 				tButton.mButtonColor = RPCView.shortToLongColor(aParameters[2]);
 				tButton.mValue = aParameters[3];
-				if (BlueDisplay.isINFO()) {
-					Log.i(LOG_TAG, "set color= " + RPCView.shortToColorString(tButton.mButtonColor) + " and value="
+				if (MyLog.isINFO()) {
+					MyLog.i(LOG_TAG, "set color= " + RPCView.shortToColorString(tButton.mButtonColor) + " and value="
 							+ tButton.mValue + " for" + tButtonCaption + tButtonNumber);
 				}
 				if (tSubcommand == BUTTON_FLAG_SET_COLOR_AND_VALUE_AND_DRAW) {
@@ -547,16 +634,34 @@ public class TouchButton {
 				break;
 
 			case BUTTON_FLAG_SET_ACTIVE:
-				if (BlueDisplay.isINFO()) {
-					Log.i(LOG_TAG, "Set active=true for" + tButtonCaption + tButtonNumber);
+				if (MyLog.isINFO()) {
+					MyLog.i(LOG_TAG, "Set active=true for" + tButtonCaption + tButtonNumber);
 				}
 				tButton.mIsActive = true;
 				break;
 			case BUTTON_FLAG_RESET_ACTIVE:
-				if (BlueDisplay.isINFO()) {
-					Log.i(LOG_TAG, "Set active=false for" + tButtonCaption + tButtonNumber);
+				if (MyLog.isINFO()) {
+					MyLog.i(LOG_TAG, "Set active=false for" + tButtonCaption + tButtonNumber);
 				}
 				tButton.mIsActive = false;
+				break;
+
+			case BUTTON_FLAG_SET_AUTOREPEAT_TIMING:
+				if (tButton.mIsAutorepeatButton) {
+					if (MyLog.isINFO()) {
+						MyLog.i(LOG_TAG, "Set autorepeat timing 1.delay" + aParameters[2] + ", 1.rate" + aParameters[3]
+								+ ", 1.count" + aParameters[4] + ", 2.rate" + aParameters[5] + ". " + tButtonCaption
+								+ tButtonNumber);
+					}
+					tButton.mMillisFirstAutorepeatDelay = aParameters[2];
+					tButton.mMillisFirstAutorepeatRate = aParameters[3];
+					tButton.mFirstAutorepeatCount = aParameters[4];
+					tButton.mMillisSecondAutorepeatRate = aParameters[5];
+				} else {
+					MyLog.w(LOG_TAG, "Set autorepeat timing for non autorepeat btton 1.delay" + aParameters[2] + ", 1.rate"
+							+ aParameters[3] + ", 1.count" + aParameters[4] + ", 2.rate" + aParameters[5] + ". " + tButtonCaption
+							+ tButtonNumber);
+				}
 				break;
 
 			}
@@ -582,7 +687,7 @@ public class TouchButton {
 				} else {
 					tButtonNumber = sButtonList.size();
 					sButtonList.add(tButton);
-					if (BlueDisplay.isDEBUG()) {
+					if (MyLog.isDEBUG()) {
 						Log.d(LOG_TAG, "Button with index " + tButtonNumber + " appended at end of list. List size now "
 								+ sButtonList.size());
 					}
@@ -590,12 +695,13 @@ public class TouchButton {
 				tButton.mListIndex = tButtonNumber;
 			}
 
-			if (BlueDisplay.isINFO()) {
-				Log.i(LOG_TAG,
-						"Create button. ButtonNr=" + tButtonNumber + ", new TouchButton(\"" + tString + "\", " + aParameters[1]
-								+ ", " + aParameters[2] + ", " + aParameters[3] + ", " + aParameters[4] + ", "
-								+ RPCView.shortToColorString(aParameters[5]) + ", " + aParameters[6] + ", " + aParameters[7]
-								+ ", 0x" + Integer.toHexString(tCallbackAddress) + ") ListSize=" + sButtonList.size());
+			if (MyLog.isINFO()) {
+				MyLog.i(LOG_TAG,
+						"Create button. ButtonNr=" + tButtonNumber + ", new TouchButton(\"" + tString + "\", x=" + aParameters[1]
+								+ ", y=" + aParameters[2] + ", width=" + aParameters[3] + ", height=" + aParameters[4] + ", color="
+								+ RPCView.shortToColorString(aParameters[5]) + ", flags=" + aParameters[6] + ", value="
+								+ aParameters[7] + ", callback=0x" + Integer.toHexString(tCallbackAddress) + ") ListSize="
+								+ sButtonList.size());
 			}
 
 			tButton.initButton(aRPCView, aParameters[1], aParameters[2], aParameters[3], aParameters[4],
@@ -604,7 +710,7 @@ public class TouchButton {
 			break;
 
 		default:
-			Log.e(LOG_TAG, "unknown command 0x" + Integer.toHexString(aCommand) + " received. paramsLength=" + aParamsLength
+			MyLog.e(LOG_TAG, "unknown command 0x" + Integer.toHexString(aCommand) + " received. paramsLength=" + aParamsLength
 					+ " dataLenght=" + aDataLength);
 			break;
 		}

@@ -27,6 +27,11 @@
 #include "BlueSerial.h"
 #include "EventHandler.h"
 
+// Use simple blocking serial version without receive buffer and other overhead
+// Using it saves up to 1250 byte FLASH and 185 byte RAM since USART is used directly
+// Comment it out here AND in BlueSerial on line 35 if you want to use it instead of Arduino Serial....
+#define USE_SIMPLE_SERIAL
+
 // Change this if you have reprogrammed the hc05 module for higher baud rate
 //#define HC_05_BAUD_RATE BAUD_9600
 #define HC_05_BAUD_RATE BAUD_115200
@@ -34,7 +39,7 @@
 #define DISPLAY_HEIGHT 240
 
 #define DELAY_START_VALUE 600
-#define DELAY_CHANGE_VALUE 20
+#define DELAY_CHANGE_VALUE 10
 
 #define SLIDER_X_POSITION 80
 
@@ -54,22 +59,22 @@ char StringBuffer[128];
 /*
  * The 3 buttons
  */
-uint8_t TouchButtonOnOff;
-uint8_t TouchButtonPlus;
-uint8_t TouchButtonMinus;
-uint8_t TouchButtonValueDirect;
+BDButton TouchButtonStartStop;
+BDButton TouchButtonPlus;
+BDButton TouchButtonMinus;
+BDButton TouchButtonValueDirect;
 
 // Touch handler for buttons
-void doStartStop(uint8_t aTheTochedButton, int16_t aValue);
-void doPlusMinus(uint8_t aTheTochedButton, int16_t aValue);
-void doGetDelay(uint8_t aTheTouchedButton, int16_t aValue);
+void doStartStop(BDButton * aTheTochedButton, int16_t aValue);
+void doPlusMinus(BDButton * aTheTochedButton, int16_t aValue);
+void doGetDelay(BDButton * aTheTouchedButton, int16_t aValue);
 
 /*
  * The horizontal slider
  */
-uint8_t TouchSliderDelay;
+BDSlider TouchSliderDelay;
 // handler for value change
-void doDelay(uint8_t aTheTochedSlider, int16_t aSliderValue);
+void doDelay(BDSlider * aTheTochedSlider, uint16_t aSliderValue);
 void printDelayValue(void);
 
 // Callback handler for (re)connect and resize
@@ -81,7 +86,7 @@ void setup() {
     // initialize the digital pin as an output.
     pinMode(LED_PIN, OUTPUT);
     pinMode(TONE_PIN, OUTPUT);
-#ifdef USE_SIMPLE_SERIAL
+#ifdef USE_SIMPLE_SERIAL  // see line 50 in BlueSerial.h
     initSimpleSerial(HC_05_BAUD_RATE, false);
 #else
     Serial.begin(HC_05_BAUD_RATE);
@@ -102,26 +107,32 @@ void setup() {
 void loop() {
     if (doBlink) {
         uint8_t i;
-        if (doBlink) {
-            digitalWrite(LED_PIN, HIGH);  // LED on
-            BlueDisplay1.fillCircle(DISPLAY_WIDTH / 2, DISPLAY_HEIGHT / 2, 20, COLOR_RED);
-            // wait for delay time but check touch events 8 times while waiting
-            for (i = 0; i < 8; ++i) {
-                checkAndHandleEvents();
-                printDemoString();
-                delay(sDelay / 8);
-            }
-            digitalWrite(LED_PIN, LOW);  // LED off
-            BlueDisplay1.fillCircle(DISPLAY_WIDTH / 2, DISPLAY_HEIGHT / 2, 20, COLOR_DEMO_BACKGROUND);
-            for (i = 0; i < 8; ++i) {
-                checkAndHandleEvents();
-                printDemoString();
-                delay(sDelay / 8);
-            }
+        digitalWrite(LED_PIN, HIGH);  // LED on
+        BlueDisplay1.fillCircle(DISPLAY_WIDTH / 2, DISPLAY_HEIGHT / 2, 20, COLOR_RED);
+        // wait for delay time but check touch events 8 times while waiting
+        for (i = 0; i < 8; ++i) {
+            checkAndHandleEvents();
+            printDemoString();
+            delay(sDelay / 8);
         }
-    } else {
-        checkAndHandleEvents();
+        digitalWrite(LED_PIN, LOW);  // LED off
+        BlueDisplay1.fillCircle(DISPLAY_WIDTH / 2, DISPLAY_HEIGHT / 2, 20, COLOR_DEMO_BACKGROUND);
+        for (i = 0; i < 8; ++i) {
+#ifdef USE_SIMPLE_SERIAL
+            checkAndHandleEvents();
+#else
+            serialEvent();
+#endif
+            printDemoString();
+            delay(sDelay / 8);
+        }
         printDemoString();
+    } else {
+#ifdef USE_SIMPLE_SERIAL
+        checkAndHandleEvents();
+#else
+        serialEvent();
+#endif
     }
 }
 
@@ -133,64 +144,71 @@ void initDisplay(void) {
         tStartStopString = "Stop";
     }
 
-    TouchButtonPlus = BlueDisplay1.createButton(270, 80, 40, 40, COLOR_YELLOW, "+", 33, BUTTON_FLAG_DO_BEEP_ON_TOUCH,
+    TouchButtonPlus.init(270, 80, 40, 40, COLOR_YELLOW, "+", 33, BUTTON_FLAG_DO_BEEP_ON_TOUCH | BUTTON_FLAG_TYPE_AUTOREPEAT,
     DELAY_CHANGE_VALUE, &doPlusMinus);
-    TouchButtonMinus = BlueDisplay1.createButton(10, 80, 40, 40, COLOR_YELLOW, "-", 33, BUTTON_FLAG_DO_BEEP_ON_TOUCH,
+    TouchButtonPlus.setButtonAutorepeatTiming(600, 100, 10, 30);
+
+    TouchButtonMinus.init(10, 80, 40, 40, COLOR_YELLOW, "-", 33, BUTTON_FLAG_DO_BEEP_ON_TOUCH | BUTTON_FLAG_TYPE_AUTOREPEAT,
             -DELAY_CHANGE_VALUE, &doPlusMinus);
+    TouchButtonMinus.setButtonAutorepeatTiming(600, 100, 10, 30);
 
-    TouchButtonOnOff = BlueDisplay1.createButton(30, 150, 140, 55, COLOR_DEMO_BACKGROUND, tStartStopString, 44,
-            BUTTON_FLAG_DO_BEEP_ON_TOUCH | BUTTON_FLAG_TYPE_AUTO_RED_GREEN, 1, &doStartStop);
-    TouchButtonValueDirect = BlueDisplay1.createButton(210, 150, 90, 55, COLOR_YELLOW, "...", 44, BUTTON_FLAG_DO_BEEP_ON_TOUCH, 0,
-            &doGetDelay);
+    TouchButtonStartStop.init(30, 150, 140, 55, COLOR_DEMO_BACKGROUND, tStartStopString, 44,
+            BUTTON_FLAG_DO_BEEP_ON_TOUCH | BUTTON_FLAG_TYPE_AUTO_RED_GREEN, doBlink, &doStartStop);
 
-    TouchSliderDelay = BlueDisplay1.createSlider(SLIDER_X_POSITION, 40, 12, 150, 100, DELAY_START_VALUE / 10, COLOR_YELLOW,
-    COLOR_GREEN, TOUCHSLIDER_SHOW_BORDER | TOUCHSLIDER_IS_HORIZONTAL, &doDelay);
+    // PSTR("...") and initPGM saves RAM since string "..." is stored in flash
+    TouchButtonValueDirect.initPGM(210, 150, 90, 55, COLOR_YELLOW, PSTR("..."), 44, BUTTON_FLAG_DO_BEEP_ON_TOUCH, 0, &doGetDelay);
+
+    TouchSliderDelay.init(SLIDER_X_POSITION, 40, 12, 150, 100, DELAY_START_VALUE / 10, COLOR_YELLOW, COLOR_GREEN,
+            TOUCHSLIDER_SHOW_BORDER | TOUCHSLIDER_IS_HORIZONTAL, &doDelay);
+    TouchSliderDelay.setCaptionProperties(TEXT_SIZE_22, SLIDER_VALUE_CAPTION_ALIGN_RIGHT, 4, COLOR_RED,
+    COLOR_DEMO_BACKGROUND);
+    TouchSliderDelay.setCaption("Delay");
+    TouchSliderDelay.setPrintValueProperties(TEXT_SIZE_22, SLIDER_VALUE_CAPTION_ALIGN_LEFT, 4, COLOR_WHITE,
+    COLOR_DEMO_BACKGROUND);
 }
 
 void drawGui(void) {
     BlueDisplay1.clearDisplay(COLOR_DEMO_BACKGROUND);
-    BlueDisplay1.drawButton(TouchButtonOnOff);
-    BlueDisplay1.drawButton(TouchButtonPlus);
-    BlueDisplay1.drawButton(TouchButtonMinus);
-    BlueDisplay1.drawButton(TouchButtonValueDirect);
-    BlueDisplay1.drawSlider(TouchSliderDelay);
-    BlueDisplay1.drawText(SLIDER_X_POSITION + 7 * TEXT_SIZE_22_WIDTH, 40 + 3 * 12 + TEXT_SIZE_22_ASCEND, "Delay", TEXT_SIZE_22,
-    COLOR_RED, COLOR_DEMO_BACKGROUND);
+    TouchButtonStartStop.drawButton();
+    TouchButtonPlus.drawButton();
+    TouchButtonMinus.drawButton();
+    TouchButtonValueDirect.drawButton();
+    TouchSliderDelay.drawSlider();
     printDelayValue();
 }
 
 /*
  * Change doBlink flag as well as color and caption of the button.
- * Value is used for demonstration purposes in this case
+ * Value sent by button is used for demonstration purposes in this case
  * you could also use doBlink flag for distinguish the two states
  */
-void doStartStop(uint8_t aTheTouchedButton, int16_t aValue) {
+void doStartStop(BDButton * aTheTouchedButton, int16_t aValue) {
     doBlink = !aValue;
     if (doBlink) {
         // green stop button
-        BlueDisplay1.setButtonCaption(aTheTouchedButton, "Stop", false);
+        aTheTouchedButton->setCaption("Stop");
     } else {
         // red start button
-        BlueDisplay1.setButtonCaption(aTheTouchedButton, "Start", false);
+        aTheTouchedButton->setCaption("Start");
     }
-    BlueDisplay1.setButtonValueAndDraw(aTheTouchedButton, doBlink);
+    aTheTouchedButton->setValueAndDraw(doBlink);
 }
 
 /*
  * Is called by touch of both plus and minus buttons.
  * We just take the passed value and do not care which button was touched
  */
-void doPlusMinus(uint8_t aTheTouchedButton, int16_t aValue) {
+void doPlusMinus(BDButton * aTheTouchedButton, int16_t aValue) {
     sDelay += aValue;
     if (sDelay < DELAY_CHANGE_VALUE) {
         sDelay = DELAY_CHANGE_VALUE;
     }
     if (!doBlink) {
         // enable blinking
-        doStartStop(TouchButtonOnOff, false);
+        doStartStop(&TouchButtonStartStop, false);
     }
     // set slider bar accordingly
-    BlueDisplay1.setSliderActualValueAndDraw(TouchSliderDelay, sDelay / 10);
+    TouchSliderDelay.setActualValueAndDrawBar(sDelay / 10);
     printDelayValue();
 }
 
@@ -206,29 +224,28 @@ void doSetDelay(float aValue) {
     }
     sDelay = aValue;
     // set slider bar accordingly
-    BlueDisplay1.setSliderActualValueAndDraw(TouchSliderDelay, sDelay / 10);
+    TouchSliderDelay.setActualValueAndDrawBar(sDelay / 10);
     printDelayValue();
 }
 
 /*
  * Request delay value as number
  */
-void doGetDelay(uint8_t aTheTouchedButton, int16_t aValue) {
+void doGetDelay(BDButton * aTheTouchedButton, int16_t aValue) {
     BlueDisplay1.getNumberWithShortPrompt(&doSetDelay, "delay [ms]");
 }
 
 /*
  * Is called by touch or move on slider and sets the new delay according to the passed slider value
  */
-void doDelay(uint8_t aTheTouchedSlider, int16_t aSliderValue) {
+void doDelay(BDSlider * aTheTouchedSlider, uint16_t aSliderValue) {
     sDelay = 10 * aSliderValue;
     printDelayValue();
 }
 
 void printDelayValue(void) {
     snprintf(StringBuffer, sizeof StringBuffer, "%4ums", sDelay);
-    BlueDisplay1.drawText(SLIDER_X_POSITION, 40 + 3 * 12 + TEXT_SIZE_22_ASCEND, StringBuffer, TEXT_SIZE_22, COLOR_WHITE,
-    COLOR_DEMO_BACKGROUND);
+    TouchSliderDelay.printValue(StringBuffer);
 }
 
 #define MILLIS_PER_CHANGE 20 // gives minimal 2 seconds

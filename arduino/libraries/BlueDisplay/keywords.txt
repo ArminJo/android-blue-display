@@ -10,6 +10,8 @@
 BlueDisplay	KEYWORD1
 BlueSerial	KEYWORD1
 TouchLib	KEYWORD1
+BDButton	KEYWORD1
+BDSlider	KEYWORD1
 
 #######################################
 # Methods and Functions (KEYWORD2)
@@ -17,11 +19,14 @@ TouchLib	KEYWORD1
 
 # from BlueDisplay
 setFlagsAndSize	KEYWORD2
+setCodePage	KEYWORD2
 setCharacterMapping	KEYWORD2
 playTone	KEYWORD2
+playFeedbackTone	KEYWORD2
 setLongTouchDownTimeout	KEYWORD2
 clearDisplay	KEYWORD2
 drawDisplayDirect	KEYWORD2
+setScreenOrientationLock	KEYWORD2
 drawPixel	KEYWORD2
 drawLine	KEYWORD2
 drawLineRel	KEYWORD2
@@ -37,6 +42,13 @@ drawChar	KEYWORD2
 drawText	KEYWORD2
 drawTextPGM	KEYWORD2
 drawMLText	KEYWORD2
+
+setPrintfSizeAndColorAndFlag	KEYWORD2
+setPrintfPosition	KEYWORD2
+setPrintfPositionColumnLine	KEYWORD2
+writeString	KEYWORD2
+debugMessage	KEYWORD2
+
 drawChartByteBuffer	KEYWORD2
 
 setMaxDisplaySize	KEYWORD2
@@ -44,10 +56,14 @@ setActualDisplaySize	KEYWORD2
 getDisplayWidth	KEYWORD2
 getDisplayHeight	KEYWORD2
 
+refreshVector	KEYWORD2
+
 getNumber	KEYWORD2
 getNumberWithShortPrompt	KEYWORD2
 getNumberWithShortPromptPGM	KEYWORD2
 getText	KEYWORD2
+
+setSensor
 
 getTextWidth	KEYWORD2
 getTextAscend	KEYWORD2
@@ -61,6 +77,7 @@ drawButtonCaption	KEYWORD2
 setButtonCaption	KEYWORD2
 setButtonCaptionPGM	KEYWORD2
 setButtonValue	KEYWORD2
+setButtonValueAndDraw	KEYWORD2
 setButtonColor	KEYWORD2
 setButtonColorAndDraw	KEYWORD2
 setRedGreenButtonColor	KEYWORD2
@@ -71,16 +88,62 @@ deactivateAllButtons	KEYWORD2
 setButtonsGlobalFlags	KEYWORD2
 setButtonsTouchTone	KEYWORD2
 
+# from BDButton
+resetAllButtons	KEYWORD2
+activateAllButtons	KEYWORD2
+deactivateAllButtons	KEYWORD2
+setButtonsTouchTone	KEYWORD2
+setGlobalFlags	KEYWORD2
+
+init	KEYWORD2
+initPGM	KEYWORD2
+drawButton	KEYWORD2
+removeButton	KEYWORD2
+drawCaption	KEYWORD2
+setCaption	KEYWORD2
+setCaptionPGM	KEYWORD2
+setCaptionAndDraw	KEYWORD2
+setValue	KEYWORD2
+setValueAndDraw	KEYWORD2
+setButtonColor	KEYWORD2
+setButtonColorAndDraw	KEYWORD2
+setPosition	KEYWORD2
+setButtonAutorepeatTiming	KEYWORD2
+activate	KEYWORD2
+deactivate	KEYWORD2
+doToggleRedGreenButton	KEYWORD2
+
 # Slider stuff
 resetAllSliders	KEYWORD2
 createSlider	KEYWORD2
 drawSlider	KEYWORD2
 drawSliderBorder	KEYWORD2
 setSliderActualValueAndDraw	KEYWORD2
+setSliderColorBarThreshold	KEYWORD2
+setSliderColorBarBackground	KEYWORD2
 activateSlider	KEYWORD2
 deactivateSlider	KEYWORD2
 activateAllSliders	KEYWORD2
 deactivateAllSliders	KEYWORD2
+
+# from BDSlider
+resetAllSliders	KEYWORD2
+activateAllSliders	KEYWORD2
+deactivateAllSliders	KEYWORD2
+
+init	KEYWORD2
+drawSlider	KEYWORD2
+drawBorder	KEYWORD2
+setActualValueAndDrawBar	KEYWORD2
+setBarColor	KEYWORD2
+setBarThresholdColor	KEYWORD2
+setBarBackgroundColor	KEYWORD2
+setCaptionProperties	KEYWORD2
+setCaption	KEYWORD2
+setPrintValueProperties	KEYWORD2
+printValue	KEYWORD2
+activate	KEYWORD2
+deactivate	KEYWORD2
 
 # from BlueSerial
 initSimpleSerial	KEYWORD2
@@ -100,21 +163,25 @@ resetTouchFlags	KEYWORD2
 
 sDisableTouchUpOnce	KEYWORD2
 
-checkAndHandleTouchEvents	KEYWORD2
-registerSwipeEndCallback	KEYWORD2
-setSwipeEndCallbackEnabled	KEYWORD2
-registerConnectCallback	KEYWORD2
-registerSimpleResizeAndReconnectCallback	KEYWORD2
-registerSimpleConnectCallback	KEYWORD2
-registerResizeCallback	KEYWORD2
-registerSimpleResizeCallback	KEYWORD2
-registerTouchDownCallback	KEYWORD2
-simpleTouchDownHandler	KEYWORD2
-simpleTouchDownHandlerForSlider	KEYWORD2
-registerTouchMoveCallback	KEYWORD2
-simpleTouchMoveHandlerForSlider	KEYWORD2
-registerTouchUpCallback	KEYWORD2
+# from EventHandler
+checkAndHandleEvents	KEYWORD2
 registerLongTouchDownCallback	KEYWORD2
+registerSwipeEndCallback	KEYWORD2
+registerConnectCallback	KEYWORD2
+registerSimpleConnectCallback	KEYWORD2
+registerResizeAndConnectCallback	KEYWORD2
+registerSimpleResizeAndReconnectCallback	KEYWORD2
+getSimpleResizeAndConnectCallback	KEYWORD2
+registerSensorChangeCallback	KEYWORD2
+
+registerTouchDownCallback	KEYWORD2
+registerTouchMoveCallback	KEYWORD2
+registerTouchUpCallback	KEYWORD2
+
+simpleTouchDownHandler	KEYWORD2
+simpleTouchHandlerOnlyForButtons	KEYWORD2
+simpleTouchDownHandlerOnlyForSlider	KEYWORD2
+simpleTouchMoveHandlerForSlider	KEYWORD2
 handleEvent	KEYWORD2
 
 #######################################
@@ -124,6 +191,22 @@ handleEvent	KEYWORD2
 BD_FLAG_FIRST_RESET_ALL	LITERAL1
 BD_FLAG_TOUCH_DISABLE	LITERAL1
 BD_FLAG_USE_MAX_SIZE	LITERAL1
+
+BUTTON_FLAG_NO_BEEP_ON_TOUCH	LITERAL1
+BUTTON_FLAG_DO_BEEP_ON_TOUCH	LITERAL1
+BUTTON_FLAG_TYPE_AUTO_RED_GREEN	LITERAL1
+BUTTON_FLAG_TYPE_AUTOREPEAT	LITERAL1
+
+TOUCHSLIDER_VERTICAL_SHOW_NOTHING	LITERAL1
+TOUCHSLIDER_VERTICAL_SHOW_NOTHING	LITERAL1
+TOUCHSLIDER_VALUE_BY_CALLBACK	LITERAL1
+TOUCHSLIDER_IS_HORIZONTAL	LITERAL1
+
+SLIDER_VALUE_CAPTION_ALIGN_LEFT	LITERAL1
+SLIDER_VALUE_CAPTION_ALIGN_RIGHT	LITERAL1
+SLIDER_VALUE_CAPTION_ALIGN_MIDDLE	LITERAL1
+SLIDER_VALUE_CAPTION_BELOW	LITERAL1
+SLIDER_VALUE_CAPTION_ABOVE	LITERAL1
 
 TEXT_SIZE_11	LITERAL1
 TEXT_SIZE_22	LITERAL1

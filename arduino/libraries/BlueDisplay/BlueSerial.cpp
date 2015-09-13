@@ -1,16 +1,38 @@
 /*
  * BlueSerial.cpp
  *
- * @date 01.09.2014
- * @author Armin Joachimsmeyer
- *      Email:   armin.joachimsmeyer@gmail.com
- * @copyright GPL v3 (http://www.gnu.org/licenses/gpl.html)
- * @version 1.0.0
+ *   SUMMARY
+ *  Blue Display is an Open Source Android remote Display for Arduino etc.
+ *  It receives basic draw requests from Arduino etc. over Bluetooth and renders it.
+ *  It also implements basic GUI elements as buttons and sliders.
+ *  GUI callback, touch and sensor events are sent back to Arduino.
+ *
+ *  Copyright (C) 2014  Armin Joachimsmeyer
+ *  armin.joachimsmeyer@gmail.com
+ *
+ *  This file is part of BlueDisplay.
+ *  BlueDisplay is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, either version 3 of the License, or
+ *  (at your option) any later version.
+
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program.  If not, see <http://www.gnu.org/licenses/gpl.html>.
+ *
  */
 
 #include <Arduino.h>
 #include "BlueSerial.h"
 #include "EventHandler.h"
+
+// Simple serial is a simple blocking serial version without receive buffer and other overhead.
+// Using it saves up to 1250 byte FLASH and 185 byte RAM since USART is used directly
+#define USE_SIMPLE_SERIAL
 
 // Data field types
 const int DATAFIELD_TAG_BYTE = 0x01;

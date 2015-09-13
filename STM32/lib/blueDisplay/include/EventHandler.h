@@ -33,12 +33,7 @@
 //#define DO_NOT_NEED_BASIC_TOUCH_EVENTS // outcommenting or better defining for the compiler with -DDO_NOT_NEED_BASIC_TOUCH_EVENTS saves 620 bytes FLASH and 36 bytes RAM
 #endif
 
-#include "BlueDisplay.h"
-
-#ifdef LOCAL_DISPLAY_EXISTS
-#include "ADS7846.h"
-extern ADS7846 TouchPanel;
-#endif
+#include "BlueDisplay.h" // for struct XYSize
 
 #define TOUCH_STANDARD_CALLBACK_PERIOD_MILLIS 20 // Period between callbacks while touched (a swipe is app 100 ms)
 #define TOUCH_STANDARD_LONG_TOUCH_TIMEOUT_MILLIS 800 // Millis after which a touch is classified as a long touch
@@ -61,7 +56,7 @@ extern ADS7846 TouchPanel;
 
 // command sizes
 #define RECEIVE_TOUCH_OR_DISPLAY_DATA_SIZE 4
-#define TOUCH_CALLBACK_DATA_SIZE  12 // 15 - command, length and sync token
+#define TOUCH_CALLBACK_DATA_SIZE  12
 #define RECEIVE_CALLBACK_DATA_SIZE TOUCH_CALLBACK_DATA_SIZE
 // events with a lower number have RECEIVE_TOUCH_OR_DISPLAY_DATA_SIZE
 // events with a greater number have RECEIVE_CALLBACK_DATA_SIZE
@@ -102,12 +97,7 @@ struct Swipe {
 struct GuiCallback {
     uint16_t ObjectIndex;
     uint16_t Free;
-#if (FLASHEND > 65535)
     void * Handler;
-#else
-    void * Handler;
-    void * Handler_upperWord; // not used on 16 bit address cpu
-#endif
     union ValueForHandler {
         uint16_t Int16Value;
         uint32_t Int32Value;
@@ -128,13 +118,14 @@ struct BluetoothEvent {
         struct XYPosition TouchPosition;
         struct XYSize DisplaySize;
         struct GuiCallback GuiCallbackInfo;
-        struct SensorCallback SensorCallbackInfo;
         struct Swipe SwipeInfo;
+        struct SensorCallback SensorCallbackInfo;
     } EventData;
 };
 
 #ifdef LOCAL_DISPLAY_EXISTS
 extern struct BluetoothEvent localTouchEvent;
+
 /*
  * helper variables
  */
@@ -143,7 +134,6 @@ extern bool sAutorepeatButtonTouched;
 extern bool sSliderTouched;
 extern bool sNothingTouched;
 extern bool sSliderIsMoveTarget;
-extern volatile bool sDisableTouchUpOnce; // set normally by application if long touch action was made
 
 void resetTouchFlags(void);
 #endif
@@ -151,18 +141,25 @@ void resetTouchFlags(void);
 extern struct BluetoothEvent remoteTouchEvent;
 
 #ifndef DO_NOT_NEED_BASIC_TOUCH_EVENTS
-extern struct BluetoothEvent remoteTouchDownEvent;
 extern bool sTouchIsStillDown;
+extern bool sDisableTouchUpOnce;
+extern bool sDisableUntilTouchUpIsDone; // Skip all touch move and touch up events until touch is released
 extern struct XYPosition sDownPosition;
 extern struct XYPosition sActualPosition;
 extern struct XYPosition sUpPosition;
 #endif
 
+void delayMillisWithCheckAndHandleEvents(int32_t aTimeMillis);
+
 void checkAndHandleEvents(void);
+
+void registerPeriodicTouchCallback(bool (*aPeriodicTouchCallback)(int const, int const), const uint32_t aCallbackPeriodMillis);
+void setPeriodicTouchCallbackPeriod(const uint32_t aCallbackPeriod);
 
 void registerLongTouchDownCallback(void (*aLongTouchCallback)(struct XYPosition * const), const uint16_t aLongTouchTimeoutMillis);
 
 void registerSwipeEndCallback(void (*aSwipeEndCallback)(struct Swipe * const));
+void setSwipeEndCallbackEnabled(bool aSwipeEndCallbackEnabled);
 
 void registerConnectCallback(void (*aConnectCallback)(struct XYSize * const aMaxSize));
 void registerSimpleConnectCallback(void (*aConnectCallback)(void));
@@ -172,22 +169,36 @@ void registerSimpleResizeAndConnectCallback(void (*aSimpleResizeAndConnectCallba
 void (* getSimpleResizeAndConnectCallback(void))(void);
 
 void registerSensorChangeCallback(uint8_t aSensorType, uint8_t aSensorRate,
-        void (*aSensorChangeCallback)(uint8_t aSensorType, struct SensorCallback * aSensorCallbackInfo));
+        void (*aSensorChangeCallback)(uint8_t aEventType, struct SensorCallback * aSensorCallbackInfo));
 
 #ifndef DO_NOT_NEED_BASIC_TOUCH_EVENTS
 void registerTouchDownCallback(void (*aTouchDownCallback)(struct XYPosition * const aActualPositionPtr));
 void registerTouchMoveCallback(void (*aTouchMoveCallback)(struct XYPosition * const aActualPositionPtr));
 void registerTouchUpCallback(void (*aTouchUpCallback)(struct XYPosition * const aActualPositionPtr));
+void setTouchUpCallbackEnabled(bool aTouchUpCallbackEnabled);
+void (* getTouchUpCallback(void))(struct XYPosition * const);
 #endif
 
 #ifdef LOCAL_DISPLAY_EXISTS
 void handleLocalTouchUp(void);
+void callbackLongTouchDownTimeout(void);
 void simpleTouchDownHandler(struct XYPosition * const aActualPositionPtr);
 void simpleTouchHandlerOnlyForButtons(struct XYPosition * const aActualPositionPtr);
 void simpleTouchDownHandlerOnlyForSlider(struct XYPosition * const aActualPositionPtr);
+void simpleTouchDownHandlerForSlider(struct XYPosition * const aActualPositionPtr);
 void simpleTouchMoveHandlerForSlider(struct XYPosition * const aActualPositionPtr);
 #endif
 
+bool getDisplayXYValuesFlag(void);
+void setDisplayXYValuesFlag(bool aEnableDisplay);
+void printTPData(int x, int y, Color_t aColor, Color_t aBackColor);
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 void handleEvent(struct BluetoothEvent * aEvent);
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* EVENTHANDLER_H_ */

@@ -2,7 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="de.joachimsmeyer.android.bluedisplay"
     android:installLocation="auto"
-    android:versionCode="7"
+    android:versionCode="8"
     android:versionName="@string/app_version" >
 
     <!-- android:launchMode = "singleInstance" -->
@@ -23,7 +23,6 @@
         android:hardwareAccelerated="true"
         android:icon="@drawable/icon"
         android:label="@string/app_name" >
-
         <activity
             android:name="de.joachimsmeyer.android.bluedisplay.BlueDisplay"
             android:configChanges="keyboardHidden|orientation|screenSize"
@@ -31,6 +30,7 @@
             android:theme="@android:style/Theme.NoTitleBar.Fullscreen" >
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
+
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
@@ -39,6 +39,7 @@
             android:label="@string/select_device"
             android:theme="@android:style/Theme.Dialog" />
         <activity android:name="de.joachimsmeyer.android.bluedisplay.BlueDisplayPreferences" />
+        <activity android:name="de.joachimsmeyer.android.bluedisplay.LogViewActivity" />
     </application>
 
 </manifest>

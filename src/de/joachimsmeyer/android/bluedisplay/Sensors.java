@@ -5,7 +5,7 @@
  * 	It also implements basic GUI elements as buttons and sliders.
  * 	It sends touch or GUI callback events over Bluetooth back to Arduino.
  * 
- *  Copyright (C) 2014  Armin Joachimsmeyer
+ *  Copyright (C) 2015  Armin Joachimsmeyer
  *  armin.joachimsmeyer@gmail.com
  *  
  * 	This file is part of BlueDisplay.
@@ -108,10 +108,14 @@ public class Sensors implements SensorEventListener {
 				if (mBlueDisplayContext.mActualScreenOrientation == ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) {
 					// override only if orientation can change
 					if (mAngle > 225 && mAngle < 315 && mBlueDisplayContext.mActualRotation != Surface.ROTATION_90) {
-						Log.i(LOG_TAG, "Override rotation to 90 degree. Angle=" + mAngle);
+						if (MyLog.isINFO()) {
+							MyLog.i(LOG_TAG, "Override rotation to 90 degree. Angle=" + mAngle);
+						}
 						mBlueDisplayContext.mActualRotation = Surface.ROTATION_90;
 					} else if (mAngle > 45 && mAngle < 135 && mBlueDisplayContext.mActualRotation != Surface.ROTATION_270) {
-						Log.i(LOG_TAG, "Override rotation to 270 degree. Angle=" + mAngle);
+						if (MyLog.isINFO()) {
+							MyLog.i(LOG_TAG, "Override rotation to 270 degree. Angle=" + mAngle);
+						}
 						mBlueDisplayContext.mActualRotation = Surface.ROTATION_270;
 					}
 				}
@@ -124,7 +128,9 @@ public class Sensors implements SensorEventListener {
 		for (Sensor tSensor : tSensorsList) {
 			SensorInfo tSensorInfo = new SensorInfo(tSensor, 3, false);
 			sAvailableSensorList.add(tSensorInfo);
-			Log.i(LOG_TAG, "Sensor found: " + tSensor.toString());
+			if (MyLog.isINFO()) {
+				MyLog.i(LOG_TAG, "Sensor found: " + tSensor.toString());
+			}
 		}
 	}
 
@@ -144,8 +150,8 @@ public class Sensors implements SensorEventListener {
 	 * Activate or deactivate sensor To be called from interpret command
 	 */
 	public void setSensor(int aSensorType, boolean DoActivate, int aSensorRate) {
-		if (BlueDisplay.isINFO()) {
-			Log.i(LOG_TAG, "SetSensor sensor=" + aSensorType + " DoActivate=" + DoActivate + " rate=" + aSensorRate);
+		if (MyLog.isINFO()) {
+			MyLog.i(LOG_TAG, "SetSensor sensor=" + aSensorType + " DoActivate=" + DoActivate + " rate=" + aSensorRate);
 		}
 		for (SensorInfo tSensorInfo : sAvailableSensorList) {
 			if (tSensorInfo.mSensor.getType() == aSensorType) {
@@ -161,11 +167,13 @@ public class Sensors implements SensorEventListener {
 				tSensorInfo.isActive = DoActivate;
 				if (!isOrientationEventListenerEnabled) {
 					if (mOrientationEventListener.canDetectOrientation()) {
-						Log.i(LOG_TAG, "Enable OrientationEventListener");
+						if (MyLog.isINFO()) {
+							MyLog.i(LOG_TAG, "Enable OrientationEventListener");
+						}
 						mOrientationEventListener.enable();
 						isOrientationEventListenerEnabled = true;
 					} else {
-						Log.w(LOG_TAG, "Can't detect orientation");
+						MyLog.w(LOG_TAG, "Can't detect orientation");
 					}
 				}
 			}
@@ -182,8 +190,8 @@ public class Sensors implements SensorEventListener {
 		for (SensorInfo tSensorInfo : sAvailableSensorList) {
 			if (tSensorInfo.isActive) {
 				mSensorManager.registerListener(this, tSensorInfo.mSensor, SensorManager.SENSOR_DELAY_UI);
-				if (BlueDisplay.isDEBUG()) {
-					Log.d(LOG_TAG, "Register listener sensor=" + tSensorInfo.mSensor.getName());
+				if (MyLog.isDEBUG()) {
+					MyLog.d(LOG_TAG, "Register listener sensor=" + tSensorInfo.mSensor.getName());
 				}
 			}
 		}
@@ -203,7 +211,7 @@ public class Sensors implements SensorEventListener {
 	public void onSensorChanged(SensorEvent aEvent) {
 		int tSensorType = aEvent.sensor.getType();
 		if (isSensorEnabledAndEventValuesNotInHistory(aEvent)) {
-			if (BlueDisplay.isVERBOSE()) {
+			if (MyLog.isVERBOSE()) {
 				Log.v(LOG_TAG, "onSensorChanged sensorType=" + tSensorType);
 			}
 			if (tSensorType == Sensor.TYPE_ACCELEROMETER || tSensorType == Sensor.TYPE_GRAVITY
@@ -213,7 +221,7 @@ public class Sensors implements SensorEventListener {
 				float ValueX = aEvent.values[0];
 				float ValueY = aEvent.values[1];
 				float ValueZ = aEvent.values[2];
-				if (BlueDisplay.isVERBOSE()) {
+				if (MyLog.isVERBOSE()) {
 					// timestamp in nanoseconds
 					Log.v(LOG_TAG, "Values=" + ValueX + " " + ValueY + " " + ValueZ + " rotation="
 							+ mBlueDisplayContext.mActualRotation + " TimeStamp=" + aEvent.timestamp / 1000 + "µs");
@@ -237,7 +245,7 @@ public class Sensors implements SensorEventListener {
 
 	@Override
 	public void onAccuracyChanged(Sensor sensor, int accuracy) {
-		Log.i(LOG_TAG, "onAccuracyChanged accuracy=" + accuracy + " sensor=" + sensor);
+		MyLog.i(LOG_TAG, "onAccuracyChanged accuracy=" + accuracy + " sensor=" + sensor);
 	}
 
 }

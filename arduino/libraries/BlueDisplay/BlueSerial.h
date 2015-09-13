@@ -1,11 +1,29 @@
 /*
  * BlueSerial.h
  *
- * @date 01.09.2014
- * @author Armin Joachimsmeyer
- *      Email:   armin.joachimsmeyer@gmail.com
- * @copyright GPL v3 (http://www.gnu.org/licenses/gpl.html)
- * @version 1.0.0
+ *   SUMMARY
+ *  Blue Display is an Open Source Android remote Display for Arduino etc.
+ *  It receives basic draw requests from Arduino etc. over Bluetooth and renders it.
+ *  It also implements basic GUI elements as buttons and sliders.
+ *  GUI callback, touch and sensor events are sent back to Arduino.
+ *
+ *  Copyright (C) 2014  Armin Joachimsmeyer
+ *  armin.joachimsmeyer@gmail.com
+ *
+ *  This file is part of BlueDisplay.
+ *  BlueDisplay is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, either version 3 of the License, or
+ *  (at your option) any later version.
+
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program.  If not, see <http://www.gnu.org/licenses/gpl.html>.
+ *
  *
  *
  * SEND PROTOCOL USED:
@@ -45,10 +63,6 @@
 
 #ifndef BLUE_SERIAL_H_
 #define BLUE_SERIAL_H_
-
-#ifndef USE_SIMPLE_SERIAL
-//#define USE_SIMPLE_SERIAL // outcomment it or better define it for the compiler with -DUSE_SIMPLE_SERIAL
-#endif
 
 #define BAUD_STRING_4800 "4800"
 #define BAUD_STRING_9600 "9600"
@@ -91,16 +105,10 @@ bool USART_isBluetoothPaired(void);
 #define USART_isBluetoothPaired() (true)
 #endif
 
-// Simple blocking serial version without receive buffer and other overhead
-// Remove comment if you want to use it instead of Serial....
-//#define USE_SIMPLE_SERIAL
-
-#ifdef USE_SIMPLE_SERIAL
 extern bool allowTouchInterrupts;
 void initSimpleSerial(uint32_t aBaudRate, bool aUsePairedPin);
 void USART3_send(char aChar);
-#else
-void serialEvent(void);
-#endif
+
+void serialEvent();
 
 #endif /* BLUE_SERIAL_H_ */

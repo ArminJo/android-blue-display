@@ -56,7 +56,7 @@ public class DeviceListActivity extends Activity {
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
-		if (BlueDisplay.isINFO()) {
+		if (MyLog.isINFO()) {
 			Log.i(LOG_TAG, "+++ ON CREATE +++");
 		}
 
@@ -134,7 +134,7 @@ public class DeviceListActivity extends Activity {
 	 * Start device discover with the BluetoothAdapter
 	 */
 	private void doDiscovery() {
-		if (BlueDisplay.isDEBUG()) {
+		if (MyLog.isDEBUG()) {
 			Log.d(LOG_TAG, "doDiscovery()");
 		}
 

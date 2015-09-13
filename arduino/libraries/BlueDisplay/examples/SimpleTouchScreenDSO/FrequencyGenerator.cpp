@@ -60,24 +60,24 @@ static uint8_t sFrequencyFactorIndex; // 0->mHz, 1->Hz, 2->kHz, 3->MHz
 static uint32_t sFrequencyFactorTimes1000;
 static bool is10HzRange = false;
 
-uint8_t TouchButtonFrequencyPage;
-uint8_t TouchButtonFrequencyRanges[NUMBER_OF_FREQUENCY_RANGE_BUTTONS];
-uint8_t ActiveTouchButtonFrequencyRange; // Used to determine which range button is active
+BDButton TouchButtonFrequencyPage;
+BDButton TouchButtonFrequencyRanges[NUMBER_OF_FREQUENCY_RANGE_BUTTONS];
+BDButton ActiveTouchButtonFrequencyRange; // Used to determine which range button is active
 
-uint8_t TouchButtonFirstFixedFrequency;
-uint8_t TouchButtonFrequencyStartStop;
-uint8_t TouchButtonGetFrequency;
+BDButton TouchButtonFirstFixedFrequency;
+BDButton TouchButtonFrequencyStartStop;
+BDButton TouchButtonGetFrequency;
 
-uint8_t TouchSliderFrequency;
+BDSlider TouchSliderFrequency;
 
-void doShowFrequencyPage(uint8_t aTheTouchedButton, int16_t aValue);
+void doShowFrequencyPage(BDButton * aTheTouchedButton, int16_t aValue);
 
-void doFrequencySlider(uint8_t aTheTouchedSlider, int16_t aValue);
+void doFrequencySlider(BDSlider * aTheTouchedSlider, uint16_t aValue);
 
-void doSetFixedFrequency(uint8_t aTheTouchedButton, int16_t aValue);
-void doChangeFrequencyFactor(uint8_t aTheTouchedButton, int16_t aValue);
-void doFrequencyGeneratorStartStop(uint8_t aTheTouchedButton, int16_t aValue);
-void doGetFrequency(uint8_t aTheTouchedButton, int16_t aValue);
+void doSetFixedFrequency(BDButton * aTheTouchedButton, int16_t aValue);
+void doChangeFrequencyRange(BDButton * aTheTouchedButton, int16_t aValue);
+void doFrequencyGeneratorStartStop(BDButton * aTheTouchedButton, int16_t aValue);
+void doGetFrequency(BDButton * aTheTouchedButton, int16_t aValue);
 bool ComputePeriodAndSetTimer(bool aSetSlider);
 void initTimer1(void);
 void setFrequencyFactor(int aIndexValue);
@@ -92,28 +92,27 @@ void initFrequencyGenerator(void) {
 void initFrequencyGeneratorPage(void) {
     setFrequencyFactor(2); // for kHz range
     // Button for chart history (erase color)
-    TouchButtonFrequencyPage = BlueDisplay1.createButtonPGM(0, DISPLAY_HEIGHT - (BUTTON_HEIGHT_4 + BUTTON_DEFAULT_SPACING),
-    BUTTON_WIDTH_3, BUTTON_HEIGHT_4 + BUTTON_DEFAULT_SPACING, COLOR_RED, PSTR("Frequency"), TEXT_SIZE_11,
-            BUTTON_FLAG_DO_BEEP_ON_TOUCH, 0, &doShowFrequencyPage);
+    TouchButtonFrequencyPage.initPGM(0, BUTTON_HEIGHT_4_256_LINE_4,
+    BUTTON_WIDTH_3, BUTTON_HEIGHT_4_256, COLOR_RED, PSTR("Frequency"), TEXT_SIZE_11, BUTTON_FLAG_DO_BEEP_ON_TOUCH, 0,
+            &doShowFrequencyPage);
 
-    TouchSliderFrequency = BlueDisplay1.createSlider(FREQ_SLIDER_X, FREQ_SLIDER_Y, FREQ_SLIDER_SIZE, FREQ_SLIDER_MAX_VALUE,
+    TouchSliderFrequency.init(FREQ_SLIDER_X, FREQ_SLIDER_Y, FREQ_SLIDER_SIZE, FREQ_SLIDER_MAX_VALUE,
     FREQ_SLIDER_MAX_VALUE, 0, COLOR_BLUE, COLOR_GREEN, TOUCHSLIDER_SHOW_BORDER | TOUCHSLIDER_IS_HORIZONTAL, &doFrequencySlider);
 
 // Fixed frequency buttons next
     uint16_t tXPos = 0;
-    uint8_t tButtonIndex;
     uint16_t tFrequency;
     const uint16_t * tFrequencyPtr = &Frequency[0];
     for (uint8_t i = 0; i < NUMBER_OF_FIXED_FREQUENCY_BUTTONS; ++i) {
         tFrequency = pgm_read_word(tFrequencyPtr);
         sprintf_P(StringBuffer, PSTR("%u"), tFrequency);
-        tButtonIndex = BlueDisplay1.createButton(tXPos,
-                DISPLAY_HEIGHT - BUTTON_HEIGHT_4 - BUTTON_HEIGHT_5 - BUTTON_HEIGHT_6 - 2 * BUTTON_DEFAULT_SPACING, BUTTON_WIDTH_10,
-                BUTTON_HEIGHT_6, COLOR_BLUE, StringBuffer, TEXT_SIZE_11, 0, tFrequency, &doSetFixedFrequency);
+        TouchButtonFirstFixedFrequency.init(tXPos,
+                DISPLAY_HEIGHT - BUTTON_HEIGHT_4 - BUTTON_HEIGHT_5 - BUTTON_HEIGHT_6 - 2 * BUTTON_DEFAULT_SPACING,
+                BUTTON_WIDTH_10, BUTTON_HEIGHT_6, COLOR_BLUE, StringBuffer, TEXT_SIZE_11, 0, tFrequency, &doSetFixedFrequency);
         tXPos += BUTTON_WIDTH_10 + BUTTON_DEFAULT_SPACING_QUARTER;
         tFrequencyPtr++;
     }
-    TouchButtonFirstFixedFrequency = tButtonIndex - NUMBER_OF_FIXED_FREQUENCY_BUTTONS + 1;
+    TouchButtonFirstFixedFrequency.mButtonHandle -= NUMBER_OF_FIXED_FREQUENCY_BUTTONS - 1;
 
     // Range next
     tXPos = 0;
@@ -123,20 +122,20 @@ void initFrequencyGeneratorPage(void) {
         if (i == BUTTON_INDEX_SELECTED_INITIAL) {
             tButtonColor = BUTTON_AUTO_RED_GREEN_TRUE_COLOR;
         }
-        TouchButtonFrequencyRanges[i] = BlueDisplay1.createButtonPGM(tXPos, tYPos, BUTTON_WIDTH_5 + BUTTON_DEFAULT_SPACING_HALF,
+        TouchButtonFrequencyRanges[i].initPGM(tXPos, tYPos, BUTTON_WIDTH_5 + BUTTON_DEFAULT_SPACING_HALF,
         BUTTON_HEIGHT_5, tButtonColor, FrequencyButtonStrings[i],
-        TEXT_SIZE_22, BUTTON_FLAG_DO_BEEP_ON_TOUCH, i, &doChangeFrequencyFactor);
+        TEXT_SIZE_22, BUTTON_FLAG_DO_BEEP_ON_TOUCH, i, &doChangeFrequencyRange);
         if (i == BUTTON_INDEX_SELECTED_INITIAL) {
             ActiveTouchButtonFrequencyRange = TouchButtonFrequencyRanges[i];
         }
         tXPos += BUTTON_WIDTH_5 + BUTTON_DEFAULT_SPACING - 2;
     }
 
-    TouchButtonFrequencyStartStop = BlueDisplay1.createButtonPGM(0, BUTTON_HEIGHT_4_LINE_4, BUTTON_WIDTH_3, BUTTON_HEIGHT_4,
+    TouchButtonFrequencyStartStop.initPGM(0, LAYOUT_256_HEIGHT - BUTTON_HEIGHT_4, BUTTON_WIDTH_3, BUTTON_HEIGHT_4,
     COLOR_GREEN, StringStop, TEXT_SIZE_22, BUTTON_FLAG_DO_BEEP_ON_TOUCH | BUTTON_FLAG_TYPE_AUTO_RED_GREEN, true,
             &doFrequencyGeneratorStartStop);
 
-    TouchButtonGetFrequency = BlueDisplay1.createButtonPGM(BUTTON_WIDTH_3_POS_2, BUTTON_HEIGHT_4_LINE_4, BUTTON_WIDTH_3,
+    TouchButtonGetFrequency.initPGM(BUTTON_WIDTH_3_POS_2, LAYOUT_256_HEIGHT - BUTTON_HEIGHT_4, BUTTON_WIDTH_3,
     BUTTON_HEIGHT_4, COLOR_BLUE, PSTR("Hz..."), TEXT_SIZE_22, BUTTON_FLAG_DO_BEEP_ON_TOUCH, true, &doGetFrequency);
 }
 
@@ -158,28 +157,28 @@ void drawFrequencyGeneratorPage(void) {
     BlueDisplay1.deactivateAllButtons();
     BlueDisplay1.deactivateAllSliders();
 
-    BlueDisplay1.drawButton(TouchButtonBack);
+    TouchButtonBack.drawButton();
 
-    BlueDisplay1.drawSlider(TouchSliderFrequency);
+    TouchSliderFrequency.drawSlider();
     BlueDisplay1.drawTextPGM(TEXT_SIZE_11_WIDTH, FREQ_SLIDER_Y + 3 * FREQ_SLIDER_SIZE + TEXT_SIZE_11_HEIGHT, PSTR("1"),
     TEXT_SIZE_11, COLOR_BLUE, COLOR_BACKGROUND_FREQ);
     BlueDisplay1.drawTextPGM(DISPLAY_WIDTH - 5 * TEXT_SIZE_11_WIDTH, FREQ_SLIDER_Y + 3 * FREQ_SLIDER_SIZE + TEXT_SIZE_11_HEIGHT,
             PSTR("1000"), TEXT_SIZE_11, COLOR_BLUE, COLOR_BACKGROUND_FREQ);
 
-    for (uint8_t i = TouchButtonFirstFixedFrequency; i < TouchButtonFirstFixedFrequency + NUMBER_OF_FIXED_FREQUENCY_BUTTONS; ++i) {
-        BlueDisplay1.drawButton(i);
-    }
-
-    for (uint8_t i = TouchButtonFirstFixedFrequency; i < TouchButtonFirstFixedFrequency + NUMBER_OF_FIXED_FREQUENCY_BUTTONS; ++i) {
-        BlueDisplay1.drawButton(i);
+    // fixed frequency buttons
+    // we know that the buttons handles are increasing numbers
+    BDButton tButton(TouchButtonFirstFixedFrequency);
+    for (uint8_t i = 0; i < NUMBER_OF_FIXED_FREQUENCY_BUTTONS; ++i) {
+        tButton.drawButton();
+        tButton.mButtonHandle++;
     }
 
     for (uint8_t i = 0; i < NUMBER_OF_FREQUENCY_RANGE_BUTTONS; ++i) {
-        BlueDisplay1.drawButton(TouchButtonFrequencyRanges[i]);
+        TouchButtonFrequencyRanges[i].drawButton();
     }
 
-    BlueDisplay1.drawButton(TouchButtonFrequencyStartStop);
-    BlueDisplay1.drawButton(TouchButtonGetFrequency);
+    TouchButtonFrequencyStartStop.drawButton();
+    TouchButtonGetFrequency.drawButton();
 
     // show values
     ComputePeriodAndSetTimer(true);
@@ -188,7 +187,7 @@ void drawFrequencyGeneratorPage(void) {
 /**
  * show gui of settings screen
  */
-void doShowFrequencyPage(uint8_t aTheTouchedButton, int16_t aValue) {
+void doShowFrequencyPage(BDButton * aTheTouchedButton, int16_t aValue) {
     startFrequencyGeneratorPage();
 }
 
@@ -196,11 +195,11 @@ void doShowFrequencyPage(uint8_t aTheTouchedButton, int16_t aValue) {
  * changes the unit (mHz - MHz)
  * set color for old and new button
  */
-void doChangeFrequencyFactor(uint8_t aTheTouchedButton, int16_t aValue) {
-    if (ActiveTouchButtonFrequencyRange != aTheTouchedButton) {
-        BlueDisplay1.setButtonColorAndDraw(ActiveTouchButtonFrequencyRange, BUTTON_AUTO_RED_GREEN_FALSE_COLOR);
-        ActiveTouchButtonFrequencyRange = aTheTouchedButton;
-        BlueDisplay1.setButtonColorAndDraw(aTheTouchedButton, BUTTON_AUTO_RED_GREEN_TRUE_COLOR);
+void doChangeFrequencyRange(BDButton * aTheTouchedButton, int16_t aValue) {
+    if (ActiveTouchButtonFrequencyRange != *aTheTouchedButton) {
+        ActiveTouchButtonFrequencyRange.setButtonColorAndDraw( BUTTON_AUTO_RED_GREEN_FALSE_COLOR);
+        ActiveTouchButtonFrequencyRange = *aTheTouchedButton;
+        aTheTouchedButton->setButtonColorAndDraw( BUTTON_AUTO_RED_GREEN_TRUE_COLOR);
         // Handling of 10 Hz button
         if (aValue == INDEX_OF_10HZ) {
             is10HzRange = true;
@@ -218,7 +217,7 @@ void doChangeFrequencyFactor(uint8_t aTheTouchedButton, int16_t aValue) {
 /**
  * Set frequency to fixed value 1,2,5,10...,1000
  */
-void doSetFixedFrequency(uint8_t aTheTouchedButton, int16_t aValue) {
+void doSetFixedFrequency(BDButton * aTheTouchedButton, int16_t aValue) {
     sFrequency = aValue;
     BlueDisplay1.playFeedbackTone(ComputePeriodAndSetTimer(true));
 }
@@ -244,25 +243,25 @@ void doSetFrequency(float aValue) {
 /**
  * Request frequency numerical
  */
-void doGetFrequency(uint8_t aTheTouchedButton, int16_t aValue) {
+void doGetFrequency(BDButton * aTheTouchedButton, int16_t aValue) {
     BlueDisplay1.getNumberWithShortPromptPGM(&doSetFrequency, PSTR("frequency [Hz]"));
 }
 
-void doFrequencyGeneratorStartStop(uint8_t aTheTouchedButton, int16_t aValue) {
+void doFrequencyGeneratorStartStop(BDButton * aTheTouchedButton, int16_t aValue) {
     aValue = !aValue;
     if (aValue) {
         // Start timer and print green stop button
-        BlueDisplay1.setButtonCaptionPGM(TouchButtonFrequencyStartStop, StringStop, false);
+        TouchButtonFrequencyStartStop.setCaptionPGM(StringStop);
         ComputePeriodAndSetTimer(true);
     } else {
         // Stop timer and print red start button
-        BlueDisplay1.setButtonCaptionPGM(TouchButtonFrequencyStartStop, PSTR("Start"), false);
+        TouchButtonFrequencyStartStop.setCaptionPGM(PSTR("Start"));
         TCCR1B &= ~TIMER_PRESCALER_MASK;
     }
-    BlueDisplay1.setButtonValueAndDraw(TouchButtonFrequencyStartStop, aValue);
+    TouchButtonFrequencyStartStop.setValueAndDraw(aValue);
 }
 
-void doFrequencySlider(uint8_t aTheTouchedSlider, int16_t aValue) {
+void doFrequencySlider(BDSlider * aTheTouchedSlider, uint16_t aValue) {
     float tValue = aValue;
     tValue = tValue / (FREQ_SLIDER_MAX_VALUE / 3); // gives 0-3
     // 950 byte program space needed for pow() and log10f()
@@ -374,7 +373,7 @@ bool ComputePeriodAndSetTimer(bool aSetSlider) {
     sSliderValue = log10(tFrequency) * 100;
     if (aSetSlider) {
         // 950 byte program space needed for pow() and log10f()
-        BlueDisplay1.setSliderActualValueAndDraw(TouchSliderFrequency, sSliderValue);
+        TouchSliderFrequency.setActualValueAndDrawBar(sSliderValue);
     }
     return tIsError;
 }

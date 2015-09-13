@@ -39,7 +39,7 @@ public class BlueDisplayPreferences extends PreferenceActivity implements OnShar
 		}
 		tTitle += tValueSeparator + aPreference.getEntry();
 		aPreference.setTitle(tTitle);
-		if (BlueDisplay.isVERBOSE()) {
+		if (MyLog.isVERBOSE()) {
 			Log.v(LOG_TAG, "Changing title to " + tTitle);
 		}
 	}
@@ -47,7 +47,7 @@ public class BlueDisplayPreferences extends PreferenceActivity implements OnShar
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
-		if (BlueDisplay.isINFO()) {
+		if (MyLog.isINFO()) {
 			Log.i(LOG_TAG, " +++ ON CREATE +++");
 		}
 		// Load the preferences from an XML resource
@@ -69,7 +69,7 @@ public class BlueDisplayPreferences extends PreferenceActivity implements OnShar
 	@Override
 	protected void onResume() {
 		super.onResume();
-		if (BlueDisplay.isINFO()) {
+		if (MyLog.isINFO()) {
 			Log.i(LOG_TAG, " + ON RESUME +");
 		}
 		// Set up a listener whenever a key changes
@@ -79,7 +79,7 @@ public class BlueDisplayPreferences extends PreferenceActivity implements OnShar
 	@Override
 	protected void onPause() {
 		super.onPause();
-		if (BlueDisplay.isINFO()) {
+		if (MyLog.isINFO()) {
 			Log.i(LOG_TAG, " - ON PAUSE -");
 		}
 		// Unregister the listener whenever a key changes

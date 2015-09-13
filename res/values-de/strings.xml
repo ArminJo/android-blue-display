@@ -15,7 +15,12 @@
     <string name="menu_show_font_testpage">Font Testseite</string>
     <string name="menu_show_graph_testpage">Grafik Testseite</string>
     <string name="menu_show_statistics">Statistik</string>
+    <string name="menu_show_log">Log anzeigen</string>
     <string name="menu_about">Über</string>
+
+    <!-- LogView -->
+    <string name="message_clear">Alle Einträge jetzt löschen?</string>
+    <string name="button_clear">Alle Einträge löschen</string>
 
     <!-- Input data -->
     <string name="title_input_data">(Fliesskomma) Zahl eingeben</string>

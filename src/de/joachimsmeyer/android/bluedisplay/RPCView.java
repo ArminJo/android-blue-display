@@ -60,7 +60,7 @@ import android.widget.Toast;
 
 public class RPCView extends View {
 
-	public static final String LOG_TAG = "BlueRPCView";
+	public static final String LOG_TAG = "BD";
 
 	BlueDisplay mBlueDisplayContext;
 
@@ -263,7 +263,7 @@ public class RPCView extends View {
 	/*
 	 * Action code to action string mappings for log output
 	 */
-	public static final SparseArray<String> sActionMappings = new SparseArray<String>(16);
+	public static final SparseArray<String> sActionMappings = new SparseArray<String>(20);
 
 	static {
 		sActionMappings.put(MotionEvent.ACTION_DOWN, "down");
@@ -276,6 +276,7 @@ public class RPCView extends View {
 		sActionMappings.put(BluetoothSerialService.EVENT_TAG_FIRST_CALLBACK_ACTION, "first");
 		sActionMappings.put(BluetoothSerialService.EVENT_TAG_BUTTON_CALLBACK_ACTION, "button");
 		sActionMappings.put(BluetoothSerialService.EVENT_TAG_SLIDER_CALLBACK_ACTION, "slider");
+
 		sActionMappings.put(BluetoothSerialService.EVENT_TAG_SWIPE_CALLBACK_ACTION, "swipe");
 		sActionMappings.put(BluetoothSerialService.EVENT_TAG_NUMBER_CALLBACK, "number");
 		sActionMappings.put(BluetoothSerialService.EVENT_TAG_FIRST_SENSOR_ACTION_CODE + Sensor.TYPE_ACCELEROMETER, "Accelerometer");
@@ -290,14 +291,14 @@ public class RPCView extends View {
 		float tMaxHeightFactor = (float) mActualViewHeight / mRequestedCanvasHeight;
 		float tMaxWidthFactor = (float) mActualViewWidth / mRequestedCanvasWidth;
 		mMaxScaleFactor = Math.min(tMaxHeightFactor, tMaxWidthFactor);
-		if (BlueDisplay.isDEBUG()) {
-			Log.v(LOG_TAG, "MaxScaleFactor=" + mMaxScaleFactor);
+		if (MyLog.isDEBUG()) {
+			MyLog.d(LOG_TAG, "MaxScaleFactor=" + mMaxScaleFactor);
 		}
 	}
 
 	public RPCView(Context aContext, Handler aHandler) {
 		super(aContext);
-		if (BlueDisplay.isINFO()) {
+		if (MyLog.isINFO()) {
 			Log.i(LOG_TAG, "+++ ON CREATE +++");
 		}
 
@@ -322,11 +323,12 @@ public class RPCView extends View {
 		mTextPrintPaint.setTextSize(11);
 		mTextPrintPaint.setColor(Color.BLACK);
 
+		// For output of touch coordinates
 		mInfoPaint = new Paint();
 		mInfoPaint.setTypeface(Typeface.MONOSPACE);
 		mInfoPaint.setStyle(Paint.Style.FILL);
 		mInfoPaint.setTextSize(22);
-		mInfoPaint.setColor(Color.WHITE);
+		mInfoPaint.setColor(Color.BLACK);
 
 		mTextBackgroundPaint = new Paint();
 		mTextBackgroundPaint.setStrokeWidth(1);
@@ -366,7 +368,7 @@ public class RPCView extends View {
 	@Override
 	public void onSizeChanged(int aWidth, int aHeight, int aOldWidth, int aOldHeight) {
 		// Is called on start and on changing orientation
-		if (BlueDisplay.isINFO()) {
+		if (MyLog.isINFO()) {
 			Log.i(LOG_TAG, "++ ON SizeChanged width=" + aWidth + " height=" + aHeight + " old width=" + aOldWidth + " old height="
 					+ aOldHeight);
 		}
@@ -385,7 +387,7 @@ public class RPCView extends View {
 
 	@Override
 	protected void onDraw(Canvas canvas) {
-		if (BlueDisplay.isVERBOSE()) {
+		if (MyLog.isVERBOSE()) {
 			Log.v(LOG_TAG, "+ ON Draw +");
 		}
 		if (mBlueDisplayContext.mSerialService != null) {
@@ -421,8 +423,8 @@ public class RPCView extends View {
 
 		int tMaskedAction = aEvent.getActionMasked();
 
-		if (BlueDisplay.isVERBOSE()) {
-			Log.v(LOG_TAG, "TouchEvent action=" + tMaskedAction);
+		if (MyLog.isVERBOSE()) {
+			MyLog.v(LOG_TAG, "TouchEvent action=" + tMaskedAction);
 		}
 		// process event also by scale detector
 		mScaleDetector.onTouchEvent(aEvent);
@@ -463,13 +465,13 @@ public class RPCView extends View {
 		case MotionEvent.ACTION_UP:
 		case MotionEvent.ACTION_CANCEL:
 		default:
+			mTouchIsActive = false;
+			mMultiTouchDetected = false;
 			if (mSkipProcessingUntilTouchUp) {
 				mSkipProcessingUntilTouchUp = false;
 				mTouchStartsOnButtonNumber = -1;
 				return true;
 			}
-			mTouchIsActive = false;
-			mMultiTouchDetected = false;
 			break;
 		}
 
@@ -529,8 +531,11 @@ public class RPCView extends View {
 			if (tMaskedAction == MotionEvent.ACTION_DOWN || (tMaskedAction == MotionEvent.ACTION_MOVE && mTouchStartsOnSlider)) {
 				boolean tMatch = TouchSlider.checkAllSliders((int) (aEvent.getX() / mScaleFactor + 0.5), (int) (aEvent.getY()
 						/ mScaleFactor + 0.5));
-				if (tMatch && tMaskedAction == MotionEvent.ACTION_DOWN) {
-					mTouchStartsOnSlider = true;
+				if (tMatch) {
+					invalidate(); // show new slider bar value
+					if (tMaskedAction == MotionEvent.ACTION_DOWN) {
+						mTouchStartsOnSlider = true;
+					}
 				}
 			}
 
@@ -619,8 +624,8 @@ public class RPCView extends View {
 				mTouchScaleFactor = mMaxScaleFactor;
 			}
 
-			if (BlueDisplay.isINFO()) {
-				Log.i(LOG_TAG, "TouchScaleFactor=" + mTouchScaleFactor + " detector factor=" + tTempScaleFactor
+			if (MyLog.isVERBOSE()) {
+				MyLog.v(LOG_TAG, "TouchScaleFactor=" + mTouchScaleFactor + " detector factor=" + tTempScaleFactor
 						+ " MaxScaleFactor=" + mMaxScaleFactor);
 			}
 
@@ -648,7 +653,7 @@ public class RPCView extends View {
 
 		@Override
 		public boolean onDown(MotionEvent e) {
-			if (BlueDisplay.isINFO()) {
+			if (MyLog.isINFO()) {
 				Log.i(LOG_TAG, "onDown");
 			}
 			return true;
@@ -656,7 +661,7 @@ public class RPCView extends View {
 
 		@Override
 		public boolean onScroll(MotionEvent e1, MotionEvent e2, float distanceX, float distanceY) {
-			if (BlueDisplay.isINFO()) {
+			if (MyLog.isINFO()) {
 				Log.i(LOG_TAG, "onScroll distanceX=" + distanceX + " Y=" + distanceY);
 			}
 			return true;
@@ -664,14 +669,14 @@ public class RPCView extends View {
 
 		@Override
 		public void onLongPress(MotionEvent e) {
-			if (BlueDisplay.isINFO()) {
+			if (MyLog.isINFO()) {
 				Log.i(LOG_TAG, "onLongPress");
 			}
 		}
 
 		@Override
 		public boolean onSingleTapUp(MotionEvent e) {
-			if (BlueDisplay.isINFO()) {
+			if (MyLog.isINFO()) {
 				Log.i(LOG_TAG, "onSingleTapUp");
 			}
 			return true;
@@ -679,7 +684,7 @@ public class RPCView extends View {
 
 		@Override
 		public boolean onSingleTapConfirmed(MotionEvent e) {
-			if (BlueDisplay.isINFO()) {
+			if (MyLog.isINFO()) {
 				Log.i(LOG_TAG, "onSingleTapConfirmed");
 			}
 			// true if the event is consumed, else false
@@ -688,7 +693,7 @@ public class RPCView extends View {
 
 		@Override
 		public boolean onDoubleTap(MotionEvent e) {
-			if (BlueDisplay.isINFO()) {
+			if (MyLog.isINFO()) {
 				Log.i(LOG_TAG, "onDoubleTap");
 			}
 			// true if the event is consumed, else false
@@ -764,8 +769,8 @@ public class RPCView extends View {
 
 		mGraphPaintStrokeScaleFactor.setStrokeWidth(mScaleFactor);
 
-		if (BlueDisplay.isINFO()) {
-			Log.i(LOG_TAG, "setScaleFactor(" + aScaleFactor + ") old factor=" + tOldFactor + " resulting factor=" + mScaleFactor);
+		if (MyLog.isINFO()) {
+			MyLog.i(LOG_TAG, "setScaleFactor(" + aScaleFactor + ") old factor=" + tOldFactor + " resulting factor=" + mScaleFactor);
 		}
 		if (tOldFactor != mScaleFactor) {
 			invalidate();
@@ -802,7 +807,7 @@ public class RPCView extends View {
 	}
 
 	int printNewline() {
-		int tPrintY = mTextPrintTextActualPosY + mTextPrintTextSize;
+		int tPrintY = mTextPrintTextActualPosY + mTextPrintTextSize + 1; // for space between lines otherwise we see "g" truncated
 		if (tPrintY >= mRequestedCanvasHeight) {
 			// wrap around to top of screen
 			tPrintY = 0;
@@ -817,13 +822,13 @@ public class RPCView extends View {
 	public void interpretCommand(int aCommand, int[] aParameters, int aParamsLength, byte[] aDataBytes, int[] aDataInts,
 			int aDataLength) {
 
-		if (BlueDisplay.isVERBOSE()) {
+		if (MyLog.isVERBOSE()) {
 			StringBuilder tParam = new StringBuilder("cmd=0x" + Integer.toHexString(aCommand) + " / " + aCommand);
 			for (int i = 0; i < aParamsLength; i++) {
 				tParam.append(" ").append(i).append("=").append(aParameters[i]);
 			}
 			tParam.append(" data length=" + aDataLength);
-			Log.v(LOG_TAG, tParam.toString());
+			MyLog.v(LOG_TAG, tParam.toString());
 		}
 		if ((aCommand >= FIRST_FUNCTION_TAG_BUTTON && aCommand <= LAST_FUNCTION_TAG_BUTTON)
 				|| aCommand >= FIRST_FUNCTION_TAG_BUTTON_WITH_DATA && aCommand <= LAST_FUNCTION_TAG_BUTTON_WITH_DATA) {
@@ -870,8 +875,8 @@ public class RPCView extends View {
 					mToneGenerator = new ToneGenerator(AudioManager.STREAM_SYSTEM, ToneGenerator.MAX_VOLUME);
 				}
 				mToneGenerator.startTone(tTone);
-				if (BlueDisplay.isINFO()) {
-					Log.i(LOG_TAG, "Play tone type=" + tTone);
+				if (MyLog.isINFO()) {
+					MyLog.i(LOG_TAG, "Play tone type=" + tTone);
 				}
 				break;
 
@@ -889,8 +894,8 @@ public class RPCView extends View {
 					myConvertChars(aDataBytes, sCharsArray, aDataLength);
 					tStringParameter = new String(sCharsArray, 0, aDataLength);
 				}
-				if (BlueDisplay.isINFO()) {
-					Log.i(LOG_TAG, "Get " + tFunctionName + " callback=0x" + Integer.toHexString(aParameters[0]) + " String=\""
+				if (MyLog.isINFO()) {
+					MyLog.i(LOG_TAG, "Get " + tFunctionName + " callback=0x" + Integer.toHexString(aParameters[0]) + " String=\""
 							+ tStringParameter + "\"");
 				}
 				// Send request for number input to the UI Activity
@@ -909,14 +914,14 @@ public class RPCView extends View {
 				switch (tSubcommand) {
 				case SET_FLAGS_AND_SIZE:
 					if (aParameters[1] < 10 || aParameters[2] < 10) {
-						Log.e(LOG_TAG, "Set flags=0x" + Integer.toHexString(aParameters[1]) + " and canvas size=" + aParameters[2]
-								+ "/" + aParameters[3] + ". Size parameter values to small -> return.");
+						MyLog.e(LOG_TAG, "Set flags=0x" + Integer.toHexString(aParameters[1]) + " and canvas size="
+								+ aParameters[2] + "/" + aParameters[3] + ". Size parameter values to small -> return.");
 						return;
 					}
 					// set canvas size
-					if (BlueDisplay.isINFO()) {
-						Log.i(LOG_TAG, "Set flags=0x" + Integer.toHexString(aParameters[1]) + " and canvas size=" + aParameters[2]
-								+ "/" + aParameters[3]);
+					if (MyLog.isINFO()) {
+						MyLog.i(LOG_TAG, "Set flags=0x" + Integer.toHexString(aParameters[1]) + " and canvas size="
+								+ aParameters[2] + "/" + aParameters[3]);
 					}
 					mRequestedCanvasWidth = aParameters[2];
 					mRequestedCanvasHeight = aParameters[3];
@@ -925,8 +930,8 @@ public class RPCView extends View {
 					break;
 
 				case SET_CODEPAGE:
-					if (BlueDisplay.isINFO()) {
-						Log.i(LOG_TAG, "Set codepage=ISO_8859_" + aParameters[1]);
+					if (MyLog.isINFO()) {
+						MyLog.i(LOG_TAG, "Set codepage=ISO_8859_" + aParameters[1]);
 					}
 					String tCharsetName = "ISO_8859_" + aParameters[1];
 					Charset tCharset = Charset.forName(tCharsetName);
@@ -941,8 +946,8 @@ public class RPCView extends View {
 
 				case SET_CHARACTER_CODE_MAPPING:
 					tIndex = aParameters[1] - 0x80;
-					if (BlueDisplay.isINFO()) {
-						Log.i(LOG_TAG, "Set character mapping=" + mCharMappingArray[tIndex] + "->" + (char) aParameters[2]
+					if (MyLog.isINFO()) {
+						MyLog.i(LOG_TAG, "Set character mapping=" + mCharMappingArray[tIndex] + "->" + (char) aParameters[2]
 								+ " / 0x" + Integer.toHexString(aParameters[1]) + "-> 0x" + Integer.toHexString(aParameters[2]));
 					}
 					if (tIndex >= 0 && tIndex < mCharMappingArray.length) {
@@ -958,8 +963,8 @@ public class RPCView extends View {
 						mLongTouchDownTimeoutMillis = aParameters[1];
 						mIsLongTouchEnabled = true;
 					}
-					if (BlueDisplay.isINFO()) {
-						Log.i(LOG_TAG, "Long touch-down timeout=" + mLongTouchDownTimeoutMillis);
+					if (MyLog.isINFO()) {
+						MyLog.i(LOG_TAG, "Long touch-down timeout=" + mLongTouchDownTimeoutMillis);
 					}
 					break;
 
@@ -972,15 +977,15 @@ public class RPCView extends View {
 							tNewOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
 						}
 						mBlueDisplayContext.setActualScreenOrientation(tNewOrientation, true);
-						if (BlueDisplay.isINFO()) {
-							Log.i(LOG_TAG, "Locked screen orientation to actual orientation="
+						if (MyLog.isINFO()) {
+							MyLog.i(LOG_TAG, "Locked screen orientation to actual orientation="
 									+ mBlueDisplayContext.mActualScreenOrientationString);
 						}
 					} else {
 						// unlock
 						mBlueDisplayContext.setActualScreenOrientation(mBlueDisplayContext.mPreferredScreenOrientation, true);
-						if (BlueDisplay.isINFO()) {
-							Log.i(LOG_TAG, "Unlocked screen orientation to preferred orientation="
+						if (MyLog.isINFO()) {
+							MyLog.i(LOG_TAG, "Unlocked screen orientation to preferred orientation="
 									+ mBlueDisplayContext.mActualScreenOrientationString);
 						}
 					}
@@ -988,7 +993,7 @@ public class RPCView extends View {
 					break;
 
 				default:
-					Log.e(LOG_TAG, "Global settings: unknown subcommand 0x" + Integer.toHexString(tSubcommand)
+					MyLog.e(LOG_TAG, "Global settings: unknown subcommand 0x" + Integer.toHexString(tSubcommand)
 							+ " received. paramsLength=" + aParamsLength + " dataLenght=" + aDataLength);
 					break;
 
@@ -1008,8 +1013,8 @@ public class RPCView extends View {
 					} else {
 						mTextPrintDoClearScreenOnWrap = false;
 					}
-					if (BlueDisplay.isINFO()) {
-						Log.i(LOG_TAG, "Set printf size=" + aParameters[1] + " color=" + shortToColorString(aParameters[2])
+					if (MyLog.isINFO()) {
+						MyLog.i(LOG_TAG, "Set printf size=" + aParameters[1] + " color=" + shortToColorString(aParameters[2])
 								+ " backgroundcolor=" + shortToColorString(aParameters[3]) + " clearOnWrap="
 								+ mTextPrintDoClearScreenOnWrap);
 					}
@@ -1018,8 +1023,8 @@ public class RPCView extends View {
 				case WRITE_FLAG_SET_POSITION:
 					mTextPrintTextActualPosX = aParameters[1];
 					mTextPrintTextActualPosY = aParameters[2];
-					if (BlueDisplay.isINFO()) {
-						Log.i(LOG_TAG, "Set printf start position to: " + mTextPrintTextActualPosX + " / "
+					if (MyLog.isINFO()) {
+						MyLog.i(LOG_TAG, "Set printf start position to: " + mTextPrintTextActualPosX + " / "
 								+ mTextPrintTextActualPosY);
 					}
 					break;
@@ -1027,14 +1032,14 @@ public class RPCView extends View {
 				case WRITE_FLAG_SET_LINE_COLUMN:
 					mTextPrintTextActualPosX = (int) (aParameters[1] * mTextPrintTextSize * 0.6);
 					mTextPrintTextActualPosY = aParameters[2] * mTextPrintTextSize;
-					if (BlueDisplay.isINFO()) {
-						Log.i(LOG_TAG, "Set printf start position to: " + aParameters[1] + " / " + aParameters[2] + " = "
+					if (MyLog.isINFO()) {
+						MyLog.i(LOG_TAG, "Set printf start position to: " + aParameters[1] + " / " + aParameters[2] + " = "
 								+ mTextPrintTextActualPosX + " / " + mTextPrintTextActualPosY);
 					}
 					break;
 
 				default:
-					Log.e(LOG_TAG, "Write settings: unknown subcommand 0x" + Integer.toHexString(tSubcommand)
+					MyLog.e(LOG_TAG, "Write settings: unknown subcommand 0x" + Integer.toHexString(tSubcommand)
 							+ " received. paramsLength=" + aParamsLength + " dataLenght=" + aDataLength);
 				}
 				break;
@@ -1050,8 +1055,8 @@ public class RPCView extends View {
 
 			case FUNCTION_TAG_CLEAR_DISPLAY:
 				// clear screen
-				if (BlueDisplay.isDEBUG()) {
-					Log.d(LOG_TAG, "Clear screen color= " + shortToColorString(aParameters[0]));
+				if (MyLog.isDEBUG()) {
+					MyLog.d(LOG_TAG, "Clear screen color= " + shortToColorString(aParameters[0]));
 				}
 				mCanvas.drawColor(shortToLongColor(aParameters[0]));
 				// reset screen buffer
@@ -1060,8 +1065,8 @@ public class RPCView extends View {
 
 			case FUNCTION_TAG_DRAW_PIXEL:
 				mGraphPaintStrokeScaleFactor.setColor(shortToLongColor(aParameters[2]));
-				if (BlueDisplay.isDEBUG()) {
-					Log.d(LOG_TAG, "drawPixel(" + aParameters[0] + ", " + aParameters[1] + ") color= "
+				if (MyLog.isDEBUG()) {
+					MyLog.d(LOG_TAG, "drawPixel(" + aParameters[0] + ", " + aParameters[1] + ") color= "
 							+ shortToColorString(aParameters[2]));
 				}
 				mCanvas.drawPoint(tXStart, tYStart, mGraphPaintStrokeScaleFactor);
@@ -1085,7 +1090,7 @@ public class RPCView extends View {
 					// Stroke parameter
 					mGraphPaintStrokeSettable.setStrokeWidth(aParameters[5] * mScaleFactor);
 					tResultingPaint = mGraphPaintStrokeSettable;
-					if (BlueDisplay.isDEBUG()) {
+					if (MyLog.isDEBUG()) {
 						tAdditionalInfo = " strokeWidth=" + aParameters[5] * mScaleFactor;
 					}
 				} else {
@@ -1098,8 +1103,8 @@ public class RPCView extends View {
 				} else {
 					mCanvas.drawLine(tXStart, tYStart, tXEnd, tYEnd, tResultingPaint);
 				}
-				if (BlueDisplay.isDEBUG()) {
-					Log.d(LOG_TAG, tFunctionName + "(" + aParameters[0] + ", " + aParameters[1] + ", " + aParameters[2] + ", "
+				if (MyLog.isDEBUG()) {
+					MyLog.d(LOG_TAG, tFunctionName + "(" + aParameters[0] + ", " + aParameters[1] + ", " + aParameters[2] + ", "
 							+ aParameters[3] + ") color= " + shortToColorString(tColor) + tAdditionalInfo);
 				}
 				break;
@@ -1116,13 +1121,13 @@ public class RPCView extends View {
 				tColor = shortToLongColor(aParameters[2]);
 				int tDeleteColor = shortToLongColor(aParameters[3]);
 
-				if (BlueDisplay.isDEBUG()) {
+				if (MyLog.isDEBUG()) {
 					if (aCommand == FUNCTION_TAG_DRAW_CHART) {
 						tFunctionName = "drawChart";
 					} else {
 						tFunctionName = "drawChartWithoutDirectRendering";
 					}
-					Log.d(LOG_TAG, tFunctionName + "(" + aParameters[0] + ", " + (aParameters[1] & 0x0FFF) + ") color= "
+					MyLog.d(LOG_TAG, tFunctionName + "(" + aParameters[0] + ", " + (aParameters[1] & 0x0FFF) + ") color= "
 							+ shortToColorString(tColor) + " ,deleteColor= " + shortToColorString(tDeleteColor) + " lenght="
 							+ aDataLength + " ChartIndex=" + tChartIndex);
 				}
@@ -1140,7 +1145,6 @@ public class RPCView extends View {
 				/*
 				 * draw new chart
 				 */
-
 				mGraphPaintStrokeScaleFactor.setColor(tColor);
 
 				float tYOffset = tYStart;
@@ -1178,7 +1182,7 @@ public class RPCView extends View {
 					mGraphPaintStrokeSettable.setColor(tColor);
 					mGraphPaintStrokeSettable.setStrokeWidth(aParameters[1] * mScaleFactor);
 					tResultingPaint = mGraphPaintStrokeSettable;
-					if (BlueDisplay.isDEBUG()) {
+					if (MyLog.isDEBUG()) {
 						tAdditionalInfo = " strokeWidth=" + aParameters[1] * mScaleFactor;
 					}
 				} else {
@@ -1186,8 +1190,8 @@ public class RPCView extends View {
 					mGraphPaintStroke1Fill.setColor(tColor);
 					tResultingPaint = mGraphPaintStroke1Fill;
 				}
-				if (BlueDisplay.isDEBUG()) {
-					Log.d(LOG_TAG, tFunctionName + "(" + tXStart + ", " + tYStart + ") color= " + shortToColorString(tColor)
+				if (MyLog.isDEBUG()) {
+					MyLog.d(LOG_TAG, tFunctionName + "(" + tXStart + ", " + tYStart + ") color= " + shortToColorString(tColor)
 							+ " lenght=" + aDataLength + tAdditionalInfo);
 				}
 
@@ -1245,7 +1249,7 @@ public class RPCView extends View {
 					mGraphPaintStrokeSettable.setColor(tColor);
 					mGraphPaintStrokeSettable.setStrokeWidth(aParameters[5] * mScaleFactor);
 					tResultingPaint = mGraphPaintStrokeSettable;
-					if (BlueDisplay.isDEBUG()) {
+					if (MyLog.isDEBUG()) {
 						tAdditionalInfo = " strokeWidth=" + aParameters[5] * mScaleFactor;
 					}
 				} else {
@@ -1258,8 +1262,8 @@ public class RPCView extends View {
 					tResultingPaint = mGraphPaintStroke1Fill;
 				}
 
-				if (BlueDisplay.isDEBUG()) {
-					Log.d(LOG_TAG, tFunctionName + "(" + aParameters[0] + ", " + aParameters[1] + ", " + aParameters[2] + ", "
+				if (MyLog.isDEBUG()) {
+					MyLog.d(LOG_TAG, tFunctionName + "(" + aParameters[0] + ", " + aParameters[1] + ", " + aParameters[2] + ", "
 							+ aParameters[3] + ") , color= " + shortToColorString(tColor) + tAdditionalInfo);
 				}
 				mCanvas.drawRect(tXStart, tYStart, tXEnd, tYEnd, tResultingPaint);
@@ -1274,7 +1278,7 @@ public class RPCView extends View {
 					mGraphPaintStrokeSettable.setColor(tColor);
 					mGraphPaintStrokeSettable.setStrokeWidth(aParameters[4] * mScaleFactor);
 					tResultingPaint = mGraphPaintStrokeSettable;
-					if (BlueDisplay.isDEBUG()) {
+					if (MyLog.isDEBUG()) {
 						tAdditionalInfo = " strokeWidth=" + aParameters[4] * mScaleFactor;
 					}
 				} else {
@@ -1283,8 +1287,8 @@ public class RPCView extends View {
 					tResultingPaint = mGraphPaintStroke1Fill;
 				}
 
-				if (BlueDisplay.isDEBUG()) {
-					Log.d(LOG_TAG, tFunctionName + "(" + aParameters[0] + ", " + aParameters[1] + ", " + aParameters[2]
+				if (MyLog.isDEBUG()) {
+					MyLog.d(LOG_TAG, tFunctionName + "(" + aParameters[0] + ", " + aParameters[1] + ", " + aParameters[2]
 							+ ") ,color= " + shortToColorString(aParameters[3]) + tAdditionalInfo);
 				}
 				mCanvas.drawCircle(tXStart, tYStart, tRadius, tResultingPaint);
@@ -1292,15 +1296,16 @@ public class RPCView extends View {
 
 			case FUNCTION_TAG_DEBUG_STRING:
 				tStringParameter = new String(aDataBytes, 0, aDataLength);
-				Log.i(LOG_TAG, "Debug=" + tStringParameter);
+				// without enclosing if MyLog.isINFO()
+				MyLog.i(LOG_TAG, "Debug=" + tStringParameter);
 				break;
 
 			case FUNCTION_TAG_WRITE_STRING:
 				myConvertChars(aDataBytes, sCharsArray, aDataLength);
 				tStringParameter = new String(sCharsArray, 0, aDataLength);
 
-				if (BlueDisplay.isINFO()) {
-					Log.i(LOG_TAG, "writeString(\"" + tStringParameter.replaceAll("\n", "\\n") + "\"");
+				if (MyLog.isINFO()) {
+					MyLog.i(LOG_TAG, "writeString(\"" + tStringParameter.replaceAll("\n", "\\n") + "\"");
 				}
 				char tChar;
 				int tActualCharacterIndex = 0;
@@ -1415,8 +1420,8 @@ public class RPCView extends View {
 
 				mTextPaint.setColor(shortToLongColor(aParameters[3]));
 
-				if (BlueDisplay.isDEBUG()) {
-					Log.d(LOG_TAG, tFunctionName + "(\"" + tStringParameter + "\", " + aParameters[0] + ", " + aParameters[1]
+				if (MyLog.isDEBUG()) {
+					MyLog.d(LOG_TAG, tFunctionName + "(\"" + tStringParameter + "\", " + aParameters[0] + ", " + aParameters[1]
 							+ ", " + aParameters[2] + ") color= " + shortToColorString(aParameters[3]) + " bg= "
 							+ shortToColorString(aParameters[4]));
 				}
@@ -1472,12 +1477,12 @@ public class RPCView extends View {
 				break;
 
 			default:
-				Log.e(LOG_TAG, "unknown command 0x" + Integer.toHexString(aCommand) + " received. paramsLength=" + aParamsLength
+				MyLog.e(LOG_TAG, "unknown command 0x" + Integer.toHexString(aCommand) + " received. paramsLength=" + aParamsLength
 						+ " dataLenght=" + aDataLength);
 				break;
 			}
 		} catch (Exception e) {
-			Log.e(LOG_TAG, "Exception catched for command 0x" + Integer.toHexString(aCommand) + ". paramsLength=" + aParamsLength
+			MyLog.e(LOG_TAG, "Exception catched for command 0x" + Integer.toHexString(aCommand) + ". paramsLength=" + aParamsLength
 					+ " dataLenght=" + aDataLength + " Exception=" + e);
 		}
 		// long tEnd = System.nanoTime();
@@ -1531,8 +1536,8 @@ public class RPCView extends View {
 		Sensors.disableAllSensors();
 		resetFlags();
 		initCharMappingArray();
-		if (BlueDisplay.isINFO()) {
-			Log.i(LOG_TAG, "Reset all");
+		if (MyLog.isINFO()) {
+			MyLog.i(LOG_TAG, "Reset all");
 		}
 	}
 
@@ -1564,8 +1569,8 @@ public class RPCView extends View {
 			mUseMaxSize = false;
 			setScaleFactor(1, true, false);
 		}
-		if (BlueDisplay.isINFO()) {
-			Log.i(LOG_TAG, "SetFlags: " + tResetAllString + "TouchMoveEnable=" + mTouchMoveEnable + ", LongTouchEnabled="
+		if (MyLog.isINFO()) {
+			MyLog.i(LOG_TAG, "SetFlags: " + tResetAllString + "TouchMoveEnable=" + mTouchMoveEnable + ", LongTouchEnabled="
 					+ mIsLongTouchEnabled + ", UseMaxSize=" + mUseMaxSize);
 		}
 	}
@@ -2152,7 +2157,7 @@ public class RPCView extends View {
 		/*
 		 * Output TextSize-TextWidth for Size 5-75
 		 */
-		Log.i(LOG_TAG, "Font metrics:");
+		MyLog.i(LOG_TAG, "Font metrics:");
 		int j = 5;
 		for (int k = 0; k < 15; k++) {
 			StringBuilder tFontsizes = new StringBuilder(100);
@@ -2185,7 +2190,7 @@ public class RPCView extends View {
 			}
 			tYPos += tTextSizeInfo;
 			tCanvas.drawText(tFontsizes.toString(), 0, tYPos, tInfoText);
-			Log.i(LOG_TAG, tFontsizesMore.toString());
+			MyLog.i(LOG_TAG, tFontsizesMore.toString());
 		}
 
 		tYPos += tTextSizeInfo;

@@ -18,31 +18,40 @@
 
     <item
         android:id="@+id/menu_connect"
-        android:showAsAction="ifRoom"
         android:icon="@android:drawable/ic_menu_search"
+        android:showAsAction="ifRoom"
         android:title="@string/menu_connect"/>
     <item
         android:id="@+id/menu_preferences"
         android:icon="@android:drawable/ic_menu_preferences"
         android:title="@string/menu_preferences"/>
-<!--     <item
+    <!--
+         <item
         android:id="@+id/menu_start_stop_logging"
         android:icon="@android:drawable/ic_menu_save"
-        android:title="@string/menu_start_logging"/> -->
+        android:title="@string/menu_start_logging"/>
+    -->
+        <item
+        android:id="@+id/menu_show_log"
+        android:icon="@android:drawable/ic_menu_agenda"
+        android:title="@string/menu_show_log"/>
     <item
         android:id="@+id/menu_show_statistics"
         android:icon="@android:drawable/ic_menu_info_details"
-        android:title="@string/menu_show_statistics"/> 
+        android:title="@string/menu_show_statistics"/>
     <item
         android:id="@+id/menu_about"
         android:icon="@android:drawable/ic_menu_help"
         android:title="@string/menu_about"/>
-    <item
+    <!--
+        <item
         android:id="@+id/menu_show_graph_testpage"
         android:icon="@android:drawable/ic_menu_report_image"
         android:title="@string/menu_show_graph_testpage"/>
-        <item
+    -->
+    <item
         android:id="@+id/menu_show_font_testpage"
         android:icon="@android:drawable/ic_menu_report_image"
         android:title="@string/menu_show_font_testpage"/>
+
 </menu>
