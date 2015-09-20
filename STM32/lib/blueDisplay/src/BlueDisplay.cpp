@@ -40,6 +40,7 @@
 #endif
 
 #include <string.h>  // for strlen
+#include <stdio.h> /* for sprintf */
 
 //-------------------- Constructor --------------------
 
@@ -313,6 +314,72 @@ extern "C" uint16_t drawTextC(uint16_t aXStart, uint16_t aYStart, const char *aS
     uint16_t tRetValue = 0;
     if (USART_isBluetoothPaired()) {
         tRetValue = BlueDisplay1.drawText(aXStart, aYStart, (char *) aStringPtr, aFontSize, aFGColor, aBGColor);
+    }
+    return tRetValue;
+}
+uint16_t BlueDisplay::drawByte(uint16_t aPosX, uint16_t aPosY, int8_t aByte, uint8_t aTextSize, Color_t aFGColor,
+        Color_t aBGColor) {
+    uint16_t tRetValue = 0;
+    char tStringBuffer[5];
+    sprintf(tStringBuffer, "%4hhd", aByte);
+#ifdef LOCAL_DISPLAY_EXISTS
+    tRetValue = LocalDisplay.drawText(aPosX, aPosY - getTextAscend(aTextSize), tStringBuffer,
+            getLocalTextSize(aTextSize), aFGColor, aBGColor);
+#endif
+    if (USART_isBluetoothPaired()) {
+        tRetValue = aPosX + 4 * getTextWidth(aTextSize);
+        sendUSART5ArgsAndByteBuffer(FUNCTION_TAG_DRAW_STRING, aPosX, aPosY, aTextSize, aFGColor, aBGColor,
+                (uint8_t*) tStringBuffer, 4);
+    }
+    return tRetValue;
+}
+uint16_t BlueDisplay::drawUnsignedByte(uint16_t aPosX, uint16_t aPosY, uint8_t aByte, uint8_t aTextSize,
+        Color_t aFGColor, Color_t aBGColor) {
+    uint16_t tRetValue = 0;
+    char tStringBuffer[4];
+    sprintf(tStringBuffer, "%3hhd", aByte);
+#ifdef LOCAL_DISPLAY_EXISTS
+    tRetValue = LocalDisplay.drawText(aPosX, aPosY - getTextAscend(aTextSize), tStringBuffer,
+            getLocalTextSize(aTextSize), aFGColor, aBGColor);
+#endif
+    if (USART_isBluetoothPaired()) {
+        tRetValue = aPosX + 4 * getTextWidth(aTextSize);
+        sendUSART5ArgsAndByteBuffer(FUNCTION_TAG_DRAW_STRING, aPosX, aPosY, aTextSize, aFGColor, aBGColor,
+                (uint8_t*) tStringBuffer, 4);
+    }
+    return tRetValue;
+}
+
+uint16_t BlueDisplay::drawShort(uint16_t aPosX, uint16_t aPosY, int16_t aShort, uint8_t aTextSize, Color_t aFGColor,
+        Color_t aBGColor) {
+    uint16_t tRetValue = 0;
+    char tStringBuffer[7];
+    sprintf(tStringBuffer, "%6hd", aShort);
+#ifdef LOCAL_DISPLAY_EXISTS
+    tRetValue = LocalDisplay.drawText(aPosX, aPosY - getTextAscend(aTextSize), tStringBuffer,
+            getLocalTextSize(aTextSize), aFGColor, aBGColor);
+#endif
+    if (USART_isBluetoothPaired()) {
+        tRetValue = aPosX + 6 * getTextWidth(aTextSize);
+        sendUSART5ArgsAndByteBuffer(FUNCTION_TAG_DRAW_STRING, aPosX, aPosY, aTextSize, aFGColor, aBGColor,
+                (uint8_t*) tStringBuffer, 6);
+    }
+    return tRetValue;
+}
+
+uint16_t BlueDisplay::drawLong(uint16_t aPosX, uint16_t aPosY, int32_t aLong, uint8_t aTextSize, Color_t aFGColor,
+        Color_t aBGColor) {
+    uint16_t tRetValue = 0;
+    char tStringBuffer[12];
+    sprintf(tStringBuffer, "%11ld", aLong);
+#ifdef LOCAL_DISPLAY_EXISTS
+    tRetValue = LocalDisplay.drawText(aPosX, aPosY - getTextAscend(aTextSize), tStringBuffer,
+            getLocalTextSize(aTextSize), aFGColor, aBGColor);
+#endif
+    if (USART_isBluetoothPaired()) {
+        tRetValue = aPosX + 11 * getTextWidth(aTextSize);
+        sendUSART5ArgsAndByteBuffer(FUNCTION_TAG_DRAW_STRING, aPosX, aPosY, aTextSize, aFGColor, aBGColor,
+                (uint8_t*) tStringBuffer, 11);
     }
     return tRetValue;
 }

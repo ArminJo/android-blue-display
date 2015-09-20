@@ -94,10 +94,9 @@ extern const int LAST_FUNCTION_TAG_DATAFIELD;
 
 void sendUSARTArgs(uint8_t aFunctionTag, int aNumberOfArgs, ...);
 void sendUSARTArgsAndByteBuffer(uint8_t aFunctionTag, int aNumberOfArgs, ...);
-void USART3_sendBuffer(uint8_t * aBytePtr, int aLengthOfDataToSend);
 void sendUSART5Args(uint8_t aFunctionTag, uint16_t aXStart, uint16_t aYStart, uint16_t aXEnd, uint16_t aYEnd, uint16_t aColor);
 void sendUSART5ArgsAndByteBuffer(uint8_t aFunctionTag, uint16_t aXStart, uint16_t aYStart, uint16_t aXEnd, uint16_t aYEnd,
-        uint16_t aColor, uint16_t aBufferLength, uint8_t * aBuffer);
+        uint16_t aColor, uint8_t * aBuffer, uint16_t aBufferLength);
 
 #ifdef LOCAL_DISPLAY_EXISTS
 bool USART_isBluetoothPaired(void);

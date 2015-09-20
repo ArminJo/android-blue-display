@@ -24,8 +24,6 @@
 #include <Arduino.h>
 
 #include "BlueDisplay.h"
-#include "BlueSerial.h"
-#include "EventHandler.h"
 
 // Use simple blocking serial version without receive buffer and other overhead
 // Using it saves up to 1250 byte FLASH and 185 byte RAM since USART is used directly

@@ -302,6 +302,11 @@ public:
             Color_t aBGColor);
     void drawMLText(uint16_t aPosX, uint16_t aPosY, const char *aStringPtr, uint8_t aTextSize, Color_t aFGColor, Color_t aBGColor);
 
+    uint16_t drawByte(uint16_t aPosX, uint16_t aPosY, int8_t aByte, uint8_t aTextSize, Color_t aFGColor, Color_t aBGColor);
+    uint16_t drawUnsignedByte(uint16_t aPosX, uint16_t aPosY, uint8_t aByte, uint8_t aTextSize, Color_t aFGColor, Color_t aBGColor);
+    uint16_t drawShort(uint16_t aPosX, uint16_t aPosY, int16_t aShort, uint8_t aTextSize, Color_t aFGColor, Color_t aBGColor);
+    uint16_t drawLong(uint16_t aPosX, uint16_t aPosY, int32_t aLong, uint8_t aTextSize, Color_t aFGColor, Color_t aBGColor);
+
     void setPrintfSizeAndColorAndFlag(uint8_t aPrintSize, Color_t aPrintColor, Color_t aPrintBackgroundColor,
             bool aClearOnNewScreen);
     void setPrintfPosition(uint16_t aPosX, uint16_t aPosY);
@@ -337,16 +342,16 @@ public:
     void setSensor(uint8_t aSensorType, bool aDoActivate, uint8_t aSensorRate);
 
     uint16_t drawTextPGM(uint16_t aXStart, uint16_t aYStart, const char * aPGMString, uint8_t aFontSize, Color_t aFGColor,
-    Color_t aBGColor);
-    void getNumberWithShortPromptPGM(void (*aNumberHandler)( float),const char *tShortPromptLengtht);
+            Color_t aBGColor);
+    void getNumberWithShortPromptPGM(void (*aNumberHandler)(float), const char *tShortPromptLengtht);
 
     /*
      * Button stuff
      */
     void resetAllButtons(void);
-    BDButtonHandle_t createButton( uint16_t aPositionX, uint16_t aPositionY, uint16_t aWidthX, uint16_t aHeightY,
-    Color_t aButtonColor, const char * aCaption, uint8_t aCaptionSize, uint8_t aFlags,
-    int16_t aValue, void (*aOnTouchHandler)(BDButtonHandle_t *, int16_t));
+    BDButtonHandle_t createButton(uint16_t aPositionX, uint16_t aPositionY, uint16_t aWidthX, uint16_t aHeightY,
+            Color_t aButtonColor, const char * aCaption, uint8_t aCaptionSize, uint8_t aFlags, int16_t aValue,
+            void (*aOnTouchHandler)(BDButtonHandle_t *, int16_t));
     void drawButton(BDButtonHandle_t aButtonNumber);
     void drawButtonCaption(BDButtonHandle_t aButtonNumber);
     void setButtonCaption(BDButtonHandle_t aButtonNumber, const char * aCaption, bool doDrawButton);
@@ -362,21 +367,21 @@ public:
     void setButtonsGlobalFlags(uint16_t aFlags);
     void setButtonsTouchTone(uint8_t aToneIndex, uint8_t aToneVolume);
 
-    BDButtonHandle_t createButtonPGM( uint16_t aPositionX, uint16_t aPositionY, uint16_t aWidthX,
-    uint16_t aHeightY, Color_t aButtonColor, const char * aPGMCaption, uint8_t aCaptionSize, uint8_t aFlags,
-    int16_t aValue, void (*aOnTouchHandler)(BDButtonHandle_t *, int16_t));
+    BDButtonHandle_t createButtonPGM(uint16_t aPositionX, uint16_t aPositionY, uint16_t aWidthX, uint16_t aHeightY,
+            Color_t aButtonColor, const char * aPGMCaption, uint8_t aCaptionSize, uint8_t aFlags, int16_t aValue,
+            void (*aOnTouchHandler)(BDButtonHandle_t *, int16_t));
     void setButtonCaptionPGM(BDButtonHandle_t aButtonNumber, const char * aPGMCaption, bool doDrawButton);
 
     /*
      * Slider stuff
      */
     void resetAllSliders(void);
-    BDSliderHandle_t createSlider( uint16_t aPositionX, uint16_t aPositionY, uint8_t aBarWidth, uint16_t aBarLength,
-    uint16_t aThresholdValue, int16_t aInitalValue, Color_t aSliderColor,
-    Color_t aBarColor, uint8_t aOptions, void (*aOnChangeHandler)( BDSliderHandle_t *, int16_t));
+    BDSliderHandle_t createSlider(uint16_t aPositionX, uint16_t aPositionY, uint8_t aBarWidth, uint16_t aBarLength,
+            uint16_t aThresholdValue, int16_t aInitalValue, Color_t aSliderColor, Color_t aBarColor, uint8_t aOptions,
+            void (*aOnChangeHandler)(BDSliderHandle_t *, int16_t));
     void drawSlider(BDSliderHandle_t aSliderNumber);
     void drawSliderBorder(BDSliderHandle_t aSliderNumber);
-    void setSliderActualValueAndDraw(BDSliderHandle_t aSliderNumber,int16_t aActualValue);
+    void setSliderActualValueAndDraw(BDSliderHandle_t aSliderNumber, int16_t aActualValue);
     void setSliderColorBarThreshold(BDSliderHandle_t aSliderNumber, uint16_t aBarThresholdColor);
     void setSliderColorBarBackground(BDSliderHandle_t aSliderNumber, uint16_t aBarBackgroundColor);
 
@@ -399,7 +404,6 @@ extern BlueDisplay BlueDisplay1;
 
 #ifdef LOCAL_DISPLAY_EXISTS
 #include <MI0283QT2.h>
-#include "EventHandler.h"
 
 /*
  * MI0283QT2 TFTDisplay - must provided by main program
@@ -412,5 +416,9 @@ extern MI0283QT2 LocalDisplay;
 extern const uint16_t DISPLAY_HEIGHT;
 extern const uint16_t DISPLAY_WIDTH;
 #endif
+
+// for convenience also included here
+#include "BlueSerial.h"
+#include "EventHandler.h"
 
 #endif /* BLUEDISPLAY_H_ */

@@ -240,7 +240,7 @@ void sendUSARTArgsAndByteBuffer(uint8_t aFunctionTag, int aNumberOfArgs, ...) {
  * Assembles parameter header and appends header for data field
  */
 void sendUSART5ArgsAndByteBuffer(uint8_t aFunctionTag, uint16_t aXStart, uint16_t aYStart, uint16_t aXEnd, uint16_t aYEnd,
-        uint16_t aColor, uint16_t aBufferLength, uint8_t * aBuffer) {
+        uint16_t aColor, uint8_t * aBuffer, uint16_t aBufferLength) {
 
     uint16_t tParamBuffer[MAX_NUMBER_OF_ARGS];
 

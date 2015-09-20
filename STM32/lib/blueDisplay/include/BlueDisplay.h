@@ -315,6 +315,11 @@ public:
     void drawMLText(uint16_t aPosX, uint16_t aPosY, const char *aStringPtr, uint8_t aTextSize, Color_t aFGColor,
             Color_t aBGColor);
 
+    uint16_t drawByte(uint16_t aPosX, uint16_t aPosY, int8_t aByte, uint8_t aTextSize, Color_t aFGColor, Color_t aBGColor);
+    uint16_t drawUnsignedByte(uint16_t aPosX, uint16_t aPosY, uint8_t aByte, uint8_t aTextSize, Color_t aFGColor, Color_t aBGColor);
+    uint16_t drawShort(uint16_t aPosX, uint16_t aPosY, int16_t aShort, uint8_t aTextSize, Color_t aFGColor, Color_t aBGColor);
+    uint16_t drawLong(uint16_t aPosX, uint16_t aPosY, int32_t aLong, uint8_t aTextSize, Color_t aFGColor, Color_t aBGColor);
+
     void setPrintfSizeAndColorAndFlag(int aPrintSize, Color_t aPrintColor, Color_t aPrintBackgroundColor,
     bool aClearOnNewScreen);
     void setPrintfPosition(int aPosX, int aPosY);

@@ -1288,7 +1288,7 @@ public class RPCView extends View {
 				}
 
 				if (MyLog.isDEBUG()) {
-					MyLog.d(LOG_TAG, tFunctionName + "(" + aParameters[0] + ", " + aParameters[1] + ", " + aParameters[2]
+					MyLog.d(LOG_TAG, tFunctionName + "(" + aParameters[0] + ", " + aParameters[1] + ", r=" + aParameters[2]
 							+ ") ,color= " + shortToColorString(aParameters[3]) + tAdditionalInfo);
 				}
 				mCanvas.drawCircle(tXStart, tYStart, tRadius, tResultingPaint);
@@ -1296,8 +1296,8 @@ public class RPCView extends View {
 
 			case FUNCTION_TAG_DEBUG_STRING:
 				tStringParameter = new String(aDataBytes, 0, aDataLength);
-				// without enclosing if MyLog.isINFO()
-				MyLog.i(LOG_TAG, "Debug=" + tStringParameter);
+				// intentionally without enclosing if MyLog.isINFO()
+				MyLog.i(LOG_TAG, "DebugString=" + tStringParameter);
 				break;
 
 			case FUNCTION_TAG_WRITE_STRING:
@@ -1422,7 +1422,7 @@ public class RPCView extends View {
 
 				if (MyLog.isDEBUG()) {
 					MyLog.d(LOG_TAG, tFunctionName + "(\"" + tStringParameter + "\", " + aParameters[0] + ", " + aParameters[1]
-							+ ", " + aParameters[2] + ") color= " + shortToColorString(aParameters[3]) + " bg= "
+							+ ", size=" + aParameters[2] + ") color= " + shortToColorString(aParameters[3]) + " bg= "
 							+ shortToColorString(aParameters[4]));
 				}
 

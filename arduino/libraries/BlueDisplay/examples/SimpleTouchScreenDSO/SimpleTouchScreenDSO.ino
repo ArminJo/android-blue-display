@@ -83,9 +83,8 @@
 
 #include "SimpleTouchScreenDSO.h"
 #include "FrequencyGenerator.h"
-#include "EventHandler.h"
+
 #include "BlueDisplay.h"
-#include "BlueSerial.h"
 #include "digitalWriteFast.h"
 #define digitalToggleFast(P) BIT_SET(* &PINB, __digitalPinToBit(P))
 #include <avr/interrupt.h>

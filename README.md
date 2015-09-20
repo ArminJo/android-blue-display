@@ -1,6 +1,9 @@
 # BlueDisplay
-Use your Smatphone as display and input deve for your Arduino or ARM projects.
-![Example](screenshots/FrequencyGeneratorPage.png)
+Use your Smartphone as display and input device for your Arduino or ARM projects.
+
+![Example](ArminJo.github.com/android-blue-display/schematics/BlueDisplayBlink_Steckplatine.png)
+[Example](ArminJo.github.com/android-blue-display/pictures/Blink1.png)
+
 
 ##SUMMARY
 Let the Arduino sketch create a GUI with Graphics, Buttons and Sliders on your smartphone.
@@ -18,3 +21,6 @@ No Android programming needed!
 - Up to 115200 Baud using HC-05 modules.
 - Local display of received and sent commands for debug purposes.
 - C++ Libraries for Arduino and ARM (STM)
+
+[Example](ArminJo.github.com/android-blue-display/screenshots/FrequencyGeneratorPage.png)
+![Example](ArminJo.github.com/android-blue-display/screenshots/DSOSettingsPage.png)

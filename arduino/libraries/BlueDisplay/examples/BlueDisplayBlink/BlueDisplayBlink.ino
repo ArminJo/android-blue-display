@@ -24,8 +24,6 @@
 #include <Arduino.h>
 
 #include "BlueDisplay.h"
-#include "BlueSerial.h"
-#include "EventHandler.h"
 
 // Change this if you have reprogrammed the hc05 module for higher baud rate
 #define HC_05_BAUD_RATE BAUD_9600
