@@ -7,16 +7,16 @@
 
 <resources xmlns:android="http://schemas.android.com/apk/res/android">
     <string-array name="entries_screenorientation_preference">
-        <item>Auto</item>
-        <item>Portrait</item>
         <item>Landscape</item>
+        <item>Portrait</item>
+        <item>Auto</item><!-- SCREEN_ORIENTATION_UNSPECIFIED -->
     </string-array>
 
     <!-- Do not localize entryvalues -->
     <string-array name="entryvalues_screenorientation_preference">
         <item>0</item>
         <item>1</item>
-        <item>2</item>
+        <item>-1</item>
     </string-array>
 
     <string-array name="entries_loglevel_preference">

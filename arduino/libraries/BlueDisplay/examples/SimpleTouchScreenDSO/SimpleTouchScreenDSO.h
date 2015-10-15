@@ -20,8 +20,8 @@
 #define HC_05_BAUD_RATE BAUD_115200
 
 // Display size
-const uint16_t DISPLAY_HEIGHT = 256;
-const uint16_t DISPLAY_WIDTH = 320;
+const int DISPLAY_HEIGHT = 256;
+const int DISPLAY_WIDTH = 320;
 
 #define THOUSANDS_SEPARATOR '.'
 

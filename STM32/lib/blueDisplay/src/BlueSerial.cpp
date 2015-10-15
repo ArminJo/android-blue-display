@@ -360,8 +360,8 @@ int getSendBufferFreeSpace(void) {
  * Copy content of both buffers to send buffer, check for buffer wrap around and call USART_BD_DMA_TX_start() with right parameters.
  * Do blocking wait if not enough space left in buffer
  */
-void sendUSARTBufferNoSizeCheck(uint8_t * aParameterBufferPointer, int aParameterBufferLength, uint8_t * aDataBufferPointer,
-        int aDataBufferLength) {
+void sendUSARTBufferNoSizeCheck(uint8_t * aParameterBufferPointer, size_t aParameterBufferLength, uint8_t * aDataBufferPointer,
+        size_t aDataBufferLength) {
 #ifdef USE_SIMPLE_SERIAL
     sendUSARTBufferSimple(aParameterBufferPointer, aParameterBufferLength, aDataBufferPointer, aDataBufferLength);
 return;
@@ -453,8 +453,8 @@ return;
 /**
  * used if databuffer can be greater than USART_SEND_BUFFER_SIZE
  */
-void sendUSARTBuffer(uint8_t * aParameterBufferPointer, int aParameterBufferLength, uint8_t * aDataBufferPointer,
-        int aDataBufferLength) {
+void sendUSARTBuffer(uint8_t * aParameterBufferPointer, size_t aParameterBufferLength, uint8_t * aDataBufferPointer,
+        size_t aDataBufferLength) {
 #ifdef USE_SIMPLE_SERIAL
     sendUSARTBufferSimple(aParameterBufferPointer, aParameterBufferLength, aDataBufferPointer, aDataBufferLength);
 return;
@@ -483,8 +483,8 @@ return;
 /**
  * very simple blocking USART send routine - works 100%!
  */
-void sendUSARTBufferSimple(uint8_t * aParameterBufferPointer, int aParameterBufferLength, uint8_t * aDataBufferPointer,
-        int aDataBufferLength) {
+void sendUSARTBufferSimple(uint8_t * aParameterBufferPointer, size_t aParameterBufferLength, uint8_t * aDataBufferPointer,
+        size_t aDataBufferLength) {
     while (aParameterBufferLength > 0) {
 // wait for USART send buffer to become empty
         while (__HAL_UART_GET_FLAG(&UART_BD_Handle, UART_FLAG_TXE) == RESET) {
@@ -541,7 +541,7 @@ void sendUSART5Args(uint8_t aFunctionTag, uint16_t aXStart, uint16_t aYStart, ui
 /**
  *
  * @param aFunctionTag
- * @param aNumberOfArgs currently not more than 12 args are supported
+ * @param aNumberOfArgs currently not more than 12 args (SHORT) are supported
  */
 void sendUSARTArgs(uint8_t aFunctionTag, int aNumberOfArgs, ...) {
     assertParamMessage((aNumberOfArgs <= MAX_NUMBER_OF_ARGS), aNumberOfArgs, "only 12 params max");
@@ -565,7 +565,8 @@ void sendUSARTArgs(uint8_t aFunctionTag, int aNumberOfArgs, ...) {
 /**
  *
  * @param aFunctionTag
- * @param aNumberOfArgs currently not more than 10 args (SHORT) are supported
+ * @param aNumberOfArgs currently not more than 12 args (SHORT) are supported
+ * Last two arguments are length of buffer and buffer pointer (..., size_t aDataLength, uint8_t * aDataBufferPtr)
  */
 void sendUSARTArgsAndByteBuffer(uint8_t aFunctionTag, int aNumberOfArgs, ...) {
     if (aNumberOfArgs > MAX_NUMBER_OF_ARGS) {
@@ -598,7 +599,7 @@ void sendUSARTArgsAndByteBuffer(uint8_t aFunctionTag, int aNumberOfArgs, ...) {
  * Assembles parameter header and appends header for data field
  */
 void sendUSART5ArgsAndByteBuffer(uint8_t aFunctionTag, uint16_t aXStart, uint16_t aYStart, uint16_t aParam3, uint16_t aParam4,
-        Color_t aColor, uint8_t * aBuffer, int aBufferLength) {
+        Color_t aColor, uint8_t * aBuffer, size_t aBufferLength) {
 
     uint16_t tParamBuffer[9];
 
@@ -622,7 +623,7 @@ void sendUSART5ArgsAndByteBuffer(uint8_t aFunctionTag, uint16_t aXStart, uint16_
  * Assembles parameter header and appends header for data field
  */
 void sendUSART5ArgsAndShortBuffer(uint8_t aFunctionTag, uint16_t aXStart, uint16_t aYStart, uint16_t aParam3, uint16_t aParam4,
-        Color_t aColor, uint16_t * aBuffer, int aBufferLength) {
+        Color_t aColor, uint16_t * aBuffer, size_t aBufferLength) {
 
     uint16_t tParamBuffer[9];
 
@@ -707,7 +708,7 @@ int32_t getReceiveBytesAvailable(void) {
  * Check if a touch event has completely received by USART
  * Function is not synchronized because it should only be used by main thread
  */
-static uint8_t sReceivedEventType = EVENT_TAG_NO_EVENT;
+static uint8_t sReceivedEventType = EVENT_NO_EVENT;
 
 void checkAndHandleMessageReceived(void) {
 // get actual DMA byte count
@@ -720,7 +721,7 @@ void checkAndHandleMessageReceived(void) {
             // just wait for next sync token
             if (getReceiveBufferByte() == SYNC_TOKEN) {
                 sReceiveBufferOutOfSync = false;
-                sReceivedEventType = EVENT_TAG_NO_EVENT;
+                sReceivedEventType = EVENT_NO_EVENT;
                 break;
             }
         }
@@ -730,7 +731,7 @@ void checkAndHandleMessageReceived(void) {
          * regular operation here
          * enough bytes available for next step?
          */
-        if (sReceivedEventType == EVENT_TAG_NO_EVENT) {
+        if (sReceivedEventType == EVENT_NO_EVENT) {
             if (tBytesAvailable >= 2) {
                 /*
                  * read message length and event tag first
@@ -746,9 +747,9 @@ void checkAndHandleMessageReceived(void) {
                 tBytesAvailable -= 2;
             }
         }
-        if (sReceivedEventType != EVENT_TAG_NO_EVENT) {
+        if (sReceivedEventType != EVENT_NO_EVENT) {
             uint8_t tDataSize;
-            if (sReceivedEventType < EVENT_TAG_FIRST_CALLBACK_ACTION_CODE) {
+            if (sReceivedEventType < EVENT_FIRST_CALLBACK_ACTION_CODE) {
                 // Touch event
                 tDataSize = RECEIVE_TOUCH_OR_DISPLAY_DATA_SIZE;
             } else {
@@ -758,16 +759,16 @@ void checkAndHandleMessageReceived(void) {
             if (tBytesAvailable > tDataSize) {
                 // touch or size event complete received, now read data and sync token
                 // copy buffer to structure
-                unsigned char * tByteArrayPtr = remoteTouchEvent.EventData.ByteArray;
+                unsigned char * tByteArrayPtr = remoteEvent.EventData.ByteArray;
                 int i;
                 for (i = 0; i < tDataSize; ++i) {
                     *tByteArrayPtr++ = getReceiveBufferByte();
                 }
                 // Check for sync token
                 if (getReceiveBufferByte() == SYNC_TOKEN) {
-                    remoteTouchEvent.EventType = sReceivedEventType;
-                    sReceivedEventType = EVENT_TAG_NO_EVENT;
-                    handleEvent(&remoteTouchEvent);
+                    remoteEvent.EventType = sReceivedEventType;
+                    sReceivedEventType = EVENT_NO_EVENT;
+                    handleEvent(&remoteEvent);
                 } else {
                     sReceiveBufferOutOfSync = true;
                 }

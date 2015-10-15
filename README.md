@@ -1,10 +1,6 @@
 # BlueDisplay
 Use your Smartphone as display and input device for your Arduino or ARM projects.
 
-![Example](ArminJo.github.com/android-blue-display/schematics/BlueDisplayBlink_Steckplatine.png)
-[Example](ArminJo.github.com/android-blue-display/pictures/Blink1.png)
-
-
 ##SUMMARY
 Let the Arduino sketch create a GUI with Graphics, Buttons and Sliders on your smartphone.
 GUI callback, touch and sensor events are sent back to Arduino.
@@ -22,5 +18,11 @@ No Android programming needed!
 - Local display of received and sent commands for debug purposes.
 - C++ Libraries for Arduino and ARM (STM)
 
-[Example](ArminJo.github.com/android-blue-display/screenshots/FrequencyGeneratorPage.png)
-![Example](ArminJo.github.com/android-blue-display/screenshots/DSOSettingsPage.png)
+Fritzing schematics
+![Fritzing schematics](https://github.com/ArminJo/android-blue-display/blob/gh-pages/schematics/BlueDisplayBlink_Steckplatine.png)
+Breadboard picture
+![Breadboard picture](https://github.com/ArminJo/android-blue-display/blob/gh-pages/pictures/Blink1.jpg)
+DSO settings menu
+![DSO settings menu](https://github.com/ArminJo/android-blue-display/blob/gh-pages/screenshots/DSOSettingsPage.png)
+DSO frequency generator menu
+![Frequency generator menu](https://github.com/ArminJo/android-blue-display/blob/gh-pages/screenshots/FrequencyGeneratorPage.png)

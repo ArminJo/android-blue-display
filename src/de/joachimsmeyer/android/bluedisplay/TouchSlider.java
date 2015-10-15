@@ -55,33 +55,35 @@ public class TouchSlider {
 	int mTouchBorder; // border in pixel, where touches outside slider are recognized - default is 4
 
 	private class TextLayoutInfo {
-		int mSize;
-		int mMargin;
-		boolean mAbove;
-		int mAlign;
-		int mColor;
-		int mBackgroundColor;
-		int mPositionX;
-		int mPositionY;
+		int mSize = mRPCView.mRequestedCanvasHeight / 20; // text size
+		int mMargin = mRPCView.mRequestedCanvasHeight / 40; // distance from slider
+		boolean mAbove = false;
+		int mAlign = FLAG_SLIDER_CAPTION_ALIGN_MIDDLE;
+		int mColor = Color.BLACK;
+		int mBackgroundColor = Color.WHITE;
+		int mPositionX; // resulting X positions computed from the above values and the text content
+		int mPositionY; // resulting Y position
 	}
 
 	String mCaption;
 	TextLayoutInfo mCaptionLayoutInfo;
 	TextLayoutInfo mValueLayoutInfo;
 	// private static final int SLIDER_VALUE_CAPTION_BELOW = 0x00;
-	private static final int SLIDER_VALUE_CAPTION_ABOVE = 0x04;
+	private static final int FLAG_SLIDER_CAPTION_ABOVE = 0x04;
 
 	// private static final int SLIDER_VALUE_CAPTION_ALIGN_LEFT = 0x00;
-	private static final int SLIDER_VALUE_CAPTION_ALIGN_RIGHT = 0x01;
-	private static final int SLIDER_VALUE_CAPTION_ALIGN_MIDDLE = 0x02;
-	private static final int SLIDER_VALUE_CAPTION_ALIGN_MASK = 0x03;
+	private static final int FLAG_SLIDER_CAPTION_ALIGN_RIGHT = 0x01;
+	private static final int FLAG_SLIDER_CAPTION_ALIGN_MIDDLE = 0x02;
+	private static final int FLAG_SLIDER_CAPTION_ALIGN_MASK = 0x03;
 
 	int mOptions;
 	// constants for options
-	private static final int TOUCHSLIDER_SHOW_BORDER = 0x01;
-	private static final int TOUCHSLIDER_SHOW_VALUE = 0x02;
-	private static final int TOUCHSLIDER_IS_HORIZONTAL = 0x04;
-	private static final int TOUCHSLIDER_VALUE_BY_CALLBACK = 0x10; // if set value will only be set by callback handler
+	private static final int FLAG_SLIDER_SHOW_BORDER = 0x01;
+	private static final int FLAG_SLIDER_SHOW_VALUE = 0x02;
+	private static final int FLAG_SLIDER_IS_HORIZONTAL = 0x04;
+	private static final int FLAG_SLIDER_IS_INVERSE = 0x08;
+	private static final int FLAG_SLIDER_VALUE_BY_CALLBACK = 0x10; // if set value will only be set by callback handler
+	private static final int FLAG_SLIDER_IS_ONLY_OUTPUT = 0x20;
 
 	int mActualTouchValue;
 	// This value can be different from mActualTouchValue and is provided by callback handler
@@ -99,30 +101,30 @@ public class TouchSlider {
 	private static final int SLIDER_LIST_INITIAL_SIZE = 10;
 	private static List<TouchSlider> sSliderList = new ArrayList<TouchSlider>(SLIDER_LIST_INITIAL_SIZE);
 
-	private static final int FUNCTION_TAG_SLIDER_CREATE = 0x50;
-	private static final int FUNCTION_TAG_SLIDER_DRAW = 0x51;
-	private static final int FUNCTION_TAG_SLIDER_SETTINGS = 0x52;
-	private static final int FUNCTION_TAG_SLIDER_DRAW_BORDER = 0x53;
+	private static final int FUNCTION_SLIDER_CREATE = 0x50;
+	private static final int FUNCTION_SLIDER_DRAW = 0x51;
+	private static final int FUNCTION_SLIDER_SETTINGS = 0x52;
+	private static final int FUNCTION_SLIDER_DRAW_BORDER = 0x53;
 
 	// Flags for SLIDER_SETTINGS
-	private static final int SLIDER_FLAG_SET_COLOR_THRESHOLD = 0x00;
-	private static final int SLIDER_FLAG_SET_COLOR_BAR_BACKGROUND = 0x01;
-	private static final int SLIDER_FLAG_SET_COLOR_BAR = 0x02;
-	private static final int SLIDER_FLAG_SET_VALUE_AND_DRAW_BAR = 0x03;
-	private static final int SLIDER_FLAG_SET_POSITION = 0x04;
-	private static final int SLIDER_FLAG_SET_ACTIVE = 0x05;
-	private static final int SLIDER_FLAG_RESET_ACTIVE = 0x06;
+	private static final int SUBFUNCTION_SLIDER_SET_COLOR_THRESHOLD = 0x00;
+	private static final int SUBFUNCTION_SLIDER_SET_COLOR_BAR_BACKGROUND = 0x01;
+	private static final int SUBFUNCTION_SLIDER_SET_COLOR_BAR = 0x02;
+	private static final int SUBFUNCTION_SLIDER_SET_VALUE_AND_DRAW_BAR = 0x03;
+	private static final int SUBFUNCTION_SLIDER_SET_POSITION = 0x04;
+	private static final int SUBFUNCTION_SLIDER_SET_ACTIVE = 0x05;
+	private static final int SUBFUNCTION_SLIDER_RESET_ACTIVE = 0x06;
 
-	private static final int SLIDER_FLAG_SET_CAPTION_PROPERTIES = 0x08;
-	private static final int SLIDER_FLAG_SET_PRINT_VALUE_PROPERTIES = 0x09;
+	private static final int SUBFUNCTION_SLIDER_SET_CAPTION_PROPERTIES = 0x08;
+	private static final int SUBFUNCTION_SLIDER_SET_PRINT_VALUE_PROPERTIES = 0x09;
 
 	// static functions
-	private static final int FUNCTION_TAG_SLIDER_ACTIVATE_ALL = 0x58;
-	private static final int FUNCTION_TAG_SLIDER_DEACTIVATE_ALL = 0x59;
+	private static final int FUNCTION_SLIDER_ACTIVATE_ALL = 0x58;
+	private static final int FUNCTION_SLIDER_DEACTIVATE_ALL = 0x59;
 
 	// Function with variable data size
-	private static final int FUNCTION_TAG_SLIDER_SET_CAPTION = 0x78;
-	private static final int FUNCTION_TAG_SLIDER_PRINT_VALUE = 0x79;
+	private static final int FUNCTION_SLIDER_SET_CAPTION = 0x78;
+	private static final int FUNCTION_SLIDER_PRINT_VALUE = 0x79;
 
 	TouchSlider() {
 		mIsInitialized = false;
@@ -144,8 +146,6 @@ public class TouchSlider {
 		mBarThresholdColor = sDefaultThresholdColor;
 
 		mCaption = null;
-		mCaptionLayoutInfo = null;
-		mValueLayoutInfo = null;
 
 		mRPCView = aRPCView;
 		/**
@@ -159,22 +159,34 @@ public class TouchSlider {
 
 		mOptions = aOptions;
 		mBarWidth = aBarWidth;
+
 		mShortBorderWidth = aBarWidth / 2;
 		mBarLength = aBarLength;
+		if (aBarLength < 0) {
+			// inverse slider
+			mBarLength = -aBarLength;
+			mOptions |= FLAG_SLIDER_IS_INVERSE;
+		}
 		mActualValue = aInitalValue;
+		if (aInitalValue < 0) {
+			mActualValue = -aInitalValue;
+		}
 		mThresholdValue = aThresholdValue;
+		if (aThresholdValue < 0) {
+			mThresholdValue = -aThresholdValue;
+		}
 		mOnChangeHandlerCallbackAddress = aOnChangeHandlerCallbackAddress;
 
 		int tShortBordersAddedWidth = mBarWidth;
 		int tLongBordersAddedWidth = 2 * mBarWidth;
-		if ((mOptions & TOUCHSLIDER_SHOW_BORDER) == 0) {
+		if ((mOptions & FLAG_SLIDER_SHOW_BORDER) == 0) {
 			tLongBordersAddedWidth = 0;
 			tShortBordersAddedWidth = 0;
 		}
 		/*
 		 * compute lower right corner and validate
 		 */
-		if ((mOptions & TOUCHSLIDER_IS_HORIZONTAL) != 0) {
+		if ((mOptions & FLAG_SLIDER_IS_HORIZONTAL) != 0) {
 			// border at the long ends are half the size of the other borders
 			mPositionXRight = mPositionX + mBarLength + tShortBordersAddedWidth - 1;
 			if (mPositionXRight >= aRPCView.mRequestedCanvasWidth) {
@@ -199,13 +211,23 @@ public class TouchSlider {
 						+ aRPCView.mRequestedCanvasHeight);
 			}
 		}
+
+		/*
+		 * Set initial layout info
+		 */
+		mValueLayoutInfo = new TextLayoutInfo();
+
+		mCaptionLayoutInfo = new TextLayoutInfo();
+		mCaptionLayoutInfo.mAbove = true;
+		mCaptionLayoutInfo.mSize = mRPCView.mRequestedCanvasHeight / 12;
+
 		mIsActive = false;
 		mIsInitialized = true;
 	}
 
 	void drawSlider() {
 		mIsActive = true;
-		if ((mOptions & TOUCHSLIDER_SHOW_BORDER) != 0) {
+		if ((mOptions & FLAG_SLIDER_SHOW_BORDER) != 0) {
 			drawBorder();
 		}
 		// Fill middle bar with initial value
@@ -214,7 +236,7 @@ public class TouchSlider {
 			mRPCView.drawTextWithBackground(mCaptionLayoutInfo.mPositionX, mCaptionLayoutInfo.mPositionY, mCaption,
 					mCaptionLayoutInfo.mSize, mCaptionLayoutInfo.mColor, mCaptionLayoutInfo.mBackgroundColor);
 		}
-		if ((mOptions & TOUCHSLIDER_SHOW_VALUE) != 0) {
+		if ((mOptions & FLAG_SLIDER_SHOW_VALUE) != 0) {
 			printValue();
 		}
 	}
@@ -230,7 +252,7 @@ public class TouchSlider {
 	}
 
 	void drawBorder() {
-		if ((mOptions & TOUCHSLIDER_IS_HORIZONTAL) != 0) {
+		if ((mOptions & FLAG_SLIDER_IS_HORIZONTAL) != 0) {
 			// Create value bar upper border
 			mRPCView.fillRectRel(mPositionX, mPositionY, mBarLength + mBarWidth, mBarWidth, mSliderColor);
 			// Create value bar lower border
@@ -269,33 +291,49 @@ public class TouchSlider {
 
 		int tShortBorderWidth = mShortBorderWidth;
 		int tLongBorderWidth = mBarWidth;
-		if ((mOptions & TOUCHSLIDER_SHOW_BORDER) == 0) {
+		if ((mOptions & FLAG_SLIDER_SHOW_BORDER) == 0) {
 			tLongBorderWidth = 0;
 			tShortBorderWidth = 0;
 		}
 
+		int tBarBackgroundColor = mBarBackgroundColor;
+		int tBarColor = mBarColor;
+
+		if ((mOptions & FLAG_SLIDER_IS_INVERSE) != 0) {
+			/*
+			 * switch colors and invert value
+			 */
+			tBarBackgroundColor = tBarColor;
+			if (tActualValue > mThresholdValue) {
+				tBarBackgroundColor = mBarThresholdColor;
+			}
+			tBarColor = mBarBackgroundColor;
+			tActualValue = mBarLength - tActualValue;
+		} else {
+			if (tActualValue > mThresholdValue) {
+				tBarColor = mBarThresholdColor;
+			}
+		}
+
 		// draw background bar
 		if (tActualValue < mBarLength) {
-			if ((mOptions & TOUCHSLIDER_IS_HORIZONTAL) != 0) {
+			if ((mOptions & FLAG_SLIDER_IS_HORIZONTAL) != 0) {
 				mRPCView.fillRectRel(mPositionX + tShortBorderWidth + tActualValue, mPositionY + tLongBorderWidth, mBarLength
-						- tActualValue, mBarWidth, mBarBackgroundColor);
+						- tActualValue, mBarWidth, tBarBackgroundColor);
 			} else {
 				mRPCView.fillRectRel(mPositionX + tLongBorderWidth, mPositionY + tShortBorderWidth, mBarWidth, mBarLength
-						- tActualValue, mBarBackgroundColor);
+						- tActualValue, tBarBackgroundColor);
 			}
 		}
 
 		// Draw value bar
 		if (tActualValue > 0) {
-			int tColor = mBarColor;
-			if (tActualValue > mThresholdValue) {
-				tColor = mBarThresholdColor;
-			}
-			if ((mOptions & TOUCHSLIDER_IS_HORIZONTAL) != 0) {
-				mRPCView.fillRectRel(mPositionX + tShortBorderWidth, mPositionY + tLongBorderWidth, tActualValue, mBarWidth, tColor);
+			if ((mOptions & FLAG_SLIDER_IS_HORIZONTAL) != 0) {
+				mRPCView.fillRectRel(mPositionX + tShortBorderWidth, mPositionY + tLongBorderWidth, tActualValue, mBarWidth,
+						tBarColor);
 			} else {
 				mRPCView.fillRectRel(mPositionX + tLongBorderWidth, mPositionYBottom - tShortBorderWidth - tActualValue + 1,
-						mBarWidth, tActualValue, tColor);
+						mBarWidth, tActualValue, tBarColor);
 			}
 		}
 	}
@@ -309,17 +347,17 @@ public class TouchSlider {
 
 		int tSliderShortWidth = mBarWidth;
 		int tSliderLongWidth = mBarLength;
-		if ((mOptions & TOUCHSLIDER_SHOW_BORDER) != 0) {
+		if ((mOptions & FLAG_SLIDER_SHOW_BORDER) != 0) {
 			tSliderShortWidth = 3 * mBarWidth;
 			tSliderLongWidth = (2 * mShortBorderWidth) + mBarLength;
 		}
 
-		if ((mOptions & TOUCHSLIDER_IS_HORIZONTAL) != 0) {
+		if ((mOptions & FLAG_SLIDER_IS_HORIZONTAL) != 0) {
 			// Horizontal slider
 
-			if (aTextLayoutInfo.mAlign == SLIDER_VALUE_CAPTION_ALIGN_RIGHT) {
+			if (aTextLayoutInfo.mAlign == FLAG_SLIDER_CAPTION_ALIGN_RIGHT) {
 				aTextLayoutInfo.mPositionX = mPositionX + tSliderLongWidth - tTextPixelLength;
-			} else if (aTextLayoutInfo.mAlign == SLIDER_VALUE_CAPTION_ALIGN_MIDDLE) {
+			} else if (aTextLayoutInfo.mAlign == FLAG_SLIDER_CAPTION_ALIGN_MIDDLE) {
 				aTextLayoutInfo.mPositionX = mPositionX + ((tSliderLongWidth - tTextPixelLength) / 2);
 			} else {
 				aTextLayoutInfo.mPositionX = mPositionX;
@@ -334,9 +372,9 @@ public class TouchSlider {
 
 		} else {
 			// Vertical slider
-			if (aTextLayoutInfo.mAlign == SLIDER_VALUE_CAPTION_ALIGN_RIGHT) {
+			if (aTextLayoutInfo.mAlign == FLAG_SLIDER_CAPTION_ALIGN_RIGHT) {
 				aTextLayoutInfo.mPositionX = mPositionX + tSliderShortWidth - tTextPixelLength;
-			} else if (aTextLayoutInfo.mAlign == SLIDER_VALUE_CAPTION_ALIGN_MIDDLE) {
+			} else if (aTextLayoutInfo.mAlign == FLAG_SLIDER_CAPTION_ALIGN_MIDDLE) {
 				aTextLayoutInfo.mPositionX = mPositionX + ((tSliderShortWidth - tTextPixelLength) / 2);
 			} else {
 				aTextLayoutInfo.mPositionX = mPositionX;
@@ -355,6 +393,9 @@ public class TouchSlider {
 	 * Check if touch event is in slider. If yes - set bar and value call callback function and return true. If no - return false
 	 */
 	boolean checkIfTouchInSlider(final int aTouchPositionX, final int aTouchPositionY) {
+		if ((mOptions & FLAG_SLIDER_IS_ONLY_OUTPUT) != 0) {
+			return false;
+		}
 		int tPositionBorderX = mPositionX - mTouchBorder;
 		if (tPositionBorderX < 0) {
 			tPositionBorderX = 0;
@@ -368,7 +409,7 @@ public class TouchSlider {
 			return false;
 		}
 		int tShortBorderWidth = 0;
-		if ((mOptions & TOUCHSLIDER_SHOW_BORDER) != 0) {
+		if ((mOptions & FLAG_SLIDER_SHOW_BORDER) != 0) {
 			tShortBorderWidth = mShortBorderWidth;
 		}
 		/*
@@ -376,7 +417,7 @@ public class TouchSlider {
 		 */
 		// adjust value according to size of upper and lower border
 		int tActualTouchValue;
-		if ((mOptions & TOUCHSLIDER_IS_HORIZONTAL) != 0) {
+		if ((mOptions & FLAG_SLIDER_IS_HORIZONTAL) != 0) {
 			if (aTouchPositionX < (mPositionX + tShortBorderWidth)) {
 				tActualTouchValue = 0;
 			} else if (aTouchPositionX > (mPositionXRight - tShortBorderWidth)) {
@@ -393,20 +434,23 @@ public class TouchSlider {
 				tActualTouchValue = mPositionYBottom - tShortBorderWidth - aTouchPositionY + 1;
 			}
 		}
+		if ((mOptions & FLAG_SLIDER_IS_INVERSE) != 0) {
+			tActualTouchValue = mBarLength - tActualTouchValue;
+		}
 
 		if (tActualTouchValue != mActualTouchValue) {
 			mActualTouchValue = tActualTouchValue;
 			if (mOnChangeHandlerCallbackAddress != 0) {
 				// call change handler
 				mRPCView.mBlueDisplayContext.mSerialService.writeGuiCallbackEvent(
-						BluetoothSerialService.EVENT_TAG_SLIDER_CALLBACK_ACTION, mListIndex, mOnChangeHandlerCallbackAddress,
+						BluetoothSerialService.EVENT_SLIDER_CALLBACK_ACTION, mListIndex, mOnChangeHandlerCallbackAddress,
 						tActualTouchValue);
 			}
-			if ((mOptions & TOUCHSLIDER_VALUE_BY_CALLBACK) == 0) {
+			if ((mOptions & FLAG_SLIDER_VALUE_BY_CALLBACK) == 0) {
 				// store value and redraw
 				mActualValue = tActualTouchValue;
 				drawBar();
-				if ((mOptions & TOUCHSLIDER_SHOW_VALUE) != 0) {
+				if ((mOptions & FLAG_SLIDER_SHOW_VALUE) != 0) {
 					printValue();
 				}
 			}
@@ -464,25 +508,27 @@ public class TouchSlider {
 		/*
 		 * Plausi
 		 */
-		if (aCommand != FUNCTION_TAG_SLIDER_ACTIVATE_ALL && aCommand != FUNCTION_TAG_SLIDER_DEACTIVATE_ALL) {
+		if (aCommand != FUNCTION_SLIDER_ACTIVATE_ALL && aCommand != FUNCTION_SLIDER_DEACTIVATE_ALL) {
 			/*
 			 * We need a slider for the command
 			 */
 			if (aParamsLength <= 0) {
-				MyLog.e(LOG_TAG, "aParamsLength is <=0 but Command=0x" + Integer.toHexString(aCommand) + " is not one of "
-						+ FUNCTION_TAG_SLIDER_ACTIVATE_ALL + " or " + FUNCTION_TAG_SLIDER_DEACTIVATE_ALL);
+				MyLog.e(LOG_TAG,
+						"aParamsLength is <=0 but Command=0x" + Integer.toHexString(aCommand) + " is not one of 0x"
+								+ Integer.toHexString(FUNCTION_SLIDER_ACTIVATE_ALL) + " or 0x"
+								+ Integer.toHexString(FUNCTION_SLIDER_DEACTIVATE_ALL));
 				return;
 			} else {
 				tSliderNumber = aParameters[0];
 
 				if (tSliderNumber >= 0 && tSliderNumber < sSliderList.size()) {
 					tSlider = sSliderList.get(tSliderNumber);
-					if (aCommand != FUNCTION_TAG_SLIDER_CREATE && (tSlider == null || !tSlider.mIsInitialized)) {
+					if (aCommand != FUNCTION_SLIDER_CREATE && (tSlider == null || !tSlider.mIsInitialized)) {
 						MyLog.e(LOG_TAG, "Command=0x" + Integer.toHexString(aCommand) + " SliderNr=" + tSliderNumber
 								+ " is null or not initialized.");
 						return;
 					}
-				} else if (aCommand != FUNCTION_TAG_SLIDER_CREATE) {
+				} else if (aCommand != FUNCTION_SLIDER_CREATE) {
 					MyLog.e(LOG_TAG, "Command=0x" + Integer.toHexString(aCommand) + " SliderNr=" + tSliderNumber
 							+ " not found. Only " + sSliderList.size() + " sliders created.");
 					return;
@@ -493,35 +539,35 @@ public class TouchSlider {
 		try {
 			switch (aCommand) {
 
-			case FUNCTION_TAG_SLIDER_ACTIVATE_ALL:
+			case FUNCTION_SLIDER_ACTIVATE_ALL:
 				if (MyLog.isINFO()) {
 					MyLog.i(LOG_TAG, "Activate all sliders");
 				}
 				activateAllSliders();
 				break;
 
-			case FUNCTION_TAG_SLIDER_DEACTIVATE_ALL:
+			case FUNCTION_SLIDER_DEACTIVATE_ALL:
 				if (MyLog.isINFO()) {
 					MyLog.i(LOG_TAG, "Deactivate all sliders");
 				}
 				deactivateAllSliders();
 				break;
 
-			case FUNCTION_TAG_SLIDER_DRAW:
+			case FUNCTION_SLIDER_DRAW:
 				if (MyLog.isINFO()) {
 					MyLog.i(LOG_TAG, "Draw slider. SliderNr=" + tSliderNumber);
 				}
 				tSlider.drawSlider();
 				break;
 
-			case FUNCTION_TAG_SLIDER_DRAW_BORDER:
+			case FUNCTION_SLIDER_DRAW_BORDER:
 				if (MyLog.isINFO()) {
 					MyLog.i(LOG_TAG, "Draw border. SliderNr=" + tSliderNumber);
 				}
 				tSlider.drawBorder();
 				break;
 
-			case FUNCTION_TAG_SLIDER_SET_CAPTION:
+			case FUNCTION_SLIDER_SET_CAPTION:
 				aRPCView.myConvertChars(aDataBytes, RPCView.sCharsArray, aDataLength);
 				tSlider.mCaption = new String(RPCView.sCharsArray, 0, aDataLength);
 				tSlider.computeTextPositions(tSlider.mCaptionLayoutInfo, tSlider.mCaption);
@@ -531,7 +577,7 @@ public class TouchSlider {
 				}
 				break;
 
-			case FUNCTION_TAG_SLIDER_PRINT_VALUE:
+			case FUNCTION_SLIDER_PRINT_VALUE:
 				aRPCView.myConvertChars(aDataBytes, RPCView.sCharsArray, aDataLength);
 				String tValue = new String(RPCView.sCharsArray, 0, aDataLength);
 
@@ -549,46 +595,46 @@ public class TouchSlider {
 				}
 				break;
 
-			case FUNCTION_TAG_SLIDER_SETTINGS:
+			case FUNCTION_SLIDER_SETTINGS:
 				int tSubcommand = aParameters[1];
 				switch (tSubcommand) {
-				case SLIDER_FLAG_SET_COLOR_THRESHOLD:
+				case SUBFUNCTION_SLIDER_SET_COLOR_THRESHOLD:
 					tSlider.mBarThresholdColor = RPCView.shortToLongColor(aParameters[2]);
 					if (MyLog.isINFO()) {
-						MyLog.i(LOG_TAG, "Set threshold color= " + RPCView.shortToColorString(tSlider.mBarThresholdColor)
-								+ " for SliderNr=" + tSliderNumber);
-					}
-					break;
-
-				case SLIDER_FLAG_SET_COLOR_BAR_BACKGROUND:
-					tSlider.mBarBackgroundColor = RPCView.shortToLongColor(aParameters[2]);
-					if (MyLog.isINFO()) {
-						MyLog.i(LOG_TAG, "Set bar background color= " + RPCView.shortToColorString(tSlider.mBarBackgroundColor)
-								+ " for SliderNr=" + tSliderNumber);
-					}
-					break;
-
-				case SLIDER_FLAG_SET_COLOR_BAR:
-					tSlider.mBarColor = RPCView.shortToLongColor(aParameters[2]);
-					if (MyLog.isINFO()) {
-						MyLog.i(LOG_TAG, "Set bar color= " + RPCView.shortToColorString(tSlider.mBarColor) + " for SliderNr="
+						MyLog.i(LOG_TAG, "Set threshold color= " + RPCView.shortToColorString(aParameters[2]) + " for SliderNr="
 								+ tSliderNumber);
 					}
 					break;
 
-				case SLIDER_FLAG_SET_VALUE_AND_DRAW_BAR:
+				case SUBFUNCTION_SLIDER_SET_COLOR_BAR_BACKGROUND:
+					tSlider.mBarBackgroundColor = RPCView.shortToLongColor(aParameters[2]);
+					if (MyLog.isINFO()) {
+						MyLog.i(LOG_TAG, "Set bar background color= " + RPCView.shortToColorString(aParameters[2])
+								+ " for SliderNr=" + tSliderNumber);
+					}
+					break;
+
+				case SUBFUNCTION_SLIDER_SET_COLOR_BAR:
+					tSlider.mBarColor = RPCView.shortToLongColor(aParameters[2]);
+					if (MyLog.isINFO()) {
+						MyLog.i(LOG_TAG, "Set bar color= " + RPCView.shortToColorString(aParameters[2]) + " for SliderNr="
+								+ tSliderNumber);
+					}
+					break;
+
+				case SUBFUNCTION_SLIDER_SET_VALUE_AND_DRAW_BAR:
 					// Log on Info level!
 					if (MyLog.isDEBUG()) {
 						MyLog.d(LOG_TAG, "Set value=" + aParameters[2] + " for SliderNr=" + tSliderNumber);
 					}
 					tSlider.mActualValue = aParameters[2];
 					tSlider.drawBar();
-					if ((tSlider.mOptions & TOUCHSLIDER_SHOW_VALUE) != 0) {
+					if ((tSlider.mOptions & FLAG_SLIDER_SHOW_VALUE) != 0) {
 						tSlider.printValue();
 					}
 					break;
 
-				case SLIDER_FLAG_SET_POSITION:
+				case SUBFUNCTION_SLIDER_SET_POSITION:
 					tSlider.mPositionX = aParameters[2];
 					tSlider.mPositionY = aParameters[3];
 					if (MyLog.isINFO()) {
@@ -597,46 +643,46 @@ public class TouchSlider {
 					}
 					break;
 
-				case SLIDER_FLAG_SET_ACTIVE:
+				case SUBFUNCTION_SLIDER_SET_ACTIVE:
 					if (MyLog.isINFO()) {
 						MyLog.i(LOG_TAG, "Set active=true for SliderNr=" + tSliderNumber);
 					}
 					tSlider.mIsActive = true;
 					break;
 
-				case SLIDER_FLAG_RESET_ACTIVE:
+				case SUBFUNCTION_SLIDER_RESET_ACTIVE:
 					if (MyLog.isINFO()) {
 						MyLog.i(LOG_TAG, "Set active=false for SliderNr=" + tSliderNumber);
 					}
 					tSlider.mIsActive = false;
 					break;
 
-				case SLIDER_FLAG_SET_CAPTION_PROPERTIES:
-				case SLIDER_FLAG_SET_PRINT_VALUE_PROPERTIES:
+				case SUBFUNCTION_SLIDER_SET_CAPTION_PROPERTIES:
+				case SUBFUNCTION_SLIDER_SET_PRINT_VALUE_PROPERTIES:
 					String tFunction;
 					TextLayoutInfo tLayoutInfo = tSlider.new TextLayoutInfo();
 
 					tLayoutInfo.mSize = aParameters[2];
-					tLayoutInfo.mAlign = aParameters[3] & SLIDER_VALUE_CAPTION_ALIGN_MASK;
+					tLayoutInfo.mAlign = aParameters[3] & FLAG_SLIDER_CAPTION_ALIGN_MASK;
 					tLayoutInfo.mMargin = aParameters[4];
 					tLayoutInfo.mColor = RPCView.shortToLongColor(aParameters[5]);
 					tLayoutInfo.mBackgroundColor = RPCView.shortToLongColor(aParameters[6]);
 					String tAlign = "left";
-					if (tLayoutInfo.mAlign == SLIDER_VALUE_CAPTION_ALIGN_RIGHT) {
+					if (tLayoutInfo.mAlign == FLAG_SLIDER_CAPTION_ALIGN_RIGHT) {
 						tAlign = "right";
-					} else if (tLayoutInfo.mAlign == SLIDER_VALUE_CAPTION_ALIGN_MIDDLE) {
+					} else if (tLayoutInfo.mAlign == FLAG_SLIDER_CAPTION_ALIGN_MIDDLE) {
 						tAlign = "middle";
 					}
 
 					String tAbove;
-					if ((aParameters[3] & SLIDER_VALUE_CAPTION_ABOVE) != 0) {
+					if ((aParameters[3] & FLAG_SLIDER_CAPTION_ABOVE) != 0) {
 						tLayoutInfo.mAbove = true;
 						tAbove = "above";
 					} else {
 						tLayoutInfo.mAbove = false;
 						tAbove = "below";
 					}
-					if (tSubcommand == SLIDER_FLAG_SET_CAPTION_PROPERTIES) {
+					if (tSubcommand == SUBFUNCTION_SLIDER_SET_CAPTION_PROPERTIES) {
 						tFunction = "caption";
 						tSlider.mCaptionLayoutInfo = tLayoutInfo;
 						tSlider.computeTextPositions(tLayoutInfo, tSlider.mCaption);
@@ -648,16 +694,15 @@ public class TouchSlider {
 						MyLog.i(LOG_TAG,
 								"Set " + tFunction + " properties size=" + tLayoutInfo.mSize + " position=" + tAbove + " align="
 										+ tAlign + " margin=" + tLayoutInfo.mMargin + " color="
-										+ RPCView.shortToColorString(tLayoutInfo.mColor) + " background color="
-										+ RPCView.shortToColorString(tLayoutInfo.mBackgroundColor) + " for SliderNr="
-										+ tSliderNumber);
+										+ RPCView.shortToColorString(aParameters[5]) + " background color="
+										+ RPCView.shortToColorString(aParameters[6]) + " for SliderNr=" + tSliderNumber);
 					}
 					break;
 
 				}
 				break;
 
-			case FUNCTION_TAG_SLIDER_CREATE:
+			case FUNCTION_SLIDER_CREATE:
 				int tOnChangeHandlerCallbackAddress = aParameters[10] & 0x0000FFFF;
 				if (aParamsLength == 12) {
 					// 32 bit callback address

@@ -104,9 +104,10 @@ public class DeviceListActivity extends Activity {
 		// Get a set of currently paired devices
 		Set<BluetoothDevice> pairedDevices = mBtAdapter.getBondedDevices();
 
-		if (pairedDevices.size() == 1) {
+		long tActualTimestampMillis = System.currentTimeMillis();
+		if (pairedDevices.size() == 1 && BluetoothSerialService.sLastFailTimestampMillis < (tActualTimestampMillis - 5000)) {
 			/*
-			 * auto connect if only one device found
+			 * auto connect if only one device found but not within 5 seconds after last fail
 			 */
 			Iterator<BluetoothDevice> tIter = pairedDevices.iterator();
 			// Get the BLuetoothDevice object
@@ -166,6 +167,7 @@ public class DeviceListActivity extends Activity {
 
 		// Unregister broadcast listeners
 		this.unregisterReceiver(mReceiver);
+		RPCView.mDeviceListActivityLaunched = false;
 	}
 
 	// The on-click listener for all devices in the ListViews

@@ -31,12 +31,20 @@
 
 #include <stdint.h>
 
+#ifdef AVR
+#include <avr/pgmspace.h>
+#endif
+
 #ifdef LOCAL_DISPLAY_EXISTS
 #include "TouchButton.h"
 // since we have only a restricted pool of local buttons
 typedef uint8_t BDButtonHandle_t;
 #else
+#ifdef AVR
+typedef uint8_t BDButtonHandle_t;
+#else
 typedef uint16_t BDButtonHandle_t;
+#endif
 #endif
 
 extern BDButtonHandle_t sLocalButtonIndex; // local button index counter used by BDButton.init() and BlueDisplay.createButton()
@@ -51,7 +59,8 @@ public:
     static void resetAllButtons(void);
     static void activateAllButtons(void);
     static void deactivateAllButtons(void);
-    static void setButtonsTouchTone(uint8_t aToneIndex, uint8_t aToneVolume);
+    static void setButtonsTouchTone(uint8_t aToneIndex, uint16_t aToneDuration);
+    static void setButtonsTouchTone(uint8_t aToneIndex, uint16_t aToneDuration, uint8_t aToneVolume);
     static void setGlobalFlags(uint16_t aFlags);
 
     // Constructors
@@ -86,6 +95,14 @@ public:
 
     void activate(void);
     void deactivate(void);
+
+#ifdef AVR
+    void initPGM(uint16_t aPositionX, uint16_t aPositionY, uint16_t aWidthX, uint16_t aHeightY, Color_t aButtonColor,
+            const char * aPGMCaption, uint8_t aCaptionSize, uint8_t aFlags, int16_t aValue,
+            void (*aOnTouchHandler)(BDButton*, int16_t));
+    void setCaptionPGM(const char * aPGMCaption);
+    void setCaptionPGM(const char * aPGMCaption, bool doDrawButton);
+#endif
 
     BDButtonHandle_t mButtonHandle; // Index for BlueDisplay button functions
 

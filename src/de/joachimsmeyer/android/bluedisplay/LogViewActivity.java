@@ -45,9 +45,11 @@ import android.widget.ListView;
 import android.widget.TextView;
 
 public class LogViewActivity extends ListActivity {
+	LogViewActivity sInstance;
 	@Override
 	public void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
+		sInstance = this;
 
 		final ArrayAdapter<String> tColoredLogAdapter = new ColoredLogAdapter(this, R.layout.logview);
 		setListAdapter(tColoredLogAdapter);
@@ -65,6 +67,8 @@ public class LogViewActivity extends ListActivity {
 					public void onClick(DialogInterface dialog, int id) {
 						MyLog.clear();
 						tColoredLogAdapter.notifyDataSetChanged();
+						// return to main window
+						sInstance.onBackPressed();
 					}
 				});
 				tBuilder.setNegativeButton(R.string.alert_dialog_cancel, new DialogInterface.OnClickListener() {

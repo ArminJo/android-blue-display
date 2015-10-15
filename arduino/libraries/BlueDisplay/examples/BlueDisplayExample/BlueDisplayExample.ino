@@ -94,8 +94,8 @@ void setup() {
     initDisplay();
 
     // Register callback handler
-    registerSimpleConnectCallback(&initDisplay);
-    registerSimpleResizeAndConnectCallback(&drawGui);
+    registerConnectCallback(&initDisplay);
+    registerRedrawCallback(&drawGui);
     drawGui();
     // to signal that boot has finished
     tone(TONE_PIN, 2000, 200);
@@ -109,9 +109,13 @@ void loop() {
         BlueDisplay1.fillCircle(DISPLAY_WIDTH / 2, DISPLAY_HEIGHT / 2, 20, COLOR_RED);
         // wait for delay time but check touch events 8 times while waiting
         for (i = 0; i < 8; ++i) {
+#ifdef USE_SIMPLE_SERIAL
             checkAndHandleEvents();
-            printDemoString();
+#else
+            serialEvent();
+#endif
             delay(sDelay / 8);
+            printDemoString();
         }
         digitalWrite(LED_PIN, LOW);  // LED off
         BlueDisplay1.fillCircle(DISPLAY_WIDTH / 2, DISPLAY_HEIGHT / 2, 20, COLOR_DEMO_BACKGROUND);
@@ -121,8 +125,8 @@ void loop() {
 #else
             serialEvent();
 #endif
-            printDemoString();
             delay(sDelay / 8);
+            printDemoString();
         }
         printDemoString();
     } else {
@@ -157,11 +161,11 @@ void initDisplay(void) {
     TouchButtonValueDirect.initPGM(210, 150, 90, 55, COLOR_YELLOW, PSTR("..."), 44, BUTTON_FLAG_DO_BEEP_ON_TOUCH, 0, &doGetDelay);
 
     TouchSliderDelay.init(SLIDER_X_POSITION, 40, 12, 150, 100, DELAY_START_VALUE / 10, COLOR_YELLOW, COLOR_GREEN,
-            TOUCHSLIDER_SHOW_BORDER | TOUCHSLIDER_IS_HORIZONTAL, &doDelay);
-    TouchSliderDelay.setCaptionProperties(TEXT_SIZE_22, SLIDER_VALUE_CAPTION_ALIGN_RIGHT, 4, COLOR_RED,
+            FLAG_SLIDER_SHOW_BORDER | FLAG_SLIDER_IS_HORIZONTAL, &doDelay);
+    TouchSliderDelay.setCaptionProperties(TEXT_SIZE_22, FLAG_SLIDER_CAPTION_ALIGN_RIGHT, 4, COLOR_RED,
     COLOR_DEMO_BACKGROUND);
     TouchSliderDelay.setCaption("Delay");
-    TouchSliderDelay.setPrintValueProperties(TEXT_SIZE_22, SLIDER_VALUE_CAPTION_ALIGN_LEFT, 4, COLOR_WHITE,
+    TouchSliderDelay.setPrintValueProperties(TEXT_SIZE_22, FLAG_SLIDER_CAPTION_ALIGN_LEFT, 4, COLOR_WHITE,
     COLOR_DEMO_BACKGROUND);
 }
 

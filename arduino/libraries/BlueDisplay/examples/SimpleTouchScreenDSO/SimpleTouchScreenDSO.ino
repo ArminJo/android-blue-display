@@ -481,9 +481,13 @@ void initTimer2(void);
  *******************************************************************************************/
 
 void initDisplay(void) {
+    // first synchronize. Since a complete chart data can be missing, send minimum 320 byte
+    for (int i = 0; i < 16; ++i) {
+        BlueDisplay1.sendSync();
+    }
     BlueDisplay1.setFlagsAndSize(
-            BD_FLAG_FIRST_RESET_ALL | BD_FLAG_USE_MAX_SIZE | BD_FLAG_LONG_TOUCH_ENABLE | BD_FLAG_TOUCH_MOVE_DISABLE, DISPLAY_WIDTH,
-            DISPLAY_HEIGHT);
+            BD_FLAG_FIRST_RESET_ALL | BD_FLAG_USE_MAX_SIZE | BD_FLAG_LONG_TOUCH_ENABLE | BD_FLAG_ONLY_TOUCH_MOVE_DISABLE,
+            DISPLAY_WIDTH, DISPLAY_HEIGHT);
     BlueDisplay1.setCharacterMapping(0xD1, 0x21D1); // Ascending in UTF16
     BlueDisplay1.setCharacterMapping(0xD2, 0x21D3); // Descending in UTF16
 //    BlueDisplay1.setCharacterMapping(0xF8, 0x2103); // Degree Celsius in UTF16
@@ -568,8 +572,8 @@ void setup() {
     initFrequencyGenerator();
     initDisplay();
     drawStartGui();
-    registerSimpleConnectCallback(&initDisplay);
-    registerSimpleResizeAndConnectCallback(&redrawDisplay);
+    registerConnectCallback(&initDisplay);
+    registerRedrawCallback(&redrawDisplay);
     registerSwipeEndCallback(&swipeEndHandler);
     registerTouchUpCallback(&TouchUpHandler);
     registerLongTouchDownCallback(&longTouchDownHandler, 900);
@@ -827,7 +831,7 @@ void acquireDataFast(void) {
     uint16_t tValueMax = tUValue.Word;
     uint16_t tValueMin = tUValue.Word;
     uint8_t tIndex = MeasurementControl.TimebaseIndex;
-    uint16_t tLoopCount = DataBufferControl.AcquisitionSize;
+    int16_t tLoopCount = DataBufferControl.AcquisitionSize;
     uint8_t *DataPointer = &DataBufferControl.DataBuffer[0];
     uint8_t *DataPointerFast = &DataBufferControl.DataBuffer[0];
     uint32_t tIntegrateValue = 0;
@@ -1391,7 +1395,6 @@ void setACMode(bool aNewMode) {
     }
     // power latching relay
     digitalWriteFast(tRelaisPin, HIGH);
-    setACModeButtonCaption();
     if (DisplayControl.DisplayPage == DISPLAY_PAGE_SETTINGS) {
         // hide/show offset
         drawDSOSettingsPageGui();
@@ -1423,26 +1426,26 @@ void createGUI(void) {
     BlueDisplay1.setButtonsGlobalFlags(USE_UP_EVENTS_FOR_BUTTONS); // since swipe recognition needs it
 // Button for Singleshot (and settings/back)
     TouchButtonSingleshot.initPGM(BUTTON_WIDTH_3_POS_3, 0, BUTTON_WIDTH_3, BUTTON_HEIGHT_4_256,
-    COLOR_GUI_CONTROL, PSTR("Single"), TEXT_SIZE_11, BUTTON_FLAG_DO_BEEP_ON_TOUCH, 0, &doTriggerSingleshot);
+    COLOR_GUI_CONTROL, PSTR("Single"), TEXT_SIZE_11, FLAG_BUTTON_DO_BEEP_ON_TOUCH, 0, &doTriggerSingleshot);
 
     TouchButtonBack.initPGM(BUTTON_WIDTH_3_POS_3, 0, BUTTON_WIDTH_3, BUTTON_HEIGHT_4_256, COLOR_GUI_CONTROL, PSTR("Back"),
-    TEXT_SIZE_22, BUTTON_FLAG_DO_BEEP_ON_TOUCH, 0, &doBack);
+    TEXT_SIZE_22, FLAG_BUTTON_DO_BEEP_ON_TOUCH, 0, &doBack);
 
 // big start stop button
     TouchButtonStartStop.initPGM(BUTTON_WIDTH_3_POS_3, BUTTON_HEIGHT_4_256_LINE_2, BUTTON_WIDTH_3,
             (2 * BUTTON_HEIGHT_4_256) + BUTTON_DEFAULT_SPACING, COLOR_GUI_CONTROL, PSTR("Start/Stop"), TEXT_SIZE_11,
-            BUTTON_FLAG_DO_BEEP_ON_TOUCH, 0, &doStartStop);
+            FLAG_BUTTON_DO_BEEP_ON_TOUCH, 0, &doStartStop);
 
 // Button for settings page
     TouchButtonSettings.initPGM(BUTTON_WIDTH_3_POS_3, BUTTON_HEIGHT_4_256_LINE_4, BUTTON_WIDTH_3,
-    BUTTON_HEIGHT_4_256, COLOR_GUI_CONTROL, PSTR("Settings"), TEXT_SIZE_11, BUTTON_FLAG_DO_BEEP_ON_TOUCH, 0, &doShowSettingsPage);
+    BUTTON_HEIGHT_4_256, COLOR_GUI_CONTROL, PSTR("Settings"), TEXT_SIZE_11, FLAG_BUTTON_DO_BEEP_ON_TOUCH, 0, &doShowSettingsPage);
 
     /*
      * History
      */
 // Button for chart history (erase color)
     TouchButtonChartHistoryOnOff.initPGM(0, 0, BUTTON_WIDTH_3, BUTTON_HEIGHT_4_256, COLOR_RED, PSTR("History"),
-    TEXT_SIZE_11, BUTTON_FLAG_DO_BEEP_ON_TOUCH | BUTTON_FLAG_TYPE_AUTO_RED_GREEN, 0, &doChartHistory);
+    TEXT_SIZE_11, FLAG_BUTTON_DO_BEEP_ON_TOUCH | BUTTON_FLAG_TYPE_AUTO_RED_GREEN, 0, &doChartHistory);
 
     /*
      * Settings Page
@@ -1450,22 +1453,22 @@ void createGUI(void) {
 
     // Button for auto trigger on off
     TouchButtonAutoTriggerOnOff.init(BUTTON_WIDTH_3_POS_2, 0, BUTTON_WIDTH_3, BUTTON_HEIGHT_4_256,
-    COLOR_GUI_TRIGGER, "", TEXT_SIZE_11, BUTTON_FLAG_DO_BEEP_ON_TOUCH, 0, &doTriggerAutoManualFree);
+    COLOR_GUI_TRIGGER, "", TEXT_SIZE_11, FLAG_BUTTON_DO_BEEP_ON_TOUCH, 0, &doTriggerAutoManualFree);
     setTriggerAutoOnOffButtonCaption();
 
     // Button for range
     TouchButtonAutoRangeOnOff.init(BUTTON_WIDTH_3_POS_2, BUTTON_HEIGHT_4_256_LINE_2, BUTTON_WIDTH_3,
-    BUTTON_HEIGHT_4_256, COLOR_GUI_TRIGGER, "", TEXT_SIZE_11, BUTTON_FLAG_DO_BEEP_ON_TOUCH, 0, &doRangeMode);
+    BUTTON_HEIGHT_4_256, COLOR_GUI_TRIGGER, "", TEXT_SIZE_11, FLAG_BUTTON_DO_BEEP_ON_TOUCH, 0, &doRangeMode);
     setAutoRangetButtonCaption();
 
 // Button for slope
     TouchButtonSlope.init(BUTTON_WIDTH_3_POS_2, BUTTON_HEIGHT_4_256_LINE_3, BUTTON_WIDTH_3, BUTTON_HEIGHT_4_256,
-    COLOR_GUI_TRIGGER, "", TEXT_SIZE_11, BUTTON_FLAG_DO_BEEP_ON_TOUCH, 0, &doTriggerSlope);
+    COLOR_GUI_TRIGGER, "", TEXT_SIZE_11, FLAG_BUTTON_DO_BEEP_ON_TOUCH, 0, &doTriggerSlope);
     setSlopeButtonCaption();
 
 // Button for auto offset on off
     TouchButtonAutoOffsetOnOff.init(BUTTON_WIDTH_3_POS_2, BUTTON_HEIGHT_4_256_LINE_4, BUTTON_WIDTH_3,
-    BUTTON_HEIGHT_4_256, COLOR_GUI_TRIGGER, "", TEXT_SIZE_11, BUTTON_FLAG_DO_BEEP_ON_TOUCH, 0, &doAutoOffsetOnOff);
+    BUTTON_HEIGHT_4_256, COLOR_GUI_TRIGGER, "", TEXT_SIZE_11, FLAG_BUTTON_DO_BEEP_ON_TOUCH, 0, &doAutoOffsetOnOff);
     setAutoOffsetButtonCaption();
 
     /*
@@ -1474,30 +1477,30 @@ void createGUI(void) {
 
 // Button for AC / DC
     TouchButtonAcDc.init(0, BUTTON_HEIGHT_4_256_LINE_2, BUTTON_WIDTH_3, BUTTON_HEIGHT_4_256,
-    COLOR_GUI_SOURCE_TIMEBASE, "", TEXT_SIZE_22, BUTTON_FLAG_DO_BEEP_ON_TOUCH, 0, &doAcDc);
+    COLOR_GUI_SOURCE_TIMEBASE, "", TEXT_SIZE_22, FLAG_BUTTON_DO_BEEP_ON_TOUCH, 0, &doAcDc);
     setACModeButtonCaption();
 
 // Button for channel 0
     TouchButtonChannels[0].init(BUTTON_WIDTH_3_POS_3, BUTTON_HEIGHT_4_256_LINE_2, BUTTON_WIDTH_6,
-    BUTTON_HEIGHT_4_256, BUTTON_AUTO_RED_GREEN_FALSE_COLOR, "", TEXT_SIZE_11, BUTTON_FLAG_DO_BEEP_ON_TOUCH, 0, &doChannelSelect);
+    BUTTON_HEIGHT_4_256, BUTTON_AUTO_RED_GREEN_FALSE_COLOR, "", TEXT_SIZE_11, FLAG_BUTTON_DO_BEEP_ON_TOUCH, 0, &doChannelSelect);
 
 // Button for channel 1
     TouchButtonChannels[1].init(DISPLAY_WIDTH - BUTTON_WIDTH_6, BUTTON_HEIGHT_4_256_LINE_2, BUTTON_WIDTH_6,
-    BUTTON_HEIGHT_4_256, BUTTON_AUTO_RED_GREEN_FALSE_COLOR, "", TEXT_SIZE_11, BUTTON_FLAG_DO_BEEP_ON_TOUCH, 1, &doChannelSelect);
+    BUTTON_HEIGHT_4_256, BUTTON_AUTO_RED_GREEN_FALSE_COLOR, "", TEXT_SIZE_11, FLAG_BUTTON_DO_BEEP_ON_TOUCH, 1, &doChannelSelect);
 
 // Button for channel 2
     TouchButtonChannels[2].init(BUTTON_WIDTH_3_POS_3, BUTTON_HEIGHT_4_256_LINE_3, BUTTON_WIDTH_6,
-    BUTTON_HEIGHT_4_256, BUTTON_AUTO_RED_GREEN_FALSE_COLOR, "", TEXT_SIZE_11, BUTTON_FLAG_DO_BEEP_ON_TOUCH, 2, &doChannelSelect);
+    BUTTON_HEIGHT_4_256, BUTTON_AUTO_RED_GREEN_FALSE_COLOR, "", TEXT_SIZE_11, FLAG_BUTTON_DO_BEEP_ON_TOUCH, 2, &doChannelSelect);
     setChannelButtonsCaption();
 
 // Button for channel select
     TouchButtonChannelSelect.initPGM(DISPLAY_WIDTH - BUTTON_WIDTH_6, BUTTON_HEIGHT_4_256_LINE_3, BUTTON_WIDTH_6,
-    BUTTON_HEIGHT_4_256, BUTTON_AUTO_RED_GREEN_FALSE_COLOR, Channel3ButtonString, TEXT_SIZE_11, BUTTON_FLAG_DO_BEEP_ON_TOUCH, 42,
+    BUTTON_HEIGHT_4_256, BUTTON_AUTO_RED_GREEN_FALSE_COLOR, Channel3ButtonString, TEXT_SIZE_11, FLAG_BUTTON_DO_BEEP_ON_TOUCH, 42,
             &doChannelSelect);
 
 // Button for reference voltage switching
     TouchButtonADCReference.init(BUTTON_WIDTH_3_POS_3, BUTTON_HEIGHT_4_256_LINE_4, BUTTON_WIDTH_3,
-    BUTTON_HEIGHT_4_256, COLOR_GUI_SOURCE_TIMEBASE, "", TEXT_SIZE_11, BUTTON_FLAG_DO_BEEP_ON_TOUCH, 0, &doADCReference);
+    BUTTON_HEIGHT_4_256, COLOR_GUI_SOURCE_TIMEBASE, "", TEXT_SIZE_11, FLAG_BUTTON_DO_BEEP_ON_TOUCH, 0, &doADCReference);
     setReferenceButtonCaption();
 
     /*
@@ -1506,12 +1509,12 @@ void createGUI(void) {
     // make slider slightly visible
     // slider for voltage picker
     TouchSliderVoltagePicker.init(SLIDER_VPICKER_POS_X, 0, SLIDER_SIZE, DISPLAY_HEIGHT, DISPLAY_HEIGHT, 0, 0,
-    COLOR_DATA_PICKER_SLIDER, TOUCHSLIDER_VALUE_BY_CALLBACK, &doVoltagePicker);
+    COLOR_DATA_PICKER_SLIDER, FLAG_SLIDER_VALUE_BY_CALLBACK, &doVoltagePicker);
     TouchSliderVoltagePicker.setBarBackgroundColor(COLOR_DATA_PICKER_SLIDER);
 
     // slider for trigger level
     TouchSliderTriggerLevel.init(SLIDER_TLEVEL_POS_X, 0, SLIDER_SIZE, DISPLAY_HEIGHT, DISPLAY_HEIGHT, 0, 0,
-    COLOR_TRIGGER_SLIDER, TOUCHSLIDER_VALUE_BY_CALLBACK, &doTriggerLevel);
+    COLOR_TRIGGER_SLIDER, FLAG_SLIDER_VALUE_BY_CALLBACK, &doTriggerLevel);
     TouchSliderTriggerLevel.setBarBackgroundColor( COLOR_TRIGGER_SLIDER);
 }
 
@@ -1726,6 +1729,7 @@ void swipeEndHandler(struct Swipe * const aSwipeInfo) {
  */
 void doAcDc(BDButton * aTheTouchedButton, int16_t aValue) {
     setACMode(!MeasurementControl.ChannelIsACMode);
+    setACModeButtonCaption();
 }
 
 /*

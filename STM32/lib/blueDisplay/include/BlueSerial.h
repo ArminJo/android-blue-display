@@ -36,8 +36,29 @@
 #include <stm32f3xx.h>
 #include "stm32f3xx_hal_conf.h" // for UART_HandleTypeDef
 #endif
+#include <stddef.h>
 
-#define SYNC_TOKEN 0xA5
+#define BAUD_STRING_4800 "4800"
+#define BAUD_STRING_9600 "9600"
+#define BAUD_STRING_19200 "19200"
+#define BAUD_STRING_38400 "38400"
+#define BAUD_STRING_57600 "57600"
+#define BAUD_STRING_115200 "115200"
+#define BAUD_STRING_230400 "230400"
+#define BAUD_STRING_460800 "460800"
+#define BAUD_STRING_921600 " 921600"
+#define BAUD_STRING_1382400 "1382400"
+
+#define BAUD_4800 (4800)
+#define BAUD_9600 (9600)
+#define BAUD_19200 (19200)
+#define BAUD_38400 (38400)
+#define BAUD_57600 (57600)
+#define BAUD_115200 (115200)
+#define BAUD_230400 (230400)
+#define BAUD_460800 (460800)
+#define BAUD_921600 ( 921600)
+#define BAUD_1382400 (1382400)
 
 #ifdef STM32F303xC
 #define UART_BD                     USART3
@@ -92,31 +113,32 @@ __STATIC_INLINE bool USART_isBluetoothPaired(void) {
     return false;
 }
 
+#define SYNC_TOKEN 0xA5
+
+// Send functions using buffer and DMA
+int getSendBufferFreeSpace(void);
+void sendUSARTArgs(uint8_t aFunctionTag, int aNumberOfArgs, ...);
+void sendUSARTArgsAndByteBuffer(uint8_t aFunctionTag, int aNumberOfArgs, ...);
+void sendUSART5Args(uint8_t aFunctionTag, uint16_t aXStart, uint16_t aYStart, uint16_t aXEnd, uint16_t aYEnd, uint16_t aColor);
+void sendUSART5ArgsAndByteBuffer(uint8_t aFunctionTag, uint16_t aXStart, uint16_t aYStart, uint16_t aXEnd, uint16_t aYEnd,
+        uint16_t aColor, uint8_t * aBuffer, size_t aBufferLength);
+void sendUSART5ArgsAndShortBuffer(uint8_t aFunctionTag, uint16_t aXStart, uint16_t aYStart, uint16_t aXEnd, uint16_t aYEnd,
+        uint16_t aColor, uint16_t * aBuffer, size_t aBufferLength);
+
 void UART_BD_initialize(uint32_t aBaudRate);
 void HAL_UART_MspInit(UART_HandleTypeDef* aUARTHandle);
 
 uint32_t getUSART_BD_BaudRate(void);
 void setUART_BD_BaudRate(uint32_t aBaudRate);
 
-// Send functions using buffer and DMA
-int getSendBufferFreeSpace(void);
-void sendUSARTArgs(uint8_t aFunctionTag, int aNumberOfArgs, ...);
-void sendUSARTArgsAndByteBuffer(uint8_t aFunctionTag, int aNumberOfArgs, ...);
-void sendUSART5Args(uint8_t aFunctionTag, uint16_t aXStart, uint16_t aYStart, uint16_t aXEnd, uint16_t aYEnd,
-        uint16_t aColor);
-void sendUSART5ArgsAndByteBuffer(uint8_t aFunctionTag, uint16_t aXStart, uint16_t aYStart, uint16_t aXEnd,
-        uint16_t aYEnd, uint16_t aColor, uint8_t * aBuffer, int aBufferLength);
-void sendUSART5ArgsAndShortBuffer(uint8_t aFunctionTag, uint16_t aXStart, uint16_t aYStart, uint16_t aXEnd,
-        uint16_t aYEnd, uint16_t aColor, uint16_t * aBuffer, int aBufferLength);
-
 // Simple blocking serial version without overhead
 void UART3_send(char aChar);
-void sendUSARTBufferSimple(uint8_t * aParameterBufferPointer, int aParameterBufferLength,
-        uint8_t * aDataBufferPointer, int aDataBufferLength);
+void sendUSARTBufferSimple(uint8_t * aParameterBufferPointer, size_t aParameterBufferLength, uint8_t * aDataBufferPointer,
+        size_t aDataBufferLength);
 
 // Function using DMA
-void sendUSARTBufferNoSizeCheck(uint8_t * aParameterBufferPointer, int aParameterBufferLength,
-        uint8_t * aDataBufferPointer, int aDataBufferLength);
+void sendUSARTBufferNoSizeCheck(uint8_t * aParameterBufferPointer, size_t aParameterBufferLength, uint8_t * aDataBufferPointer,
+        size_t aDataBufferLength);
 void checkAndHandleMessageReceived(void);
 
 #endif /* BLUESERIAL_H_ */

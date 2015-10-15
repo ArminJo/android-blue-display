@@ -97,10 +97,8 @@ void initSimpleSerial(uint32_t aBaudRate, bool aUsePairedPin) {
 
     // enable: TX, RX, RX Complete Interrupt
     UCSR0B = (1 << RXEN0) | (1 << TXEN0) | (1 << RXCIE0);
-    remoteTouchEvent.EventType = EVENT_TAG_NO_EVENT;
-#ifndef DO_NOT_NEED_BASIC_TOUCH
-    remoteTouchDownEvent.EventType = EVENT_TAG_NO_EVENT;
-#endif
+    remoteEvent.EventType = EVENT_NO_EVENT;
+    remoteTouchDownEvent.EventType = EVENT_NO_EVENT;
 }
 
 /**
@@ -185,7 +183,7 @@ void sendUSART5Args(uint8_t aFunctionTag, uint16_t aXStart, uint16_t aYStart, ui
 /**
  *
  * @param aFunctionTag
- * @param aNumberOfArgs currently not more than 12 args are supported
+ * @param aNumberOfArgs currently not more than 12 args (SHORT) are supported
  */
 void sendUSARTArgs(uint8_t aFunctionTag, int aNumberOfArgs, ...) {
     if (aNumberOfArgs > MAX_NUMBER_OF_ARGS) {
@@ -209,7 +207,8 @@ void sendUSARTArgs(uint8_t aFunctionTag, int aNumberOfArgs, ...) {
 /**
  *
  * @param aFunctionTag
- * @param aNumberOfArgs currently not more than 12 args are supported
+ * @param aNumberOfArgs currently not more than 12 args (SHORT) are supported
+ * Last two arguments are length of buffer and buffer pointer (..., size_t aDataLength, uint8_t * aDataBufferPtr)
  */
 void sendUSARTArgsAndByteBuffer(uint8_t aFunctionTag, int aNumberOfArgs, ...) {
     if (aNumberOfArgs > MAX_NUMBER_OF_ARGS) {
@@ -240,7 +239,7 @@ void sendUSARTArgsAndByteBuffer(uint8_t aFunctionTag, int aNumberOfArgs, ...) {
  * Assembles parameter header and appends header for data field
  */
 void sendUSART5ArgsAndByteBuffer(uint8_t aFunctionTag, uint16_t aXStart, uint16_t aYStart, uint16_t aXEnd, uint16_t aYEnd,
-        uint16_t aColor, uint8_t * aBuffer, uint16_t aBufferLength) {
+        uint16_t aColor, uint8_t * aBuffer, size_t aBufferLength) {
 
     uint16_t tParamBuffer[MAX_NUMBER_OF_ARGS];
 
@@ -264,7 +263,7 @@ void sendUSART5ArgsAndByteBuffer(uint8_t aFunctionTag, uint16_t aXStart, uint16_
  * After RECEIVE_BUFFER_SIZE bytes check if SYNC_TOKEN was sent.
  * If OK then interpret content and reset buffer.
  */
-static uint8_t sReceivedEventType = EVENT_TAG_NO_EVENT;
+static uint8_t sReceivedEventType = EVENT_NO_EVENT;
 
 #ifdef USE_SIMPLE_SERIAL
 bool allowTouchInterrupts = false; // !!do not enable it, if event handling may take more time than receiving a byte (which then gives buffer overflow)!!!
@@ -275,11 +274,11 @@ ISR(USART_RX_vect) {
         // just wait for next sync token and reset buffer
         if (tByte == SYNC_TOKEN) {
             sReceiveBufferOutOfSync = false;
-            sReceivedEventType = EVENT_TAG_NO_EVENT;
+            sReceivedEventType = EVENT_NO_EVENT;
             sReceiveBufferIndex = 0;
         }
     } else {
-        if (sReceivedEventType == EVENT_TAG_NO_EVENT) {
+        if (sReceivedEventType == EVENT_NO_EVENT) {
             if (sReceiveBufferIndex == 1) {
                 sReceivedEventType = tByte;
                 // skip length and eventType
@@ -290,7 +289,7 @@ ISR(USART_RX_vect) {
             }
         } else {
             uint8_t tDataSize;
-            if (sReceivedEventType < EVENT_TAG_FIRST_CALLBACK_ACTION_CODE) {
+            if (sReceivedEventType < EVENT_FIRST_CALLBACK_ACTION_CODE) {
                 // Touch event
                 tDataSize = RECEIVE_TOUCH_OR_DISPLAY_DATA_SIZE;
             } else {
@@ -300,12 +299,13 @@ ISR(USART_RX_vect) {
             if (sReceiveBufferIndex == tDataSize) {
                 // now we expect a sync token
                 if (tByte == SYNC_TOKEN) {
-                    // event complete received
+                    // event completely received
                     // we have one dedicated touch down event in order not to overwrite it with other events before processing it
                     // Yes it makes no sense if interrupts are allowed!
-                    struct BluetoothEvent * tRemoteTouchEventPtr = &remoteTouchEvent;
+                    struct BluetoothEvent * tRemoteTouchEventPtr = &remoteEvent;
 #ifndef DO_NOT_NEED_BASIC_TOUCH
-                    if (sReceivedEventType == EVENT_TAG_TOUCH_ACTION_DOWN) {
+                    if (sReceivedEventType == EVENT_TOUCH_ACTION_DOWN
+                            || (remoteTouchDownEvent.EventType == EVENT_NO_EVENT && remoteEvent.EventType == EVENT_NO_EVENT)) {
                         tRemoteTouchEventPtr = &remoteTouchDownEvent;
                     }
 #endif
@@ -313,7 +313,7 @@ ISR(USART_RX_vect) {
                     // copy buffer to structure
                     memcpy(tRemoteTouchEventPtr->EventData.ByteArray, sReceiveBuffer, tDataSize);
                     sReceiveBufferIndex = 0;
-                    sReceivedEventType = EVENT_TAG_NO_EVENT;
+                    sReceivedEventType = EVENT_NO_EVENT;
 
                     if (allowTouchInterrupts) {
                         // Dangerous, it blocks receive event as long as event handling goes on!!!
@@ -342,7 +342,7 @@ void serialEvent(void) {
         while (Serial.available() > 0) {
             if (Serial.read() == SYNC_TOKEN) {
                 sReceiveBufferOutOfSync = false;
-                sReceivedEventType = EVENT_TAG_NO_EVENT;
+                sReceivedEventType = EVENT_NO_EVENT;
                 break;
             }
         }
@@ -355,7 +355,7 @@ void serialEvent(void) {
         /*
          * enough bytes available for next step?
          */
-        if (sReceivedEventType == EVENT_TAG_NO_EVENT) {
+        if (sReceivedEventType == EVENT_NO_EVENT) {
             if (tBytesAvailable >= 2) {
                 /*
                  * read message length and event tag first
@@ -366,9 +366,9 @@ void serialEvent(void) {
                 tBytesAvailable -= 2;
             }
         }
-        if (sReceivedEventType != EVENT_TAG_NO_EVENT) {
+        if (sReceivedEventType != EVENT_NO_EVENT) {
             uint8_t tDataSize;
-            if (sReceivedEventType < EVENT_TAG_FIRST_CALLBACK_ACTION_CODE) {
+            if (sReceivedEventType < EVENT_FIRST_CALLBACK_ACTION_CODE) {
                 // Touch event
                 tDataSize = RECEIVE_TOUCH_OR_DISPLAY_DATA_SIZE;
             } else {
@@ -379,11 +379,11 @@ void serialEvent(void) {
                 // touch or size event complete received, now read data and sync token
                 Serial.readBytes((char *) sReceiveBuffer, tDataSize);
                 if (Serial.read() == SYNC_TOKEN) {
-                    remoteTouchEvent.EventType = sReceivedEventType;
+                    remoteEvent.EventType = sReceivedEventType;
                     // copy buffer to structure
-                    memcpy(remoteTouchEvent.EventData.ByteArray, sReceiveBuffer, tDataSize);
-                    sReceivedEventType = EVENT_TAG_NO_EVENT;
-                    handleEvent(&remoteTouchEvent);
+                    memcpy(remoteEvent.EventData.ByteArray, sReceiveBuffer, tDataSize);
+                    sReceivedEventType = EVENT_NO_EVENT;
+                    handleEvent(&remoteEvent);
                 } else {
                     sReceiveBufferOutOfSync = true;
                 }

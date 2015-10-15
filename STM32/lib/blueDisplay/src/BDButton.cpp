@@ -30,6 +30,7 @@
 #include "BlueDisplayProtocol.h"
 #include "BlueDisplay.h" // for BUTTONS_SET_BEEP_TONE
 #include "BlueSerial.h"
+
 #ifdef LOCAL_DISPLAY_EXISTS
 #include "TouchButtonAutorepeat.h"
 #endif
@@ -82,24 +83,32 @@ bool BDButton::operator!=(const BDButton &aButton) {
  * initialize a button stub
  * If local display is attached, allocate a button from the local pool, so do not forget to call deinit()
  */
-void BDButton::init(uint16_t aPositionX, uint16_t aPositionY, uint16_t aWidthX, uint16_t aHeightY,
-        Color_t aButtonColor, const char * aCaption, uint8_t aCaptionSize, uint8_t aFlags, int16_t aValue,
-        void (*aOnTouchHandler)(BDButton*, int16_t)) {
+void BDButton::init(uint16_t aPositionX, uint16_t aPositionY, uint16_t aWidthX, uint16_t aHeightY, Color_t aButtonColor,
+        const char * aCaption, uint8_t aCaptionSize, uint8_t aFlags, int16_t aValue, void (*aOnTouchHandler)(BDButton*, int16_t)) {
 
     BDButtonHandle_t tButtonNumber = sLocalButtonIndex++;
     if (USART_isBluetoothPaired()) {
-        sendUSARTArgsAndByteBuffer(FUNCTION_TAG_BUTTON_CREATE, 10, tButtonNumber, aPositionX, aPositionY, aWidthX,
-                aHeightY, aButtonColor, aCaptionSize | (aFlags << 8), aValue, aOnTouchHandler,
+#if (FLASHEND > 65535 || AVR != 1)
+        sendUSARTArgsAndByteBuffer(FUNCTION_BUTTON_CREATE, 10, tButtonNumber, aPositionX, aPositionY, aWidthX, aHeightY,
+                aButtonColor, aCaptionSize | (aFlags << 8), aValue, aOnTouchHandler,
                 (reinterpret_cast<uint32_t>(aOnTouchHandler) >> 16), strlen(aCaption), aCaption);
+#else
+        sendUSARTArgsAndByteBuffer(FUNCTION_BUTTON_CREATE, 9, tButtonNumber, aPositionX, aPositionY, aWidthX, aHeightY,
+                aButtonColor, aCaptionSize | (aFlags << 8), aValue, aOnTouchHandler, strlen(aCaption), aCaption);
+#endif
     }
     mButtonHandle = tButtonNumber;
 #ifdef LOCAL_DISPLAY_EXISTS
+    if (aFlags & BUTTON_FLAG_TYPE_AUTOREPEAT) {
+        mLocalButtonPtr = new TouchButtonAutorepeat();
+    } else {
+        mLocalButtonPtr = new TouchButton();
+    }
     // Cast needed here. At runtime the right pointer is returned because of FLAG_USE_BDBUTTON_FOR_CALLBACK
-    mLocalButtonPtr = TouchButton::allocAndInitButton(aPositionX, aPositionY, aWidthX, aHeightY, aButtonColor,
-            aCaption, aCaptionSize, aFlags | FLAG_USE_BDBUTTON_FOR_CALLBACK, aValue,
-            reinterpret_cast<void (*)(TouchButton*, int16_t)> (aOnTouchHandler));
+    mLocalButtonPtr->initButton(aPositionX, aPositionY, aWidthX, aHeightY, aButtonColor, aCaption, aCaptionSize,
+            aFlags | FLAG_USE_BDBUTTON_FOR_CALLBACK, aValue, reinterpret_cast<void (*)(TouchButton*, int16_t)> (aOnTouchHandler));
 
-mLocalButtonPtr    ->mBDButtonPtr = this;
+    mLocalButtonPtr ->mBDButtonPtr = this;
 #endif
 }
 
@@ -110,7 +119,7 @@ mLocalButtonPtr    ->mBDButtonPtr = this;
  */
 void BDButton::deinit(void) {
     sLocalButtonIndex--;
-    mLocalButtonPtr->setFree();
+    delete mLocalButtonPtr;
 }
 #endif
 
@@ -119,7 +128,7 @@ void BDButton::drawButton(void) {
     mLocalButtonPtr->drawButton();
 #endif
     if (USART_isBluetoothPaired()) {
-        sendUSARTArgs(FUNCTION_TAG_BUTTON_DRAW, 1, mButtonHandle);
+        sendUSARTArgs(FUNCTION_BUTTON_DRAW, 1, mButtonHandle);
     }
 }
 
@@ -128,7 +137,7 @@ void BDButton::removeButton(Color_t aBackgroundColor) {
     mLocalButtonPtr->removeButton(aBackgroundColor);
 #endif
     if (USART_isBluetoothPaired()) {
-        sendUSARTArgs(FUNCTION_TAG_BUTTON_REMOVE, 2, mButtonHandle, aBackgroundColor);
+        sendUSARTArgs(FUNCTION_BUTTON_REMOVE, 2, mButtonHandle, aBackgroundColor);
     }
 }
 
@@ -137,7 +146,7 @@ void BDButton::drawCaption(void) {
     mLocalButtonPtr->drawCaption();
 #endif
     if (USART_isBluetoothPaired()) {
-        sendUSARTArgs(FUNCTION_TAG_BUTTON_DRAW_CAPTION, 1, mButtonHandle);
+        sendUSARTArgs(FUNCTION_BUTTON_DRAW_CAPTION, 1, mButtonHandle);
     }
 }
 
@@ -146,7 +155,7 @@ void BDButton::setCaption(const char * aCaption) {
     mLocalButtonPtr->setCaption(aCaption);
 #endif
     if (USART_isBluetoothPaired()) {
-        sendUSARTArgsAndByteBuffer(FUNCTION_TAG_BUTTON_SET_CAPTION, 1, mButtonHandle, strlen(aCaption), aCaption);
+        sendUSARTArgsAndByteBuffer(FUNCTION_BUTTON_SET_CAPTION, 1, mButtonHandle, strlen(aCaption), aCaption);
     }
 }
 
@@ -156,8 +165,7 @@ void BDButton::setCaptionAndDraw(const char * aCaption) {
     mLocalButtonPtr->drawButton();
 #endif
     if (USART_isBluetoothPaired()) {
-        sendUSARTArgsAndByteBuffer(FUNCTION_TAG_BUTTON_SET_CAPTION_AND_DRAW_BUTTON, 1, mButtonHandle,
-                strlen(aCaption), aCaption);
+        sendUSARTArgsAndByteBuffer(FUNCTION_BUTTON_SET_CAPTION_AND_DRAW_BUTTON, 1, mButtonHandle, strlen(aCaption), aCaption);
     }
 }
 
@@ -169,9 +177,9 @@ void BDButton::setCaption(const char * aCaption, bool doDrawButton) {
     }
 #endif
     if (USART_isBluetoothPaired()) {
-        uint8_t tFunctionCode = FUNCTION_TAG_BUTTON_SET_CAPTION;
+        uint8_t tFunctionCode = FUNCTION_BUTTON_SET_CAPTION;
         if (doDrawButton) {
-            tFunctionCode = FUNCTION_TAG_BUTTON_SET_CAPTION_AND_DRAW_BUTTON;
+            tFunctionCode = FUNCTION_BUTTON_SET_CAPTION_AND_DRAW_BUTTON;
         }
         sendUSARTArgsAndByteBuffer(tFunctionCode, 1, mButtonHandle, strlen(aCaption), aCaption);
     }
@@ -182,7 +190,7 @@ void BDButton::setValue(int16_t aValue) {
     mLocalButtonPtr->setValue(aValue);
 #endif
     if (USART_isBluetoothPaired()) {
-        sendUSARTArgs(FUNCTION_TAG_BUTTON_SETTINGS, 3, mButtonHandle, BUTTON_FLAG_SET_VALUE, aValue);
+        sendUSARTArgs(FUNCTION_BUTTON_SETTINGS, 3, mButtonHandle, SUBFUNCTION_BUTTON_SET_VALUE, aValue);
     }
 }
 
@@ -192,17 +200,16 @@ void BDButton::setValueAndDraw(int16_t aValue) {
     mLocalButtonPtr->drawButton();
 #endif
     if (USART_isBluetoothPaired()) {
-        sendUSARTArgs(FUNCTION_TAG_BUTTON_SETTINGS, 3, mButtonHandle, BUTTON_FLAG_SET_VALUE_AND_DRAW, aValue);
+        sendUSARTArgs(FUNCTION_BUTTON_SETTINGS, 3, mButtonHandle, SUBFUNCTION_BUTTON_SET_VALUE_AND_DRAW, aValue);
     }
 }
 
 void BDButton::setButtonColor(Color_t aButtonColor) {
 #ifdef LOCAL_DISPLAY_EXISTS
     mLocalButtonPtr->setButtonColor(aButtonColor);
-    mLocalButtonPtr->drawButton();
 #endif
     if (USART_isBluetoothPaired()) {
-        sendUSARTArgs(FUNCTION_TAG_BUTTON_SETTINGS, 3, mButtonHandle, BUTTON_FLAG_SET_BUTTON_COLOR, aButtonColor);
+        sendUSARTArgs(FUNCTION_BUTTON_SETTINGS, 3, mButtonHandle, SUBFUNCTION_BUTTON_SET_BUTTON_COLOR, aButtonColor);
     }
 }
 
@@ -212,8 +219,7 @@ void BDButton::setButtonColorAndDraw(Color_t aButtonColor) {
     mLocalButtonPtr->drawButton();
 #endif
     if (USART_isBluetoothPaired()) {
-        sendUSARTArgs(FUNCTION_TAG_BUTTON_SETTINGS, 3, mButtonHandle, BUTTON_FLAG_SET_BUTTON_COLOR_AND_DRAW,
-                aButtonColor);
+        sendUSARTArgs(FUNCTION_BUTTON_SETTINGS, 3, mButtonHandle, SUBFUNCTION_BUTTON_SET_BUTTON_COLOR_AND_DRAW, aButtonColor);
     }
 }
 
@@ -222,8 +228,7 @@ void BDButton::setPosition(int16_t aPositionX, int16_t aPositionY) {
     mLocalButtonPtr->setPosition(aPositionX, aPositionY);
 #endif
     if (USART_isBluetoothPaired()) {
-        sendUSARTArgs(FUNCTION_TAG_BUTTON_SETTINGS, 4, mButtonHandle, BUTTON_FLAG_SET_POSITION, aPositionX,
-                aPositionY);
+        sendUSARTArgs(FUNCTION_BUTTON_SETTINGS, 4, mButtonHandle, SUBFUNCTION_BUTTON_SET_POSITION, aPositionX, aPositionY);
     }
 }
 
@@ -234,12 +239,12 @@ void BDButton::setPosition(int16_t aPositionX, int16_t aPositionY) {
 void BDButton::setButtonAutorepeatTiming(uint16_t aMillisFirstDelay, uint16_t aMillisFirstRate, uint16_t aFirstCount,
         uint16_t aMillisSecondRate) {
 #ifdef LOCAL_DISPLAY_EXISTS
-    ((TouchButtonAutorepeat*) mLocalButtonPtr)->setButtonAutorepeatTiming(aMillisFirstDelay, aMillisFirstRate,
-            aFirstCount, aMillisSecondRate);
+    ((TouchButtonAutorepeat*) mLocalButtonPtr)->setButtonAutorepeatTiming(aMillisFirstDelay, aMillisFirstRate, aFirstCount,
+            aMillisSecondRate);
 #endif
     if (USART_isBluetoothPaired()) {
-        sendUSARTArgs(FUNCTION_TAG_BUTTON_SETTINGS, 7, mButtonHandle, BUTTON_FLAG_SET_AUTOREPEAT_TIMING,
-                aMillisFirstDelay, aMillisFirstRate, aFirstCount, aMillisSecondRate);
+        sendUSARTArgs(FUNCTION_BUTTON_SETTINGS, 7, mButtonHandle, SUBFUNCTION_BUTTON_SET_AUTOREPEAT_TIMING, aMillisFirstDelay,
+                aMillisFirstRate, aFirstCount, aMillisSecondRate);
     }
 }
 
@@ -248,7 +253,7 @@ void BDButton::activate(void) {
     mLocalButtonPtr->activate();
 #endif
     if (USART_isBluetoothPaired()) {
-        sendUSARTArgs(FUNCTION_TAG_BUTTON_SETTINGS, 2, mButtonHandle, BUTTON_FLAG_SET_ACTIVE);
+        sendUSARTArgs(FUNCTION_BUTTON_SETTINGS, 2, mButtonHandle, SUBFUNCTION_BUTTON_SET_ACTIVE);
     }
 }
 
@@ -257,7 +262,7 @@ void BDButton::deactivate(void) {
     mLocalButtonPtr->deactivate();
 #endif
     if (USART_isBluetoothPaired()) {
-        sendUSARTArgs(FUNCTION_TAG_BUTTON_SETTINGS, 2, mButtonHandle, BUTTON_FLAG_RESET_ACTIVE);
+        sendUSARTArgs(FUNCTION_BUTTON_SETTINGS, 2, mButtonHandle, SUBFUNCTION_BUTTON_RESET_ACTIVE);
     }
 }
 
@@ -270,22 +275,28 @@ void BDButton::resetAllButtons(void) {
 
 void BDButton::setGlobalFlags(uint16_t aFlags) {
     if (USART_isBluetoothPaired()) {
-        sendUSARTArgs(FUNCTION_TAG_BUTTON_GLOBAL_SETTINGS, 1, aFlags);
+        sendUSARTArgs(FUNCTION_BUTTON_GLOBAL_SETTINGS, 1, aFlags);
     }
 }
 
 /*
  * aToneVolume: value in percent
  */
-void BDButton::setButtonsTouchTone(uint8_t aToneIndex, uint8_t aToneVolume) {
+void BDButton::setButtonsTouchTone(uint8_t aToneIndex, uint16_t aToneDuration) {
     if (USART_isBluetoothPaired()) {
-        sendUSARTArgs(FUNCTION_TAG_BUTTON_GLOBAL_SETTINGS, 3, BUTTONS_SET_BEEP_TONE, aToneIndex, aToneVolume);
+        sendUSARTArgs(FUNCTION_BUTTON_GLOBAL_SETTINGS, 3, BUTTONS_SET_BEEP_TONE, aToneIndex, aToneDuration);
+    }
+}
+
+void BDButton::setButtonsTouchTone(uint8_t aToneIndex, uint16_t aToneDuration, uint8_t aToneVolume) {
+    if (USART_isBluetoothPaired()) {
+        sendUSARTArgs(FUNCTION_BUTTON_GLOBAL_SETTINGS, 4, BUTTONS_SET_BEEP_TONE, aToneIndex, aToneDuration, aToneVolume);
     }
 }
 
 void BDButton::activateAllButtons(void) {
     if (USART_isBluetoothPaired()) {
-        sendUSARTArgs(FUNCTION_TAG_BUTTON_ACTIVATE_ALL, 0);
+        sendUSARTArgs(FUNCTION_BUTTON_ACTIVATE_ALL, 0);
     }
 }
 
@@ -294,7 +305,7 @@ void BDButton::deactivateAllButtons(void) {
     TouchButton::deactivateAllButtons();
 #endif
     if (USART_isBluetoothPaired()) {
-        sendUSARTArgs(FUNCTION_TAG_BUTTON_DEACTIVATE_ALL, 0);
+        sendUSARTArgs(FUNCTION_BUTTON_DEACTIVATE_ALL, 0);
     }
 }
 
@@ -307,3 +318,48 @@ void doToggleRedGreenButton(BDButton * aTheTouchedButton, int16_t aValue) {
     aValue = !aValue;
     aTheTouchedButton->setValueAndDraw(aValue);
 }
+
+#ifdef AVR
+void BDButton::initPGM(uint16_t aPositionX, uint16_t aPositionY, uint16_t aWidthX, uint16_t aHeightY, Color_t aButtonColor,
+        const char * aPGMCaption, uint8_t aCaptionSize, uint8_t aFlags, int16_t aValue,
+        void (*aOnTouchHandler)(BDButton*, int16_t)) {
+
+    BDButtonHandle_t tButtonNumber = sLocalButtonIndex++;
+    if (USART_isBluetoothPaired()) {
+        uint8_t tCaptionLength = strlen_P(aPGMCaption);
+        if (tCaptionLength < STRING_BUFFER_STACK_SIZE) {
+            char StringBuffer[STRING_BUFFER_STACK_SIZE];
+            strcpy_P(StringBuffer, aPGMCaption);
+            sendUSARTArgsAndByteBuffer(FUNCTION_BUTTON_CREATE, 9, tButtonNumber, aPositionX, aPositionY, aWidthX, aHeightY,
+                    aButtonColor, aCaptionSize | (aFlags << 8), aValue, aOnTouchHandler, tCaptionLength, StringBuffer);
+        }
+    }
+    mButtonHandle = tButtonNumber;
+}
+
+void BDButton::setCaptionPGM(const char * aPGMCaption) {
+    if (USART_isBluetoothPaired()) {
+        uint8_t tCaptionLength = strlen_P(aPGMCaption);
+        if (tCaptionLength < STRING_BUFFER_STACK_SIZE) {
+            char StringBuffer[STRING_BUFFER_STACK_SIZE];
+            strcpy_P(StringBuffer, aPGMCaption);
+            sendUSARTArgsAndByteBuffer(FUNCTION_BUTTON_SET_CAPTION, 1, mButtonHandle, tCaptionLength, StringBuffer);
+        }
+    }
+}
+
+void BDButton::setCaptionPGM(const char * aPGMCaption, bool doDrawButton) {
+    if (USART_isBluetoothPaired()) {
+        uint8_t tCaptionLength = strlen_P(aPGMCaption);
+        if (tCaptionLength < STRING_BUFFER_STACK_SIZE) {
+            char StringBuffer[STRING_BUFFER_STACK_SIZE];
+            strcpy_P(StringBuffer, aPGMCaption);
+            uint8_t tFunctionCode = FUNCTION_BUTTON_SET_CAPTION;
+            if (doDrawButton) {
+                tFunctionCode = FUNCTION_BUTTON_SET_CAPTION_AND_DRAW_BUTTON;
+            }
+            sendUSARTArgsAndByteBuffer(tFunctionCode, 1, mButtonHandle, tCaptionLength, StringBuffer);
+        }
+    }
+}
+#endif

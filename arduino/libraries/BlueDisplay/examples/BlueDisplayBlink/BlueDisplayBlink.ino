@@ -34,7 +34,7 @@
 // Pin 13 has an LED connected on most Arduino boards.
 const int LED_PIN = 13;
 
-volatile bool doBlink = true;
+bool doTone = true;
 
 /*
  * The Start Stop button
@@ -55,29 +55,27 @@ void setup() {
     initSimpleSerial(HC_05_BAUD_RATE, false);
 
     // Register callback handler for connect and resize
-    registerSimpleConnectCallback(&initDisplay);
-    registerSimpleResizeAndConnectCallback(&drawGui);
+    registerConnectCallback(&initDisplay);
+    registerRedrawCallback(&drawGui);
 
     initDisplay();
     drawGui();
 }
 
 void loop() {
-    if (doBlink) {
+    if (doTone) {
         // LED on
         digitalWrite(LED_PIN, HIGH);
         BlueDisplay1.fillCircle(DISPLAY_WIDTH / 2, DISPLAY_HEIGHT / 2, 20, COLOR_RED);
-        delay(300);
+        delayMillisWithCheckAndHandleEvents(300);
     }
-    checkAndHandleEvents();
 
-    if (doBlink) {
+    if (doTone) {
         // LED off
         digitalWrite(LED_PIN, LOW);
         BlueDisplay1.fillCircle(DISPLAY_WIDTH / 2, DISPLAY_HEIGHT / 2, 20, COLOR_BLUE);
-        delay(300);
+        delayMillisWithCheckAndHandleEvents(300);
     }
-    checkAndHandleEvents();
 }
 
 /*
@@ -89,7 +87,7 @@ void initDisplay(void) {
     DISPLAY_HEIGHT);
     // Initialize button position, size, colors etc.
     TouchButtonStartStop.init((DISPLAY_WIDTH - BUTTON_WIDTH_2) / 2, BUTTON_HEIGHT_4_256_LINE_4, BUTTON_WIDTH_2, BUTTON_HEIGHT_4_256,
-    COLOR_BLUE, "Stop", 44, BUTTON_FLAG_DO_BEEP_ON_TOUCH | BUTTON_FLAG_TYPE_AUTO_RED_GREEN, doBlink, &doStartStop);
+    COLOR_BLUE, "Stop", 44, BUTTON_FLAG_DO_BEEP_ON_TOUCH | BUTTON_FLAG_TYPE_AUTO_RED_GREEN, doTone, &doStartStop);
 }
 
 /*
@@ -104,13 +102,13 @@ void drawGui(void) {
  * Change doBlink flag as well as color and caption of the button.
  */
 void doStartStop(BDButton * aTheTouchedButton, int16_t aValue) {
-    doBlink = !doBlink;
-    if (doBlink) {
+    doTone = !doTone;
+    if (doTone) {
         // green stop button
         aTheTouchedButton->setCaption("Stop");
     } else {
         // red start button
         aTheTouchedButton->setCaption("Start");
     }
-    aTheTouchedButton->setValueAndDraw(doBlink);
+    aTheTouchedButton->setValueAndDraw(doTone);
 }

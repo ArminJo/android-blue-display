@@ -24,45 +24,12 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/gpl.html>.
  *
- *
- *
- * SEND PROTOCOL USED:
- * Message:
- * 1. Sync byte A5
- * 2. Byte function token
- * 3. Short length (in short units) of parameters
- * 4. Short n parameters
- *
- * Optional Data:
- * 1. Sync Byte A5
- * 2. Byte Data_Size_Type token (byte, short etc.)
- * 3. Short length of data
- * 4. Length data values
- *
- *
- * RECEIVE PROTOCOL USED:
- *
- * Touch/size message has 7 bytes:
- * 1 - Gross message length in bytes
- * 2 - Function code
- * 3 - X Position LSB
- * 4 - X Position MSB
- * 5 - Y Position LSB
- * 6 - Y Position MSB
- * 7 - Sync token
- *
- * Callback message has 15 bytes:
- * 1 - Gross message length in bytes
- * 2 - Function code
- * 16 bit button index
- * 16 bit filler
- * 32 bit callback address
- * 32 bit value
- * 13 - Sync token
  */
 
-#ifndef BLUE_SERIAL_H_
-#define BLUE_SERIAL_H_
+#ifndef BLUESERIAL_H_
+#define BLUESERIAL_H_
+
+#include <stddef.h>
 
 #define BAUD_STRING_4800 "4800"
 #define BAUD_STRING_9600 "9600"
@@ -96,7 +63,7 @@ void sendUSARTArgs(uint8_t aFunctionTag, int aNumberOfArgs, ...);
 void sendUSARTArgsAndByteBuffer(uint8_t aFunctionTag, int aNumberOfArgs, ...);
 void sendUSART5Args(uint8_t aFunctionTag, uint16_t aXStart, uint16_t aYStart, uint16_t aXEnd, uint16_t aYEnd, uint16_t aColor);
 void sendUSART5ArgsAndByteBuffer(uint8_t aFunctionTag, uint16_t aXStart, uint16_t aYStart, uint16_t aXEnd, uint16_t aYEnd,
-        uint16_t aColor, uint8_t * aBuffer, uint16_t aBufferLength);
+        uint16_t aColor, uint8_t * aBuffer, size_t aBufferLength);
 
 #ifdef LOCAL_DISPLAY_EXISTS
 bool USART_isBluetoothPaired(void);
@@ -110,4 +77,4 @@ void USART3_send(char aChar);
 
 void serialEvent();
 
-#endif /* BLUE_SERIAL_H_ */
+#endif /* BLUESERIAL_H_ */

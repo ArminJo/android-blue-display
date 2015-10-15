@@ -8,7 +8,8 @@
  * 4. Connect key pin of HC-05 module with 3.3V line (of Arduino).
       On my kind of board (a single sided one) it is sufficient to press the tiny button while powering up.
  * 5. Apply power to Arduino and module.
- * 6. Wait for LED to blink continously. If it only blinks twice (after 3 seconds after boot flickering), check your wiring.
+ * 6. Wait for LED to blink continously (This could take up to 10 seconds).
+      If it only blinks twice (after 8 seconds for boot flickering), check your wiring.
  * 7. Disconnect Arduino and module from power.
  * 8. Disconnect key pin of HC-05 module from 3.3V line of Arduino.
  * 9. Congratulation you're done.

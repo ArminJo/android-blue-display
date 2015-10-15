@@ -1,5 +1,5 @@
 /*
- * BlueDisplay.h
+ * BDSlider.cpp
  *
  *   SUMMARY
  *  Blue Display is an Open Source Android remote Display for Arduino etc.
@@ -33,7 +33,7 @@
 #include <string.h>  // for strlen
 #include <stdlib.h> // for malloc/free
 
-BDSliderHandle_t localSliderIndex = 0;
+BDSliderHandle_t sLocalSliderIndex = 0;
 
 BDSlider::BDSlider(void) {
 }
@@ -46,45 +46,49 @@ BDSlider::BDSlider(BDSliderHandle_t aSliderHandle, TouchSlider * aLocalSliderPoi
 #endif
 
 /**
- * @brief initialization with all parameters except color
+ * @brief initialization with all parameters except BarBackgroundColor
  * @param aPositionX determines upper left corner
  * @param aPositionY determines upper left corner
  * @param aBarWidth width of bar (and border) in pixel
  * @param aBarLength size of slider bar in pixel = maximum slider value
- * @param aThresholdValue value where color of bar changes from #TOUCHSLIDER_DEFAULT_BAR_COLOR to #TOUCHSLIDER_DEFAULT_BAR_THRESHOLD_COLOR
+ * @param aThresholdValue value - if bigger, then color of bar changes from BarColor to BarBackgroundColor
  * @param aInitalValue
- * @param aSliderColor
+ * @param aSliderColor color of slider frame
  * @param aBarColor
- * @param aOptions see #TOUCHSLIDER_SHOW_BORDER etc.
+ * @param aOptions see #FLAG_SLIDER_SHOW_BORDER etc.
  * @param aOnChangeHandler - if NULL no update of bar is done on touch
- * @return slider index.
  */
-void BDSlider::init(uint16_t aPositionX, uint16_t aPositionY, uint8_t aBarWidth, uint16_t aBarLength,
-        uint16_t aThresholdValue, int16_t aInitalValue, Color_t aSliderColor, Color_t aBarColor, uint8_t aFlags,
+void BDSlider::init(uint16_t aPositionX, uint16_t aPositionY, uint8_t aBarWidth, int16_t aBarLength, int16_t aThresholdValue,
+        int16_t aInitalValue, Color_t aSliderColor, Color_t aBarColor, uint8_t aFlags,
         void (*aOnChangeHandler)(BDSlider *, uint16_t)) {
-    BDSliderHandle_t tSliderNumber = localSliderIndex++;
+    BDSliderHandle_t tSliderNumber = sLocalSliderIndex++;
 
     if (USART_isBluetoothPaired()) {
-        sendUSARTArgs(FUNCTION_TAG_SLIDER_CREATE, 12, tSliderNumber, aPositionX, aPositionY, aBarWidth, aBarLength,
+#if (FLASHEND > 65535 || AVR != 1)
+        sendUSARTArgs(FUNCTION_SLIDER_CREATE, 12, tSliderNumber, aPositionX, aPositionY, aBarWidth, aBarLength,
                 aThresholdValue, aInitalValue, aSliderColor, aBarColor, aFlags, aOnChangeHandler,
                 (reinterpret_cast<uint32_t>(aOnChangeHandler) >> 16));
+#else
+        sendUSARTArgs(FUNCTION_SLIDER_CREATE, 11, tSliderNumber, aPositionX, aPositionY, aBarWidth, aBarLength, aThresholdValue,
+                aInitalValue, aSliderColor, aBarColor, aFlags, aOnChangeHandler);
+#endif
     }
     mSliderHandle = tSliderNumber;
 
 #ifdef LOCAL_DISPLAY_EXISTS
-    // Cast needed here. At runtime the right pointer is returned because of FLAG_USE_INDEX_FOR_CALLBACK
     mLocalSliderPointer = new TouchSlider();
+    // Cast needed here. At runtime the right pointer is returned because of FLAG_USE_INDEX_FOR_CALLBACK
     mLocalSliderPointer->initSlider(aPositionX, aPositionY, aBarWidth, aBarLength, aThresholdValue, aInitalValue,
             aSliderColor, aBarColor, aFlags | FLAG_USE_BDSLIDER_FOR_CALLBACK,
             reinterpret_cast<void (*)(TouchSlider *, uint16_t)>( aOnChangeHandler));
-            // keep the formatting
-mLocalSliderPointer    ->mBDSliderHandle = tSliderNumber;
+    // keep the formatting
+    mLocalSliderPointer ->mBDSliderPtr = this;
 #endif
 }
 
 #ifdef LOCAL_DISPLAY_EXISTS
 void BDSlider::deinit(void) {
-    localSliderIndex--;
+    sLocalSliderIndex--;
     delete mLocalSliderPointer;
 }
 #endif
@@ -94,7 +98,7 @@ void BDSlider::drawSlider(void) {
     mLocalSliderPointer->drawSlider();
 #endif
     if (USART_isBluetoothPaired()) {
-        sendUSARTArgs(FUNCTION_TAG_SLIDER_DRAW, 1, mSliderHandle);
+        sendUSARTArgs(FUNCTION_SLIDER_DRAW, 1, mSliderHandle);
     }
 }
 
@@ -103,7 +107,7 @@ void BDSlider::drawBorder(void) {
     mLocalSliderPointer->drawBorder();
 #endif
     if (USART_isBluetoothPaired()) {
-        sendUSARTArgs(FUNCTION_TAG_SLIDER_DRAW_BORDER, 1, mSliderHandle);
+        sendUSARTArgs(FUNCTION_SLIDER_DRAW_BORDER, 1, mSliderHandle);
     }
 }
 
@@ -112,8 +116,7 @@ void BDSlider::setActualValueAndDrawBar(int16_t aActualValue) {
     mLocalSliderPointer->setActualValueAndDrawBar(aActualValue);
 #endif
     if (USART_isBluetoothPaired()) {
-        sendUSARTArgs(FUNCTION_TAG_SLIDER_SETTINGS, 3, mSliderHandle, SLIDER_FLAG_SET_VALUE_AND_DRAW_BAR,
-                aActualValue);
+        sendUSARTArgs(FUNCTION_SLIDER_SETTINGS, 3, mSliderHandle, SUBFUNCTION_SLIDER_SET_VALUE_AND_DRAW_BAR, aActualValue);
     }
 }
 
@@ -122,8 +125,7 @@ void BDSlider::setBarThresholdColor(Color_t aBarThresholdColor) {
     mLocalSliderPointer->setBarThresholdColor(aBarThresholdColor);
 #endif
     if (USART_isBluetoothPaired()) {
-        sendUSARTArgs(FUNCTION_TAG_SLIDER_SETTINGS, 3, mSliderHandle, SLIDER_FLAG_SET_COLOR_THRESHOLD,
-                aBarThresholdColor);
+        sendUSARTArgs(FUNCTION_SLIDER_SETTINGS, 3, mSliderHandle, SUBFUNCTION_SLIDER_SET_COLOR_THRESHOLD, aBarThresholdColor);
     }
 }
 
@@ -132,20 +134,18 @@ void BDSlider::setBarBackgroundColor(Color_t aBarBackgroundColor) {
     mLocalSliderPointer->setBarBackgroundColor(aBarBackgroundColor);
 #endif
     if (USART_isBluetoothPaired()) {
-        sendUSARTArgs(FUNCTION_TAG_SLIDER_SETTINGS, 3, mSliderHandle, SLIDER_FLAG_SET_COLOR_BAR_BACKGROUND,
-                aBarBackgroundColor);
+        sendUSARTArgs(FUNCTION_SLIDER_SETTINGS, 3, mSliderHandle, SUBFUNCTION_SLIDER_SET_COLOR_BAR_BACKGROUND, aBarBackgroundColor);
     }
 }
 
-
-void BDSlider::setCaptionProperties(uint8_t aCaptionSize, uint8_t aCaptionPosition, uint8_t aCaptionMargin,
-        Color_t aCaptionColor, Color_t aCaptionBackgroundColor) {
+void BDSlider::setCaptionProperties(uint8_t aCaptionSize, uint8_t aCaptionPosition, uint8_t aCaptionMargin, Color_t aCaptionColor,
+        Color_t aCaptionBackgroundColor) {
 #ifdef LOCAL_DISPLAY_EXISTS
     mLocalSliderPointer->setCaptionColors(aCaptionColor, aCaptionBackgroundColor);
 #endif
     if (USART_isBluetoothPaired()) {
-        sendUSARTArgs(FUNCTION_TAG_SLIDER_SETTINGS, 7, mSliderHandle, SLIDER_FLAG_SET_CAPTION_PROPERTIES,
-                aCaptionSize, aCaptionPosition, aCaptionMargin, aCaptionColor, aCaptionBackgroundColor);
+        sendUSARTArgs(FUNCTION_SLIDER_SETTINGS, 7, mSliderHandle, SUBFUNCTION_SLIDER_SET_CAPTION_PROPERTIES, aCaptionSize,
+                aCaptionPosition, aCaptionMargin, aCaptionColor, aCaptionBackgroundColor);
     }
 }
 
@@ -154,7 +154,7 @@ void BDSlider::setCaption(const char * aCaption) {
     mLocalSliderPointer->setCaption(aCaption);
 #endif
     if (USART_isBluetoothPaired()) {
-        sendUSARTArgsAndByteBuffer(FUNCTION_TAG_SLIDER_SET_CAPTION, 1, mSliderHandle, strlen(aCaption), aCaption);
+        sendUSARTArgsAndByteBuffer(FUNCTION_SLIDER_SET_CAPTION, 1, mSliderHandle, strlen(aCaption), aCaption);
     }
 }
 
@@ -164,8 +164,8 @@ void BDSlider::setPrintValueProperties(uint8_t aPrintValueSize, uint8_t aPrintVa
     mLocalSliderPointer->setValueStringColors(aPrintValueColor, aPrintValueBackgroundColor);
 #endif
     if (USART_isBluetoothPaired()) {
-        sendUSARTArgs(FUNCTION_TAG_SLIDER_SETTINGS, 7, mSliderHandle, SLIDER_FLAG_SET_VALUE_STRING_PROPERTIES,
-                aPrintValueSize, aPrintValuePosition, aPrintValueMargin, aPrintValueColor, aPrintValueBackgroundColor);
+        sendUSARTArgs(FUNCTION_SLIDER_SETTINGS, 7, mSliderHandle, SUBFUNCTION_SLIDER_SET_VALUE_STRING_PROPERTIES, aPrintValueSize,
+                aPrintValuePosition, aPrintValueMargin, aPrintValueColor, aPrintValueBackgroundColor);
     }
 }
 
@@ -174,7 +174,7 @@ void BDSlider::printValue(const char * aValueString) {
     mLocalSliderPointer->printValue(aValueString);
 #endif
     if (USART_isBluetoothPaired()) {
-        sendUSARTArgsAndByteBuffer(FUNCTION_TAG_SLIDER_PRINT_VALUE, 1, mSliderHandle, strlen(aValueString), aValueString);
+        sendUSARTArgsAndByteBuffer(FUNCTION_SLIDER_PRINT_VALUE, 1, mSliderHandle, strlen(aValueString), aValueString);
     }
 }
 
@@ -183,7 +183,7 @@ void BDSlider::activate(void) {
     mLocalSliderPointer->activate();
 #endif
     if (USART_isBluetoothPaired()) {
-        sendUSARTArgs(FUNCTION_TAG_SLIDER_SETTINGS, 2, mSliderHandle, SLIDER_FLAG_SET_ACTIVE);
+        sendUSARTArgs(FUNCTION_SLIDER_SETTINGS, 2, mSliderHandle, SUBFUNCTION_SLIDER_SET_ACTIVE);
     }
 }
 
@@ -192,7 +192,7 @@ void BDSlider::deactivate(void) {
     mLocalSliderPointer->deactivate();
 #endif
     if (USART_isBluetoothPaired()) {
-        sendUSARTArgs(FUNCTION_TAG_SLIDER_SETTINGS, 2, mSliderHandle, SLIDER_FLAG_RESET_ACTIVE);
+        sendUSARTArgs(FUNCTION_SLIDER_SETTINGS, 2, mSliderHandle, SUBFUNCTION_SLIDER_RESET_ACTIVE);
     }
 }
 
@@ -223,7 +223,7 @@ uint16_t BDSlider::getPositionYBottom() const {
  * Static functions
  */
 void BDSlider::resetAllSliders(void) {
-    localSliderIndex = 0;
+    sLocalSliderIndex = 0;
 }
 
 void BDSlider::activateAllSliders(void) {
@@ -231,7 +231,7 @@ void BDSlider::activateAllSliders(void) {
     TouchSlider::activateAllSliders();
 #endif
     if (USART_isBluetoothPaired()) {
-        sendUSARTArgs(FUNCTION_TAG_SLIDER_ACTIVATE_ALL, 0);
+        sendUSARTArgs(FUNCTION_SLIDER_ACTIVATE_ALL, 0);
     }
 }
 
@@ -240,7 +240,7 @@ void BDSlider::deactivateAllSliders(void) {
     TouchSlider::deactivateAllSliders();
 #endif
     if (USART_isBluetoothPaired()) {
-        sendUSARTArgs(FUNCTION_TAG_SLIDER_DEACTIVATE_ALL, 0);
+        sendUSARTArgs(FUNCTION_SLIDER_DEACTIVATE_ALL, 0);
     }
 }
 

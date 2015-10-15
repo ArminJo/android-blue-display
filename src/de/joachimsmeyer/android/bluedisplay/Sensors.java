@@ -44,6 +44,10 @@ import android.view.Surface;
 public class Sensors implements SensorEventListener {
 
 	public static final String LOG_TAG = "Sensors";
+
+	public static final int FLAG_SENSOR_NO_FILTER = 0;
+	public static final int FLAG_SENSOR_SIMPLE_FILTER = 1;
+
 	boolean isAnySensorEnabled = false;
 	static List<SensorInfo> sAvailableSensorList = new ArrayList<SensorInfo>(32); // have seen more than 18 sensors in a device
 
@@ -51,6 +55,7 @@ public class Sensors implements SensorEventListener {
 		Sensor mSensor;
 		int mType;
 		int mRate;
+		int mFilterFlag;
 		boolean isActive;
 		float mLastValueX;
 		float mLastValueY;
@@ -72,11 +77,11 @@ public class Sensors implements SensorEventListener {
 		}
 
 		// Avoid noise (event value is solely switching between 2 values) -> skip value if it is equal last or second last value
-		boolean isInHistory(SensorEvent aEvent) {
+		boolean simpleFilter(SensorEvent aEvent) {
 			if ((aEvent.values[0] == mLastValueX || aEvent.values[0] == mSecondLastValueX)
 					&& (aEvent.values[1] == mLastValueY || aEvent.values[1] == mSecondLastValueY)
 					&& (aEvent.values[2] == mLastValueZ || aEvent.values[2] == mSecondLastValueZ)) {
-				return true;
+				return false;
 			}
 			mSecondLastValueX = mLastValueX;
 			mSecondLastValueY = mLastValueY;
@@ -84,7 +89,7 @@ public class Sensors implements SensorEventListener {
 			mLastValueX = aEvent.values[0];
 			mLastValueY = aEvent.values[1];
 			mLastValueZ = aEvent.values[2];
-			return false;
+			return true;
 		}
 
 	}
@@ -101,22 +106,35 @@ public class Sensors implements SensorEventListener {
 		mSensorManager = aSensorManager;
 		getAllAvailableSensors();
 
-		// to detect direct switching from 90 to 270 degrees and vice versa which does not call onConfigurationChanged()
+		/*
+		 * To detect direct switching from 0 to 180 and from 90 to 270 degrees and vice versa which does not call
+		 * onConfigurationChanged() Used by onSensorChanged, to adjust X + Y values relative to rotation of canvas
+		 */
 		mOrientationEventListener = new OrientationEventListener(mBlueDisplayContext, SensorManager.SENSOR_DELAY_NORMAL) {
 			@Override
 			public void onOrientationChanged(int mAngle) {
-				if (mBlueDisplayContext.mActualScreenOrientation == ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) {
-					// override only if orientation can change
-					if (mAngle > 225 && mAngle < 315 && mBlueDisplayContext.mActualRotation != Surface.ROTATION_90) {
-						if (MyLog.isINFO()) {
-							MyLog.i(LOG_TAG, "Override rotation to 90 degree. Angle=" + mAngle);
+				if (mAngle > 0) {
+					/**
+					 * Process only, if orientation can change <br>
+					 * angle 0 is Surface.ROTATION_0 <br>
+					 * angle 90 is Surface.ROTATION_270<br>
+					 * angle 180 is Surface.ROTATION_180<br>
+					 * angle 270 is Surface.ROTATION_90
+					 */
+					if (mBlueDisplayContext.mRequestedScreenOrientation == ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) {
+						if ((315 < mAngle || mAngle < 45 && mBlueDisplayContext.mActualRotation != Surface.ROTATION_0)
+								|| (45 < mAngle && mAngle < 135 && mBlueDisplayContext.mActualRotation != Surface.ROTATION_270)
+								|| (135 < mAngle && mAngle < 225 && mBlueDisplayContext.mActualRotation != Surface.ROTATION_180)
+								|| (225 < mAngle && mAngle < 315 && mBlueDisplayContext.mActualRotation != Surface.ROTATION_90)) {
+							if (MyLog.isDEBUG()) {
+								MyLog.d(LOG_TAG, "Trigger reading of rotation. Angle=" + mAngle);
+							}
+							if (mBlueDisplayContext.mActualRotation != mBlueDisplayContext.getWindowManager().getDefaultDisplay()
+									.getRotation()) {
+								mBlueDisplayContext
+										.setActualScreenOrientationVariables(mBlueDisplayContext.mActualScreenOrientation);
+							}
 						}
-						mBlueDisplayContext.mActualRotation = Surface.ROTATION_90;
-					} else if (mAngle > 45 && mAngle < 135 && mBlueDisplayContext.mActualRotation != Surface.ROTATION_270) {
-						if (MyLog.isINFO()) {
-							MyLog.i(LOG_TAG, "Override rotation to 270 degree. Angle=" + mAngle);
-						}
-						mBlueDisplayContext.mActualRotation = Surface.ROTATION_270;
 					}
 				}
 			}
@@ -139,8 +157,9 @@ public class Sensors implements SensorEventListener {
 			Sensor tSensor = tSensorInfo.mSensor;
 			if (tSensor.getType() == tSensor.getType() && tSensorInfo.isActive) {
 				// Sensor found and active, check for simple noise cancellation
-				if (!tSensorInfo.isInHistory(aEvent))
+				if (tSensorInfo.mFilterFlag == FLAG_SENSOR_NO_FILTER || tSensorInfo.simpleFilter(aEvent)) {
 					return true;
+				}
 			}
 		}
 		return false;
@@ -149,7 +168,7 @@ public class Sensors implements SensorEventListener {
 	/*
 	 * Activate or deactivate sensor To be called from interpret command
 	 */
-	public void setSensor(int aSensorType, boolean DoActivate, int aSensorRate) {
+	public void setSensor(int aSensorType, boolean DoActivate, int aSensorRate, int aFilterFlag) {
 		if (MyLog.isINFO()) {
 			MyLog.i(LOG_TAG, "SetSensor sensor=" + aSensorType + " DoActivate=" + DoActivate + " rate=" + aSensorRate);
 		}
@@ -165,6 +184,7 @@ public class Sensors implements SensorEventListener {
 					mSensorManager.unregisterListener(this, tSensorInfo.mSensor);
 				}
 				tSensorInfo.isActive = DoActivate;
+				tSensorInfo.mFilterFlag = aFilterFlag;
 				if (!isOrientationEventListenerEnabled) {
 					if (mOrientationEventListener.canDetectOrientation()) {
 						if (MyLog.isINFO()) {
@@ -237,7 +257,7 @@ public class Sensors implements SensorEventListener {
 					ValueX = -ValueX;
 					ValueY = -ValueY;
 				}
-				mBlueDisplayContext.mSerialService.writeSensorEvent(BluetoothSerialService.EVENT_TAG_FIRST_SENSOR_ACTION_CODE
+				mBlueDisplayContext.mSerialService.writeSensorEvent(BluetoothSerialService.EVENT_FIRST_SENSOR_ACTION_CODE
 						+ tSensorType, ValueX, ValueY, ValueZ);
 			}
 		}

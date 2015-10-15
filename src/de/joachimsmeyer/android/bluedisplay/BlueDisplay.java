@@ -54,8 +54,11 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.res.Configuration;
 import android.hardware.SensorManager;
+import android.media.ToneGenerator;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
@@ -67,6 +70,7 @@ import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
+import android.view.Surface;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.view.WindowManager;
@@ -78,20 +82,17 @@ import android.widget.Toast;
 public class BlueDisplay extends Activity {
 
 	// Intent request codes
-	private static final int REQUEST_CONNECT_DEVICE = 1;
+	public static final int REQUEST_CONNECT_DEVICE = 1;
 	private static final int REQUEST_ENABLE_BT = 2;
-
-	// Name of the connected device
-	private String mConnectedDeviceName = null;
 
 	// static boolean isDevelopmentTesting = true;
 	static final String LOG_TAG = "BlueDisplay";
 
 	// Message types sent from the BluetoothSerialService Handler
-	public static final int MESSAGE_STATE_CHANGE = 1;
+	public static final int MESSAGE_CHANGE_MENU_ITEM_FOR_CONNECTED_STATE = 1;
 	public static final int MESSAGE_READ = 2;
 	public static final int MESSAGE_WRITE = 3;
-	public static final int MESSAGE_DEVICE_NAME = 4;
+	public static final int MESSAGE_AFTER_CONNECT = 4;
 	public static final int MESSAGE_DISCONNECT = 5;
 	public static final int MESSAGE_TOAST = 6;
 	public static final int MESSAGE_UPDATE_VIEW = 7;
@@ -100,6 +101,7 @@ public class BlueDisplay extends Activity {
 	public static final int REQUEST_INPUT_DATA = 10;
 	public static final String CALLBACK_ADDRESS = "callback_address";
 	public static final String DIALOG_PROMPT = "dialog_prompt";
+	public static final String NUMBER_INITIAL_VALUE = "initialValue";
 	public static final String NUMBER_FLAG = "doNumber";
 
 	// Key names received from the BluetoothSerialService Handler
@@ -131,11 +133,14 @@ public class BlueDisplay extends Activity {
 	private static final String SHOW_TOUCH_COORDINATES_KEY = "show_touch_mode";
 	private static final String ALLOW_INSECURE_CONNECTIONS_KEY = "allowinsecureconnections";
 
+	private static final String VERSION_KEY = "version";
 	private static final String SCREENORIENTATION_KEY = "screenorientation";
 	int mPreferredScreenOrientation;
 	protected int mActualScreenOrientation;
-	protected String mActualScreenOrientationString = "";
+	protected int mRequestedScreenOrientation;
 	protected int mActualRotation;
+	protected boolean mOrientationisLockedByClient = false;
+	protected String mActualScreenOrientationRotationString = "";
 
 	MenuItem mMenuItemConnect;
 	// private MenuItem mMenuItemStartStopLogging;
@@ -156,7 +161,7 @@ public class BlueDisplay extends Activity {
 		/*
 		 * Create RPCView
 		 */
-		mRPCView = new RPCView(this, mHandlerBT);
+		mRPCView = new RPCView(this, mHandlerBluetooth);
 		setContentView(mRPCView);
 		mRPCView.setFocusable(true);
 		mRPCView.setFocusableInTouchMode(true);
@@ -171,7 +176,7 @@ public class BlueDisplay extends Activity {
 				// finishDialogNoBluetooth();
 			}
 		} else {
-			mSerialService = new BluetoothSerialService(this, mHandlerBT);
+			mSerialService = new BluetoothSerialService(this, mHandlerBluetooth);
 			if (mSerialService.getState() == BluetoothSerialService.STATE_NONE && mBluetoothAdapter.isEnabled()) {
 				Set<BluetoothDevice> tDeviceset = mBluetoothAdapter.getBondedDevices();
 				if (tDeviceset.size() == 1) {
@@ -193,9 +198,6 @@ public class BlueDisplay extends Activity {
 		}
 		// Set default values only once (after installation)
 		PreferenceManager.setDefaultValues(this, R.xml.preferences, false);
-		readPreferences();
-
-		setActualScreenOrientation(mPreferredScreenOrientation, true);
 
 		mInEnableBT = false;
 		// mRPCView.showTestpage();
@@ -233,10 +235,13 @@ public class BlueDisplay extends Activity {
 				mInEnableBT = true;
 			}
 		}
-		int tOldPreferredScreenOrientation = mPreferredScreenOrientation;
-		readPreferences();
-		if (tOldPreferredScreenOrientation != mPreferredScreenOrientation) {
-			setActualScreenOrientation(mPreferredScreenOrientation, true);
+		if (mOrientationisLockedByClient) {
+			int tOldPreferredScreenOrientation = mPreferredScreenOrientation;
+			readPreferences();
+			mPreferredScreenOrientation = tOldPreferredScreenOrientation;
+		} else {
+			readPreferences();
+			setActualScreenOrientation(mPreferredScreenOrientation);
 		}
 
 		mActualRotation = getWindowManager().getDefaultDisplay().getRotation();
@@ -259,6 +264,7 @@ public class BlueDisplay extends Activity {
 			Log.i(LOG_TAG, "- ON PAUSE -");
 		}
 		mSensorEventListener.deregisterAllActiveSensorListeners();
+		mRPCView.mToneGenerator.startTone(ToneGenerator.TONE_CDMA_SIGNAL_OFF);
 	}
 
 	@Override
@@ -284,34 +290,50 @@ public class BlueDisplay extends Activity {
 	@Override
 	public void onConfigurationChanged(Configuration newConfig) {
 		super.onConfigurationChanged(newConfig);
-
-		setActualScreenOrientation(newConfig.orientation, false);
-		mActualRotation = getWindowManager().getDefaultDisplay().getRotation();
+		int tNewOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
+		if (newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+			tNewOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE;
+		} else if (newConfig.orientation == Configuration.ORIENTATION_PORTRAIT) {
+			tNewOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
+		} else {
+			MyLog.w(LOG_TAG, "ON ConfigurationChanged new config is" + newConfig.orientation);
+		}
+		setActualScreenOrientationVariables(tNewOrientation);
 		if (MyLog.isINFO()) {
-			Log.i(LOG_TAG, "--- ON ConfigurationChanged --- " + mActualScreenOrientationString + " rotation=" + mActualRotation);
+			Log.i(LOG_TAG, "--- ON ConfigurationChanged --- ");
 		}
 	}
 
-	/**
-	 * 
-	 * @param aNewOrientation
-	 * @param doRequest
-	 *            false if called by onConfigurationChanged, since orientation has already changed because of a former request
-	 */
-	void setActualScreenOrientation(int aNewOrientation, boolean doRequest) {
+	void setActualScreenOrientation(int aNewOrientation) {
+		setActualScreenOrientationVariables(aNewOrientation);
+		// really set orientation for device
+		setRequestedOrientation(aNewOrientation);
+		mRequestedScreenOrientation = aNewOrientation;
+	}
+
+	void setActualScreenOrientationVariables(int aNewOrientation) {
+		mActualRotation = getWindowManager().getDefaultDisplay().getRotation();
 		mActualScreenOrientation = aNewOrientation;
-		if (doRequest) {
-			setRequestedOrientation(aNewOrientation);
-		}
-		String tOrientation = "portrait";
-		if (mActualScreenOrientation == ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE) {
+		/*
+		 * Set the mActualScreenOrientationRotationString variable
+		 */
+		String tOrientation = "unknown";
+		if (mActualScreenOrientation == ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) {
+			tOrientation = "unspecified/auto";
+		} else if (mActualScreenOrientation == ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE) {
 			tOrientation = "landscape";
-		} else if (mActualScreenOrientation == ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) {
-			tOrientation = "undefined";
+		} else if (mActualScreenOrientation == ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE) {
+			tOrientation = "reverse landscape";
+		} else if (mActualScreenOrientation == ActivityInfo.SCREEN_ORIENTATION_PORTRAIT) {
+			tOrientation = "portrait";
+		} else if (mActualScreenOrientation == ActivityInfo.SCREEN_ORIENTATION_REVERSE_PORTRAIT) {
+			tOrientation = "reverse portrait";
+		} else {
+			Log.w(LOG_TAG, "Unknown orientation=" + aNewOrientation);
 		}
-		mActualScreenOrientationString = tOrientation;
+		mActualScreenOrientationRotationString = tOrientation + "=" + aNewOrientation + " | " + (90 * mActualRotation) + " degrees";
 		if (MyLog.isINFO()) {
-			Log.i(LOG_TAG, "Set orientation to " + mActualScreenOrientationString);
+			Log.i(LOG_TAG, "Orientation is now: " + mActualScreenOrientationRotationString);
 		}
 	}
 
@@ -348,11 +370,12 @@ public class BlueDisplay extends Activity {
 		switch (item.getItemId()) {
 		case R.id.menu_connect:
 			if (mSerialService.getState() == BluetoothSerialService.STATE_NONE) {
+				// connect request here
 				// Launch the DeviceListActivity to see devices and do scan
 				Intent tDeviceListIntent = new Intent(this, DeviceListActivity.class);
 				startActivityForResult(tDeviceListIntent, REQUEST_CONNECT_DEVICE);
 			} else if (mSerialService.getState() == BluetoothSerialService.STATE_CONNECTED) {
-				// disconnect -> stop running service + reset locked orientation in turn
+				// disconnect request here -> stop running service + reset locked orientation in turn
 				mSerialService.stop();
 			}
 			return true;
@@ -394,14 +417,17 @@ public class BlueDisplay extends Activity {
 	 * The handler that gets information back from BluetoothSerialService
 	 */
 	@SuppressLint("HandlerLeak")
-	private final Handler mHandlerBT = new Handler() {
+	private final Handler mHandlerBluetooth = new Handler() {
 
 		@Override
 		public void handleMessage(Message msg) {
 			switch (msg.what) {
-			case MESSAGE_STATE_CHANGE:
+			case MESSAGE_CHANGE_MENU_ITEM_FOR_CONNECTED_STATE:
+				/*
+				 * called by SerialService manages the menu item
+				 */
 				if (MyLog.isVERBOSE()) {
-					Log.v(LOG_TAG, "MESSAGE_STATE_CHANGE: " + msg.arg1);
+					Log.v(LOG_TAG, "MESSAGE_CHANGE_MENU_ITEM_FOR_CONNECTED_STATE: " + msg.arg1);
 				}
 				switch (msg.arg1) {
 				case BluetoothSerialService.STATE_CONNECTED:
@@ -425,31 +451,48 @@ public class BlueDisplay extends Activity {
 				}
 				break;
 
-			case MESSAGE_DEVICE_NAME:
-				// save the connected device's name
-				mConnectedDeviceName = msg.getData().getString(DEVICE_NAME);
+			case MESSAGE_AFTER_CONNECT:
+				/*
+				 * called by SerialService after connect -> save the connected device's name,set window to always on, reset button
+				 * and slider and show toast
+				 */
 				if (MyLog.isDEBUG()) {
-					Log.d(LOG_TAG, "MESSAGE_DEVICE_NAME: " + mConnectedDeviceName);
+					Log.d(LOG_TAG, "MESSAGE_AFTER_CONNECT: " + mSerialService.mConnectedDeviceName);
 				}
-				Toast.makeText(getApplicationContext(), getString(R.string.toast_connected_to) + " " + mConnectedDeviceName,
-						Toast.LENGTH_SHORT).show();
-				// set window to always on
+
+				// set window to always on and reset all structures and flags
 				getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+
+				Toast.makeText(getApplicationContext(),
+						getString(R.string.toast_connected_to) + " " + mSerialService.mConnectedDeviceName, Toast.LENGTH_SHORT)
+						.show();
 				break;
 
 			case MESSAGE_DISCONNECT:
+				/*
+				 * show toast, reset locked orientation, set window to normal (not persistent) state, stop tone, deregister sensor
+				 * listener
+				 */
 				if (MyLog.isDEBUG()) {
-					Log.d(LOG_TAG, "MESSAGE_DISCONNECT: " + mConnectedDeviceName);
+					Log.d(LOG_TAG, "MESSAGE_DISCONNECT: " + mSerialService.mConnectedDeviceName);
 				}
-				Toast.makeText(getApplicationContext(), getString(R.string.toast_connection_lost) + " " + mConnectedDeviceName,
-						Toast.LENGTH_SHORT).show();
-				// reset locked orientation
-				setActualScreenOrientation(mPreferredScreenOrientation, true);
+				Toast.makeText(getApplicationContext(),
+						getString(R.string.toast_connection_lost) + " " + mSerialService.mConnectedDeviceName, Toast.LENGTH_SHORT)
+						.show();
+				// reset eventually locked orientation
+				mOrientationisLockedByClient = false;
+				setActualScreenOrientation(mPreferredScreenOrientation);
 				// set window to normal (not persistent) state
 				getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+				// stop tone
+				mRPCView.mToneGenerator.startTone(ToneGenerator.TONE_CDMA_SIGNAL_OFF);
+				mSensorEventListener.deregisterAllActiveSensorListeners();
 				break;
 
 			case MESSAGE_TOAST:
+				/*
+				 * only used by connectionFailed
+				 */
 				if (MyLog.isVERBOSE()) {
 					Log.v(LOG_TAG, "MESSAGE_TOAST");
 				}
@@ -457,6 +500,9 @@ public class BlueDisplay extends Activity {
 				break;
 
 			case MESSAGE_UPDATE_VIEW:
+				/*
+				 * called by SerialService after command processed.
+				 */
 				if (MyLog.isVERBOSE()) {
 					Log.v(LOG_TAG, "MESSAGE_UPDATE_VIEW");
 				}
@@ -464,11 +510,14 @@ public class BlueDisplay extends Activity {
 				break;
 
 			case REQUEST_INPUT_DATA:
+				/*
+				 * shows input data dialog (requested by FUNCTION_GET_NUMBER, FUNCTION_GET_TEXT etc.)
+				 */
 				if (MyLog.isVERBOSE()) {
 					Log.v(LOG_TAG, "REQUEST_INPUT_DATA");
 				}
 				showInputDialog(msg.getData().getBoolean(NUMBER_FLAG), msg.getData().getInt(CALLBACK_ADDRESS), msg.getData()
-						.getString(BlueDisplay.DIALOG_PROMPT));
+						.getString(BlueDisplay.DIALOG_PROMPT), msg.getData().getInt(NUMBER_INITIAL_VALUE));
 				break;
 			}
 
@@ -552,7 +601,7 @@ public class BlueDisplay extends Activity {
 	}
 
 	@SuppressLint("InflateParams")
-	public void showInputDialog(boolean aDoNumber, final int aCallbackAddress, String tShortPrompt) {
+	public void showInputDialog(boolean aDoNumber, final int aCallbackAddress, String tShortPrompt, int aInitialValue) {
 		LayoutInflater tLayoutInflater = LayoutInflater.from(this);
 		View tInputView = tLayoutInflater.inflate(R.layout.input_data, null);
 
@@ -566,25 +615,32 @@ public class BlueDisplay extends Activity {
 			String tPromptTrailing = getResources().getString(R.string.title_input_data_prompt_trailing);
 			tTitle.setText(tPromptLeading + " " + tShortPrompt + " " + tPromptTrailing);
 		}
-
+		final boolean tDoNumber = aDoNumber;
 		final EditText tUserInput = (EditText) tInputView.findViewById(R.id.editTextDialogUserInput);
 		if (aDoNumber) {
 			tUserInput.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+		}
+		if (aInitialValue != Integer.MIN_VALUE) {
+			tUserInput.setText(Integer.toString(aInitialValue));
 		}
 		AlertDialog.Builder tBuilder = new AlertDialog.Builder(this);
 		tBuilder.setView(tInputView);
 		tBuilder.setCancelable(true);
 		tBuilder.setPositiveButton(R.string.alert_dialog_ok, new DialogInterface.OnClickListener() {
 			public void onClick(DialogInterface dialog, int id) {
-				Editable tNumber = tUserInput.getText();
-				float tValue;
-				try {
-					tValue = Float.parseFloat(tNumber.toString());
-					mSerialService.writeNumberCallbackEvent(BluetoothSerialService.EVENT_TAG_NUMBER_CALLBACK, aCallbackAddress,
-							tValue);
-				} catch (NumberFormatException e) {
-					tValue = Float.NaN;
-					Log.w(LOG_TAG, "Entered data \"" + tNumber + "\" is no float");
+				if (tDoNumber) {
+					Editable tNumber = tUserInput.getText();
+					float tValue;
+					try {
+						tValue = Float.parseFloat(tNumber.toString());
+						mSerialService.writeNumberCallbackEvent(BluetoothSerialService.EVENT_NUMBER_CALLBACK, aCallbackAddress,
+								tValue);
+					} catch (NumberFormatException e) {
+						tValue = Float.NaN;
+						MyLog.w(LOG_TAG, "Entered data \"" + tNumber + "\" is no float");
+					}
+				} else {
+					// getText function here - Not yet implemented
 				}
 			}
 		});
@@ -622,27 +678,47 @@ public class BlueDisplay extends Activity {
 	/****************
 	 * PREFERENCES
 	 ****************/
-	public static final int ORIENTATION_PORTRAIT = 1;
-	public static final int ORIENTATION_LANDSCAPE = 2;
-
 	private void readPreferences() {
 		SharedPreferences tSharedPreferences = PreferenceManager.getDefaultSharedPreferences(this);
 		/*
 		 * Load preferences
 		 */
+
 		// integer preferences do not work on Android. Values of <integer-array>
 		// are always stored as Strings in HashMap
-		int tScreenOrientation = Integer.parseInt(tSharedPreferences.getString(SCREENORIENTATION_KEY, ""
+		mPreferredScreenOrientation = Integer.parseInt(tSharedPreferences.getString(SCREENORIENTATION_KEY, ""
 				+ ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED));
-		switch (tScreenOrientation) {
-		case ORIENTATION_PORTRAIT:
-			mPreferredScreenOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
-			break;
-		case ORIENTATION_LANDSCAPE:
-			mPreferredScreenOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE;
-			break;
-		default:
-			mPreferredScreenOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
+		/*
+		 * Get Version and compare it with actual
+		 */
+		PackageInfo tPackageInfo;
+		int tActualVersion = 9;
+		try {
+			tPackageInfo = getPackageManager().getPackageInfo(getPackageName(), 0);
+			tActualVersion = tPackageInfo.versionCode;
+
+		} catch (NameNotFoundException e) {
+			MyLog.e(LOG_TAG, "Exception getting versionCode: " + e.toString());
+		}
+		int tOldVersion = Integer.parseInt(tSharedPreferences.getString(VERSION_KEY, "0"));
+		if (tOldVersion == 0) {
+			/*
+			 * For old version 0 adjust screen orientation once (in 3.2)
+			 */
+			if (mPreferredScreenOrientation == 2) {
+				mPreferredScreenOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE;
+			} else if (mPreferredScreenOrientation == 0) {
+				mPreferredScreenOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
+			}
+			MyLog.i(LOG_TAG, "Adjusted screen orientation preferences once.");
+
+			/*
+			 * Adjustment done -> now save the actual version in preferences
+			 */
+			SharedPreferences.Editor tEdit = tSharedPreferences.edit();
+			tEdit.putString(SCREENORIENTATION_KEY, Integer.toString(mPreferredScreenOrientation));
+			tEdit.putString(VERSION_KEY, Integer.toString(tActualVersion));
+			tEdit.commit();
 		}
 
 		MyLog.setLoglevel(Integer.parseInt(tSharedPreferences.getString(MyLog.LOGLEVEL_KEY, Log.INFO + "")));
@@ -658,10 +734,23 @@ public class BlueDisplay extends Activity {
 		}
 	}
 
-	// public void setTouchMoveModePreference(boolean aNewMode) {
-	// Editor tEditor = PreferenceManager.getDefaultSharedPreferences(this).edit();
-	// tEditor.putBoolean(TOUCH_MOVE_KEY, aNewMode);
-	// tEditor.apply();
-	// }
+	@Override
+	// Source is from http://stackoverflow.com/questions/9996333/openoptionsmenu-function-not-working-in-ics/17903128#17903128
+	// I found the android one not working on a 5.0 tablet
+	public void openOptionsMenu() {
+
+		Configuration config = getResources().getConfiguration();
+
+		if ((config.screenLayout & Configuration.SCREENLAYOUT_SIZE_MASK) > Configuration.SCREENLAYOUT_SIZE_LARGE) {
+
+			int originalScreenLayout = config.screenLayout;
+			config.screenLayout = Configuration.SCREENLAYOUT_SIZE_LARGE;
+			super.openOptionsMenu();
+			config.screenLayout = originalScreenLayout;
+
+		} else {
+			super.openOptionsMenu();
+		}
+	}
 
 }

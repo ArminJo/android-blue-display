@@ -97,7 +97,7 @@ void initFrequencyGeneratorPage(void) {
             &doShowFrequencyPage);
 
     TouchSliderFrequency.init(FREQ_SLIDER_X, FREQ_SLIDER_Y, FREQ_SLIDER_SIZE, FREQ_SLIDER_MAX_VALUE,
-    FREQ_SLIDER_MAX_VALUE, 0, COLOR_BLUE, COLOR_GREEN, TOUCHSLIDER_SHOW_BORDER | TOUCHSLIDER_IS_HORIZONTAL, &doFrequencySlider);
+    FREQ_SLIDER_MAX_VALUE, 0, COLOR_BLUE, COLOR_GREEN, FLAG_SLIDER_SHOW_BORDER | FLAG_SLIDER_IS_HORIZONTAL, &doFrequencySlider);
 
 // Fixed frequency buttons next
     uint16_t tXPos = 0;

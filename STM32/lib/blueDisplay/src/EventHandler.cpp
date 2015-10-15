@@ -54,15 +54,15 @@ struct XYPosition sUpPosition;
  * helper variables
  */
 //
-bool sButtonTouched = false;// flag if autorepeat button was touched - to influence long button press handling
-bool sAutorepeatButtonTouched = false;// flag if autorepeat button was touched - to influence long button press handling
-bool sNothingTouched = false;// = !(sSliderTouched || sButtonTouched || sAutorepeatButtonTouched)
-bool sSliderIsMoveTarget = false;// true if slider was touched by DOWN event
+bool sButtonTouched = false; // flag if autorepeat button was touched - to influence long button press handling
+bool sAutorepeatButtonTouched = false; // flag if autorepeat button was touched - to influence long button press handling
+bool sNothingTouched = false; // = !(sSliderTouched || sButtonTouched || sAutorepeatButtonTouched)
+bool sSliderIsMoveTarget = false; // true if slider was touched by DOWN event
 
 uint32_t sLongTouchDownTimeoutMillis;
 /*
  * timer related callbacks
- */bool (*sPeriodicTouchCallback)(int const, int const) = NULL;// return parameter not yet used
+ */bool (*sPeriodicTouchCallback)(int, int) = NULL; // return parameter not yet used
 uint32_t sPeriodicCallbackPeriodMillis;
 
 struct BluetoothEvent localTouchEvent;
@@ -72,21 +72,20 @@ bool sTouchIsStillDown = false;
 bool sDisableTouchUpOnce = false;
 bool sDisableUntilTouchUpIsDone = false;
 
-struct BluetoothEvent remoteTouchEvent;
+struct BluetoothEvent remoteEvent;
 
-void (*sTouchDownCallback)(struct XYPosition * const) = NULL;
-void (*sLongTouchDownCallback)(struct XYPosition * const) = NULL;
-void (*sTouchMoveCallback)(struct XYPosition * const) = NULL;
-void (*sTouchUpCallback)(struct XYPosition * const) = NULL;
+void (*sTouchDownCallback)(struct XYPosition *) = NULL;
+void (*sLongTouchDownCallback)(struct XYPosition *) = NULL;
+void (*sTouchMoveCallback)(struct XYPosition *) = NULL;
+void (*sTouchUpCallback)(struct XYPosition *) = NULL;
 bool sTouchUpCallbackEnabled = false;
 
-void (*sSwipeEndCallback)(struct Swipe * const) = NULL;
+void (*sSwipeEndCallback)(struct Swipe *) = NULL;
 bool sSwipeEndCallbackEnabled = false;
 
-void (*sConnectCallback)(struct XYSize * const) = NULL;
-void (*sSimpleConnectCallback)(void) = NULL;
-void (*sResizeAndConnectCallback)(struct XYSize * const) = NULL;
-void (*sSimpleResizeAndConnectCallback)(void) = NULL;
+void (*sConnectCallback)(void) = NULL;
+void (*sRedrawCallback)(void) = NULL;
+void (*sReorientationCallback)(void) = NULL;
 
 void (*sSensorChangeCallback)(uint8_t aEventType, struct SensorCallback * aSensorCallbackInfo) = NULL;
 
@@ -112,8 +111,7 @@ void callbackPeriodicTouch(void) {
 /**
  * Register a callback routine which is called every CallbackPeriod milliseconds while screen is touched
  */
-void registerPeriodicTouchCallback(bool (*aPeriodicTouchCallback)(int const, int const),
-        const uint32_t aCallbackPeriodMillis) {
+void registerPeriodicTouchCallback(bool (*aPeriodicTouchCallback)(int, int), uint32_t aCallbackPeriodMillis) {
     sPeriodicTouchCallback = aPeriodicTouchCallback;
     sPeriodicCallbackPeriodMillis = aCallbackPeriodMillis;
     changeDelayCallback(&callbackPeriodicTouch, aCallbackPeriodMillis);
@@ -122,7 +120,7 @@ void registerPeriodicTouchCallback(bool (*aPeriodicTouchCallback)(int const, int
 /**
  * set CallbackPeriod
  */
-void setPeriodicTouchCallbackPeriod(const uint32_t aCallbackPeriod) {
+void setPeriodicTouchCallbackPeriod(uint32_t aCallbackPeriod) {
     sPeriodicCallbackPeriodMillis = aCallbackPeriod;
 }
 
@@ -143,45 +141,37 @@ void callbackLongTouchDownTimeout(void) {
                 && abs(sDownPosition.PosY - sActualPosition.PosY) < TOUCH_SWIPE_THRESHOLD) {
             // fill up event
             localTouchEvent.EventData.TouchPosition = TouchPanel.mTouchLastPosition;
-            localTouchEvent.EventType = EVENT_TAG_LONG_TOUCH_DOWN_CALLBACK_ACTION;
+            localTouchEvent.EventType = EVENT_LONG_TOUCH_DOWN_CALLBACK_ACTION;
         }
     }
 }
 #endif
 
-void registerConnectCallback(void (*aConnectCallback)(struct XYSize * const aMaxSizePtr)) {
+void registerConnectCallback(void (*aConnectCallback)(void)) {
     sConnectCallback = aConnectCallback;
 }
 
-void registerSimpleConnectCallback(void (*aConnectCallback)(void)) {
-    sSimpleConnectCallback = aConnectCallback;
+void registerRedrawCallback(void (*aRedrawCallback)(void)) {
+    sRedrawCallback = aRedrawCallback;
 }
 
-void registerResizeAndConnectCallback(void (*aResizeAndConnectCallback)(struct XYSize * const aActualSizePtr)) {
-    sResizeAndConnectCallback = aResizeAndConnectCallback;
-}
-
-void registerSimpleResizeAndConnectCallback(void (*aSimpleResizeAndConnectCallback)(void)) {
-    sSimpleResizeAndConnectCallback = aSimpleResizeAndConnectCallback;
-}
-
-void (* getSimpleResizeAndConnectCallback(void))(void)  {
-    return sSimpleResizeAndConnectCallback;
+void registerReorientationCallback(void (*aReorientationCallback)(void)) {
+    sReorientationCallback = aReorientationCallback;
 }
 
 #ifndef DO_NOT_NEED_BASIC_TOUCH_EVENTS
-void registerTouchDownCallback(void (*aTouchDownCallback)(struct XYPosition * const aActualPositionPtr)) {
+void registerTouchDownCallback(void (*aTouchDownCallback)(struct XYPosition * aActualPositionPtr)) {
     sTouchDownCallback = aTouchDownCallback;
 }
 
-void registerTouchMoveCallback(void (*aTouchMoveCallback)(struct XYPosition * const aActualPositionPtr)) {
+void registerTouchMoveCallback(void (*aTouchMoveCallback)(struct XYPosition * aActualPositionPtr)) {
     sTouchMoveCallback = aTouchMoveCallback;
 }
 
 /**
  * Register a callback routine which is called when touch goes up
  */
-void registerTouchUpCallback(void (*aTouchUpCallback)(struct XYPosition * const aActualPositionPtr)) {
+void registerTouchUpCallback(void (*aTouchUpCallback)(struct XYPosition * aActualPositionPtr)) {
     sTouchUpCallback = aTouchUpCallback;
     // disable next end touch since we are already in a touch handler and don't want the end of this touch to be interpreted
     if (sTouchIsStillDown) {
@@ -207,8 +197,7 @@ void setTouchUpCallbackEnabled(bool aTouchUpCallbackEnabled) {
 /**
  * Register a callback routine which is only called after a timeout if screen is still touched
  */
-void registerLongTouchDownCallback(void (*aLongTouchDownCallback)(struct XYPosition * const),
-        const uint16_t aLongTouchDownTimeoutMillis) {
+void registerLongTouchDownCallback(void (*aLongTouchDownCallback)(struct XYPosition *), uint16_t aLongTouchDownTimeoutMillis) {
     sLongTouchDownCallback = aLongTouchDownCallback;
 #ifdef LOCAL_DISPLAY_EXISTS
     sLongTouchDownTimeoutMillis = aLongTouchDownTimeoutMillis;
@@ -222,7 +211,7 @@ void registerLongTouchDownCallback(void (*aLongTouchDownCallback)(struct XYPosit
 /**
  * Register a callback routine which is called when touch goes up and swipe detected
  */
-void registerSwipeEndCallback(void (*aSwipeEndCallback)(struct Swipe * const)) {
+void registerSwipeEndCallback(void (*aSwipeEndCallback)(struct Swipe *)) {
     sSwipeEndCallback = aSwipeEndCallback;
     // disable next end touch since we are already in a touch handler and don't want the end of this touch to be interpreted
     if (sTouchIsStillDown) {
@@ -245,30 +234,29 @@ void setSwipeEndCallbackEnabled(bool aSwipeEndCallbackEnabled) {
  * @param aSensorRate see android.hardware.SensorManager (0-3) or in milli seconds
  * @param aSensorChangeCallback one callback for all sensors types
  */
-void registerSensorChangeCallback(uint8_t aSensorType, uint8_t aSensorRate,
+void registerSensorChangeCallback(uint8_t aSensorType, uint8_t aSensorRate, uint8_t aFilterFlag,
         void (*aSensorChangeCallback)(uint8_t aSensorType, struct SensorCallback * aSensorCallbackInfo)) {
     bool tSensorEnable = true;
     if (aSensorChangeCallback == NULL) {
         tSensorEnable = false;
     }
-    BlueDisplay1.setSensor(aSensorType, tSensorEnable, aSensorRate);
+    BlueDisplay1.setSensor(aSensorType, tSensorEnable, aSensorRate, aFilterFlag);
     sSensorChangeCallback = aSensorChangeCallback;
 }
 
 /*
- * Delay, which also checks for events
+ * Delay (in 8 millis resolution), which also checks for events
  */
 void delayMillisWithCheckAndHandleEvents(int32_t aTimeMillis) {
-    aTimeMillis /= 16;
+    aTimeMillis /= 8;
     for (int32_t i = 0; i < aTimeMillis; ++i) {
-        delayMillis(16);
+        delayMillis(8);
         checkAndHandleEvents();
     }
 }
 
 /**
  * Is called by thread main loops
- * Checks also for (re)connect and resize events
  */
 void checkAndHandleEvents(void) {
 #ifdef HAL_WWDG_MODULE_ENABLED
@@ -276,7 +264,7 @@ void checkAndHandleEvents(void) {
 #endif
 #ifdef LOCAL_DISPLAY_EXISTS
     resetTouchFlags();
-    if (localTouchEvent.EventType != EVENT_TAG_NO_EVENT) {
+    if (localTouchEvent.EventType != EVENT_NO_EVENT) {
         handleEvent(&localTouchEvent);
     }
 #endif
@@ -292,43 +280,47 @@ void checkAndHandleEvents(void) {
  */
 extern "C" void handleEvent(struct BluetoothEvent * aEvent) {
     uint8_t tEventType = aEvent->EventType;
+
+    // local event since the values in the event may be overwritten if the handler needs long time for its action
+    struct BluetoothEvent tEvent = *aEvent;
+
     // avoid using event twice
-    aEvent->EventType = EVENT_TAG_NO_EVENT;
+    aEvent->EventType = EVENT_NO_EVENT;
 #ifndef DO_NOT_NEED_BASIC_TOUCH_EVENTS
 #ifdef  LOCAL_DISPLAY_EXISTS
-    if (tEventType <= EVENT_TAG_TOUCH_ACTION_MOVE && sDisplayXYValuesEnabled) {
+    if (tEventType <= EVENT_TOUCH_ACTION_MOVE && sDisplayXYValuesEnabled) {
         printTPData(30, 2 + TEXT_SIZE_11_ASCEND, COLOR_BLACK, COLOR_WHITE);
     }
 #endif
-    if (tEventType == EVENT_TAG_TOUCH_ACTION_DOWN) {
+    if (tEventType == EVENT_TOUCH_ACTION_DOWN) {
         // must initialize all positions here!
-        sDownPosition = aEvent->EventData.TouchPosition;
-        sActualPosition = aEvent->EventData.TouchPosition;
+        sDownPosition = tEvent.EventData.TouchPosition;
+        sActualPosition = tEvent.EventData.TouchPosition;
 #ifdef USE_STM32F3_DISCO
         BSP_LED_On(LED_BLUE_2); // BLUE Front
 #endif
         sTouchIsStillDown = true;
 #ifdef LOCAL_DISPLAY_EXISTS
         // start timeout for long touch if it is local event
-        if (sLongTouchDownCallback != NULL && aEvent != &remoteTouchEvent) {
+        if (sLongTouchDownCallback != NULL && aEvent != &remoteEvent) {
             changeDelayCallback(&callbackLongTouchDownTimeout, sLongTouchDownTimeoutMillis); // enable timeout
         }
 #endif
         if (sTouchDownCallback != NULL) {
-            sTouchDownCallback(&aEvent->EventData.TouchPosition);
+            sTouchDownCallback(&tEvent.EventData.TouchPosition);
         }
 
-    } else if (tEventType == EVENT_TAG_TOUCH_ACTION_MOVE) {
+    } else if (tEventType == EVENT_TOUCH_ACTION_MOVE) {
         if (sDisableUntilTouchUpIsDone) {
             return;
         }
         if (sTouchMoveCallback != NULL) {
-            sTouchMoveCallback(&aEvent->EventData.TouchPosition);
+            sTouchMoveCallback(&tEvent.EventData.TouchPosition);
         }
-        sActualPosition = aEvent->EventData.TouchPosition;
+        sActualPosition = tEvent.EventData.TouchPosition;
 
-    } else if (tEventType == EVENT_TAG_TOUCH_ACTION_UP) {
-        sUpPosition = aEvent->EventData.TouchPosition;
+    } else if (tEventType == EVENT_TOUCH_ACTION_UP) {
+        sUpPosition = tEvent.EventData.TouchPosition;
 #ifdef USE_STM32F3_DISCO
         BSP_LED_Off(LED9); // BLUE Front
 #endif
@@ -343,98 +335,130 @@ extern "C" void handleEvent(struct BluetoothEvent * aEvent) {
             return;
         }
         if (sTouchUpCallback != NULL) {
-            sTouchUpCallback(&aEvent->EventData.TouchPosition);
+            sTouchUpCallback(&tEvent.EventData.TouchPosition);
         }
 
-    } else if (tEventType == EVENT_TAG_TOUCH_ACTION_ERROR) {
+    } else if (tEventType == EVENT_TOUCH_ACTION_ERROR) {
         // try to reset touch state
 #ifdef USE_STM32F3_DISCO
         BSP_LED_Off(LED9); // BLUE Front
 #endif
-        sUpPosition = aEvent->EventData.TouchPosition;
+        sUpPosition = tEvent.EventData.TouchPosition;
         sTouchIsStillDown = false;
     } else
 #endif
 
-    if (tEventType == EVENT_TAG_BUTTON_CALLBACK_ACTION) {
+    if (tEventType == EVENT_BUTTON_CALLBACK_ACTION) {
         sTouchIsStillDown = false; // to disable local touch up detection
 
 #ifdef LOCAL_DISPLAY_EXISTS
-        void (*tCallback)(BDButton*,
-                int16_t) = (void (*)(BDButton*, int16_t)) aEvent->EventData.GuiCallbackInfo.Handler;
-        BDButton tTempButton = BDButton(aEvent->EventData.GuiCallbackInfo.ObjectIndex,
-                TouchButton::getLocalButtonFromBDButtonHandle(aEvent->EventData.GuiCallbackInfo.ObjectIndex));
-        tCallback(&tTempButton, aEvent->EventData.GuiCallbackInfo.ValueForHandler.Int16Value);
+        void (*tCallback)(BDButton*, int16_t) = (void (*)(BDButton*, int16_t)) tEvent.EventData.GuiCallbackInfo.Handler;
+        BDButton tTempButton = BDButton(tEvent.EventData.GuiCallbackInfo.ObjectIndex,
+                TouchButton::getLocalButtonFromBDButtonHandle(tEvent.EventData.GuiCallbackInfo.ObjectIndex));
+        tCallback(&tTempButton, tEvent.EventData.GuiCallbackInfo.ValueForHandler.Int16Value);
 #else
         //BDButton * is the same as BDButtonHandle_t * since BDButton only has one BDButtonHandle_t element
         void (*tCallback)(BDButtonHandle_t*,
-                int16_t) = (void (*)(BDButtonHandle_t*, int16_t)) aEvent->EventData.GuiCallbackInfo.Handler;
-        tCallback(&aEvent->EventData.GuiCallbackInfo.ObjectIndex,
-                aEvent->EventData.GuiCallbackInfo.ValueForHandler.Int16Value);
+                int16_t) = (void (*)(BDButtonHandle_t*, int16_t)) tEvent.EventData.GuiCallbackInfo.Handler;
+        tCallback(&tEvent.EventData.GuiCallbackInfo.ObjectIndex, tEvent.EventData.GuiCallbackInfo.ValueForHandler.Int16Value);
 #endif
 
-    } else if (tEventType == EVENT_TAG_SLIDER_CALLBACK_ACTION) {
+    } else if (tEventType == EVENT_SLIDER_CALLBACK_ACTION) {
         sTouchIsStillDown = false; // to disable local touch up detection
 #ifdef LOCAL_DISPLAY_EXISTS
-                void (*tCallback)(BDSlider *,
-                        int16_t) = (void (*)(BDSlider *, int16_t))aEvent->EventData.GuiCallbackInfo.Handler;
-                TouchSlider * tLocalSlider = TouchSlider::getLocalSliderFromBDSliderHandle(
-                        aEvent->EventData.GuiCallbackInfo.ObjectIndex);
-                BDSlider tTempSlider = BDSlider(aEvent->EventData.GuiCallbackInfo.ObjectIndex, tLocalSlider);
-                tCallback(&tTempSlider, aEvent->EventData.GuiCallbackInfo.ValueForHandler.Int16Value);
-                // synchronize local slider - remote one is synchronized by local slider itself
-                if (aEvent != &localTouchEvent) {
-                    tLocalSlider->setActualValueAndDrawBar(aEvent->EventData.GuiCallbackInfo.ValueForHandler.Int16Value);
-                }
+        void (*tCallback)(BDSlider *, int16_t) = (void (*)(BDSlider *, int16_t))tEvent.EventData.GuiCallbackInfo.Handler;
+        TouchSlider * tLocalSlider = TouchSlider::getLocalSliderFromBDSliderHandle(tEvent.EventData.GuiCallbackInfo.ObjectIndex);
+        BDSlider tTempSlider = BDSlider(tEvent.EventData.GuiCallbackInfo.ObjectIndex, tLocalSlider);
+        tCallback(&tTempSlider, tEvent.EventData.GuiCallbackInfo.ValueForHandler.Int16Value);
+        // synchronize local slider - remote one is synchronized by local slider itself
+        if (aEvent != &localTouchEvent) {
+            tLocalSlider->setActualValueAndDrawBar(tEvent.EventData.GuiCallbackInfo.ValueForHandler.Int16Value);
+        }
 #else
         void (*tCallback)(BDSliderHandle_t *,
-                int16_t) = (void (*)(BDSliderHandle_t *, int16_t))aEvent->EventData.GuiCallbackInfo.Handler;
-        tCallback(&aEvent->EventData.GuiCallbackInfo.ObjectIndex,
-                aEvent->EventData.GuiCallbackInfo.ValueForHandler.Int16Value);
+                int16_t) = (void (*)(BDSliderHandle_t *, int16_t))tEvent.EventData.GuiCallbackInfo.Handler;
+        tCallback(&tEvent.EventData.GuiCallbackInfo.ObjectIndex, tEvent.EventData.GuiCallbackInfo.ValueForHandler.Int16Value);
 #endif
-    } else if (tEventType == EVENT_TAG_NUMBER_CALLBACK) {
-        void (*tCallback)(float) = (void (*)(float))aEvent->EventData.GuiCallbackInfo.Handler;
-        tCallback(aEvent->EventData.GuiCallbackInfo.ValueForHandler.FloatValue);
+    } else if (tEventType == EVENT_NUMBER_CALLBACK) {
+        void (*tCallback)(float) = (void (*)(float))tEvent.EventData.GuiCallbackInfo.Handler;
+        tCallback(tEvent.EventData.GuiCallbackInfo.ValueForHandler.FloatValue);
 
         // check for sSensorChangeCallback != NULL since we can still have a few events for sensors even if they are just disabled
-    } else if (tEventType >= EVENT_TAG_FIRST_SENSOR_ACTION_CODE && tEventType <= EVENT_TAG_LAST_SENSOR_ACTION_CODE
+    } else if (tEventType >= EVENT_FIRST_SENSOR_ACTION_CODE && tEventType <= EVENT_LAST_SENSOR_ACTION_CODE
             && sSensorChangeCallback != NULL) {
-        sSensorChangeCallback(tEventType - EVENT_TAG_FIRST_SENSOR_ACTION_CODE, &aEvent->EventData.SensorCallbackInfo);
+        sSensorChangeCallback(tEventType - EVENT_FIRST_SENSOR_ACTION_CODE, &tEvent.EventData.SensorCallbackInfo);
 
-    } else if (tEventType == EVENT_TAG_SWIPE_CALLBACK_ACTION) {
+    } else if (tEventType == EVENT_SWIPE_CALLBACK_ACTION) {
         sTouchIsStillDown = false;
         if (sSwipeEndCallback != NULL) {
             // compute it locally - no need to send it over the line
-            if (aEvent->EventData.SwipeInfo.SwipeMainDirectionIsX) {
-                aEvent->EventData.SwipeInfo.TouchDeltaAbsMax = abs(aEvent->EventData.SwipeInfo.TouchDeltaX);
+            if (tEvent.EventData.SwipeInfo.SwipeMainDirectionIsX) {
+                tEvent.EventData.SwipeInfo.TouchDeltaAbsMax = abs(tEvent.EventData.SwipeInfo.TouchDeltaX);
             } else {
-                aEvent->EventData.SwipeInfo.TouchDeltaAbsMax = abs(aEvent->EventData.SwipeInfo.TouchDeltaY);
+                tEvent.EventData.SwipeInfo.TouchDeltaAbsMax = abs(tEvent.EventData.SwipeInfo.TouchDeltaY);
             }
-            sSwipeEndCallback(&(aEvent->EventData.SwipeInfo));
+            sSwipeEndCallback(&(tEvent.EventData.SwipeInfo));
         }
 
-    } else if (tEventType == EVENT_TAG_LONG_TOUCH_DOWN_CALLBACK_ACTION) {
+    } else if (tEventType == EVENT_LONG_TOUCH_DOWN_CALLBACK_ACTION) {
         if (sLongTouchDownCallback != NULL) {
-            sLongTouchDownCallback(&(aEvent->EventData.TouchPosition));
+            sLongTouchDownCallback(&(tEvent.EventData.TouchPosition));
         }
         sDisableTouchUpOnce = true;
 
-    } else if (tEventType == EVENT_TAG_CONNECTION_BUILD_UP) {
-        BlueDisplay1.setMaxDisplaySize(&aEvent->EventData.DisplaySize);
-        if (sSimpleConnectCallback != NULL) {
-            sSimpleConnectCallback();
-        } else if (sConnectCallback != NULL) {
-            sConnectCallback(&aEvent->EventData.DisplaySize);
+    } else if (tEventType == EVENT_INFO_CALLBACK) {
+        void (*tCallback)(uint16_t, uint16_t, uint16_t, uint16_t) = (void (*)(uint16_t, uint16_t, uint16_t,
+                        uint16_t))tEvent.EventData.IntegerInfoCallbackData.Handler;
+        tCallback(tEvent.EventData.IntegerInfoCallbackData.SubFunction, tEvent.EventData.IntegerInfoCallbackData.Special,
+                tEvent.EventData.IntegerInfoCallbackData.Int16Value1, tEvent.EventData.IntegerInfoCallbackData.Int16Value2);
+
+    } else if (tEventType == EVENT_REORIENTATION_ACTION) {
+        /*
+         * Got max display size for new orientation
+         */
+        if (tEvent.EventData.DisplaySize.XWidth > tEvent.EventData.DisplaySize.YHeight) {
+            BlueDisplay1.mOrientationIsLandscape = true;
+        } else {
+            BlueDisplay1.mOrientationIsLandscape = false;
         }
-        // also handle as resize
-        tEventType = EVENT_TAG_RESIZE_ACTION;
+        BlueDisplay1.mMaxDisplaySize.XWidth = tEvent.EventData.DisplaySize.XWidth;
+        BlueDisplay1.mMaxDisplaySize.YHeight = tEvent.EventData.DisplaySize.YHeight;
+        if (sReorientationCallback != NULL) {
+            sReorientationCallback();
+        }
+        // Since with simpleSerial we have only buffer for 1 event must also call redraw here
+        tEventType = EVENT_REDRAW_ACTION;
+
+    } else if (tEventType == EVENT_CONNECTION_BUILD_UP) {
+        /*
+         * Got max display size for actual orientation
+         */
+        BlueDisplay1.mMaxDisplaySize.XWidth = tEvent.EventData.DisplaySize.XWidth;
+        BlueDisplay1.mMaxDisplaySize.YHeight = tEvent.EventData.DisplaySize.YHeight;
+        // first write a NOP command for synchronizing
+        BlueDisplay1.sendSync();
+
+        if (sConnectCallback != NULL) {
+            sConnectCallback();
+        }
+
+#ifdef LOCAL_DISPLAY_EXISTS
+        // do it after sConnectCallback() since the upper tends to send a reset all command
+        TouchButton::reinitAllLocalButtonsForRemote();
+        TouchSlider::reinitAllLocalSlidersForRemote();
+#endif
+        // Since with simpleSerial we have only buffer for 1 event must also call redraw here
+        tEventType = EVENT_REDRAW_ACTION;
     }
-    if (tEventType == EVENT_TAG_RESIZE_ACTION) {
-        BlueDisplay1.setActualDisplaySize(&aEvent->EventData.DisplaySize);
-        if (sSimpleResizeAndConnectCallback != NULL) {
-            sSimpleResizeAndConnectCallback();
-        } else if (sResizeAndConnectCallback != NULL) {
-            sResizeAndConnectCallback(&aEvent->EventData.DisplaySize);
+
+    if (tEventType == EVENT_REDRAW_ACTION) {
+        /*
+         * Got actual display size
+         */
+        BlueDisplay1.mActualDisplaySize.XWidth = tEvent.EventData.DisplaySize.XWidth;
+        BlueDisplay1.mActualDisplaySize.YHeight = tEvent.EventData.DisplaySize.YHeight;
+        if (sRedrawCallback != NULL) {
+            sRedrawCallback();
         }
     }
 }
@@ -492,23 +516,23 @@ void handleLocalTouchUp(void) {
  * @param aActualPositionPtr
  * @return
  */
-void simpleTouchDownHandler(struct XYPosition * const aActualPositionPtr) {
+void simpleTouchDownHandler(struct XYPosition * aActualPositionPtr) {
     if (TouchSlider::checkAllSliders(aActualPositionPtr->PosX, aActualPositionPtr->PosY)) {
         sSliderIsMoveTarget = true;
     } else {
-        if (!TouchButton::checkAllButtons(aActualPositionPtr->PosX, aActualPositionPtr->PosY, true)) {
+        if (!TouchButton::checkAllButtons(aActualPositionPtr->PosX, aActualPositionPtr->PosY)) {
             sNothingTouched = true;
         }
     }
 }
 
-void simpleTouchHandlerOnlyForButtons(struct XYPosition * const aActualPositionPtr) {
-    if (!TouchButton::checkAllButtons(aActualPositionPtr->PosX, aActualPositionPtr->PosY, true)) {
+void simpleTouchHandlerOnlyForButtons(struct XYPosition * aActualPositionPtr) {
+    if (!TouchButton::checkAllButtons(aActualPositionPtr->PosX, aActualPositionPtr->PosY)) {
         sNothingTouched = true;
     }
 }
 
-void simpleTouchDownHandlerOnlyForSlider(struct XYPosition * const aActualPositionPtr) {
+void simpleTouchDownHandlerOnlyForSlider(struct XYPosition * aActualPositionPtr) {
     if (TouchSlider::checkAllSliders(aActualPositionPtr->PosX, aActualPositionPtr->PosY)) {
         sSliderIsMoveTarget = true;
     } else {
@@ -516,7 +540,7 @@ void simpleTouchDownHandlerOnlyForSlider(struct XYPosition * const aActualPositi
     }
 }
 
-void simpleTouchMoveHandlerForSlider(struct XYPosition * const aActualPositionPtr) {
+void simpleTouchMoveHandlerForSlider(struct XYPosition * aActualPositionPtr) {
     TouchSlider::checkAllSliders(aActualPositionPtr->PosX, aActualPositionPtr->PosY);
 }
 
@@ -540,11 +564,18 @@ void printTPData(int x, int y, Color_t aColor, Color_t aBackColor) {
 }
 #endif //LOCAL_DISPLAY_EXISTS
 
-/**
- * return pointer to end touch callback function
+/*
+ * function are located here since the auto format cannot deal with them.
  */
-
-void (*
-        getTouchUpCallback(void))(struct XYPosition * const) {
-            return sTouchUpCallback;
+void (* getRedrawCallback(void))(void) {
+            return sRedrawCallback;
         }
+
+        /**
+         * return pointer to end touch callback function
+         */
+
+        void (*
+                getTouchUpCallback(void))(struct XYPosition * ) {
+                    return sTouchUpCallback;
+                }

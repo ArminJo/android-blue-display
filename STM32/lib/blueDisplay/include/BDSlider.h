@@ -36,10 +36,14 @@
 // assume we have only a restricted amount of local sliders
 typedef uint8_t BDSliderHandle_t;
 #else
+#ifdef AVR
+typedef uint8_t BDSliderHandle_t;
+#else
 typedef uint16_t BDSliderHandle_t;
 #endif
+#endif
 
-extern BDSliderHandle_t localSliderIndex;
+extern BDSliderHandle_t sLocalSliderIndex;
 
 //#include "BlueDisplay.h" // for Color_t - cannot be included here since BlueDisplay.h needs BDSlider
 typedef uint16_t Color_t;
@@ -58,8 +62,21 @@ public:
     BDSlider(BDSliderHandle_t aSliderHandle, TouchSlider * aLocalSliderPointer);
 #endif
 
-    void init(uint16_t aPositionX, uint16_t aPositionY, uint8_t aBarWidth, uint16_t aBarLength,
-            uint16_t aThresholdValue, int16_t aInitalValue, Color_t aSliderColor, Color_t aBarColor, uint8_t aFlags,
+    /**
+     * @brief initialization with all parameters except BarBackgroundColor
+     * @param aPositionX determines upper left corner
+     * @param aPositionY determines upper left corner
+     * @param aBarWidth width of bar (and border) in pixel
+     * @param aBarLength size of slider bar in pixel = maximum slider value
+     * @param aThresholdValue value - if bigger, then color of bar changes from BarColor to BarBackgroundColor
+     * @param aInitalValue
+     * @param aSliderColor color of slider frame
+     * @param aBarColor
+     * @param aOptions see #FLAG_SLIDER_SHOW_BORDER etc.
+     * @param aOnChangeHandler - if NULL no update of bar is done on touch
+     */
+    void init(uint16_t aPositionX, uint16_t aPositionY, uint8_t aBarWidth, int16_t aBarLength,
+            int16_t aThresholdValue, int16_t aInitalValue, Color_t aSliderColor, Color_t aBarColor, uint8_t aFlags,
             void (*aOnChangeHandler)(BDSlider *, uint16_t));
 
     void drawSlider(void);
