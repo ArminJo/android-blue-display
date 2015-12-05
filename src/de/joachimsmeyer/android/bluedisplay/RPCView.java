@@ -68,7 +68,7 @@ public class RPCView extends View {
 	BlueDisplay mBlueDisplayContext;
 
 	private static final int MAX_REFERENCE_CANVAS_WIDTH = 1280;
-	private static final int MAX_REFERENCE_CANVAS_HEIGHT = 800; // not used yet
+	// private static final int MAX_REFERENCE_CANVAS_HEIGHT = 800; // not used yet
 
 	protected int mActualCanvasWidth;
 	protected int mActualCanvasHeight;
@@ -217,7 +217,7 @@ public class RPCView extends View {
 	private final static int SUBFUNCTION_GLOBAL_SET_LONG_TOUCH_DOWN_TIMEOUT = 0x08;
 	private final static int SUBFUNCTION_GLOBAL_SET_SCREEN_ORIENTATION_LOCK = 0x0C;
 	// Flags for SUBFUNCTION_GLOBAL_SET_SCREEN_ORIENTATION_LOCK
-	private final static int FLAG_SCREEN_ORIENTATION_LOCK_LANDSCAPE = 0x00;
+	// private final static int FLAG_SCREEN_ORIENTATION_LOCK_LANDSCAPE = 0x00;
 	private final static int FLAG_SCREEN_ORIENTATION_LOCK_PORTRAIT = 0x01;
 	private final static int FLAG_SCREEN_ORIENTATION_LOCK_ACTUAL = 0x02;
 	private final static int FLAG_SCREEN_ORIENTATION_LOCK_UNLOCK = 0x03;
@@ -321,6 +321,7 @@ public class RPCView extends View {
 		}
 	}
 
+	@SuppressWarnings("deprecation")
 	@SuppressLint("NewApi")
 	public RPCView(Context aContext, Handler aHandler) {
 		super(aContext);
@@ -970,7 +971,7 @@ public class RPCView extends View {
 						 * set duration in ms
 						 */
 						tDurationMillis = aParameters[1];
-						// Only duration -1 means forever -2 gives 65534
+						// Only duration -1 means forever, -2 gives 65534
 						if (tDurationMillis < -1) {
 							tDurationMillis = 0x10000 + tDurationMillis;
 						}
@@ -1609,12 +1610,14 @@ public class RPCView extends View {
 				}
 
 				tIndex = tStringParameter.indexOf('\n');
-
-				boolean tDrawBackgroundExtend = ((aParameters[4] != COLOR_NO_BACKGROUND_EXTEND));
-				if(aParameters[4] == COLOR_NO_BACKGROUND_EXTEND) {
-					tDrawBackgroundExtend = false;
-					aParameters[4] = COLOR_WHITE_PARAMETER;
+				boolean tDrawBackgroundExtend = false;
+				int tCRIndex = tStringParameter.indexOf('\r');
+				if (tCRIndex >= 0 && (tCRIndex < tIndex || tIndex < 0)) {
+					tIndex = tCRIndex;
+					tDrawBackgroundExtend = true;
+					// tStringParameter = tStringParameter.substring(0, tIndex) + "\n" + tStringParameter.substring(tIndex + 1);
 				}
+
 				boolean tDrawBackground;
 				if (aParameters[4] == COLOR_NO_BACKGROUND) {
 					tDrawBackground = false;
@@ -1655,6 +1658,15 @@ public class RPCView extends View {
 						tStartIndex = tIndex + 1;
 						if (tIndex + 1 <= tStringParameter.length()) {
 							tIndex = tStringParameter.indexOf('\n', tIndex + 1);
+							tDrawBackgroundExtend = false;
+							tCRIndex = tStringParameter.indexOf('\r', tIndex + 1);
+							if (tCRIndex >= 0 && (tCRIndex < tIndex || tIndex < 0)) {
+								tIndex = tCRIndex;
+								tDrawBackgroundExtend = true;
+								// tStringParameter = tStringParameter.substring(0, tIndex) + "\n"
+								// + tStringParameter.substring(tIndex + 1);
+							}
+
 							if (tIndex < 0) {
 								tIndex = tStringParameter.length();
 							}
