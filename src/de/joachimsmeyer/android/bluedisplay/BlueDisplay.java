@@ -41,8 +41,6 @@
 
 package de.joachimsmeyer.android.bluedisplay;
 
-import java.util.Set;
-
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.AlertDialog;
@@ -70,7 +68,6 @@ import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
-import android.view.Surface;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.view.WindowManager;
@@ -178,19 +175,9 @@ public class BlueDisplay extends Activity {
 		} else {
 			mSerialService = new BluetoothSerialService(this, mHandlerBluetooth);
 			if (mSerialService.getState() == BluetoothSerialService.STATE_NONE && mBluetoothAdapter.isEnabled()) {
-				Set<BluetoothDevice> tDeviceset = mBluetoothAdapter.getBondedDevices();
-				if (tDeviceset.size() == 1) {
-					// found one device, try to connect directly
-					tDeviceset.iterator().next();
-					// Get the BLuetoothDevice object
-					BluetoothDevice device = tDeviceset.iterator().next();
-					// Attempt to connect to the device
-					mSerialService.connect(device);
-				} else {
-					// Launch the DeviceListActivity to choose device
-					Intent serverIntent = new Intent(this, DeviceListActivity.class);
-					startActivityForResult(serverIntent, REQUEST_CONNECT_DEVICE);
-				}
+				// Launch the DeviceListActivity to choose device
+				Intent serverIntent = new Intent(this, DeviceListActivity.class);
+				startActivityForResult(serverIntent, REQUEST_CONNECT_DEVICE);
 			} else if (mSerialService.getState() == BluetoothSerialService.STATE_CONNECTED) {
 				// stop running service
 				mSerialService.stop();
@@ -484,8 +471,9 @@ public class BlueDisplay extends Activity {
 				setActualScreenOrientation(mPreferredScreenOrientation);
 				// set window to normal (not persistent) state
 				getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-				// stop tone
-				mRPCView.mToneGenerator.startTone(ToneGenerator.TONE_CDMA_SIGNAL_OFF);
+				// stop tone - TONE_CDMA_SIGNAL_OFF does not work for lollipop
+				// mRPCView.mToneGenerator.startTone(ToneGenerator.TONE_CDMA_SIGNAL_OFF);
+				mRPCView.mToneGenerator.startTone(ToneGenerator.TONE_CDMA_CALL_SIGNAL_ISDN_PAT5);
 				mSensorEventListener.deregisterAllActiveSensorListeners();
 				break;
 
@@ -535,7 +523,9 @@ public class BlueDisplay extends Activity {
 		switch (requestCode) {
 
 		case REQUEST_CONNECT_DEVICE:
-			// When DeviceListActivity returns with a device to connect
+			/*
+			 * When DeviceListActivity returns with a device to connect
+			 */
 			if (resultCode == Activity.RESULT_OK) {
 				// Get the device MAC address
 				String address = data.getExtras().getString(DeviceListActivity.EXTRA_DEVICE_ADDRESS);
@@ -547,7 +537,9 @@ public class BlueDisplay extends Activity {
 			break;
 
 		case REQUEST_ENABLE_BT:
-			// When the request to enable Bluetooth returns
+			/*
+			 * When the request to enable Bluetooth returns
+			 */
 			if (resultCode != Activity.RESULT_OK) {
 				if (MyLog.isDEBUG()) {
 					Log.d(LOG_TAG, "BT not enabled");
