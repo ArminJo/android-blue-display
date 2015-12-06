@@ -846,6 +846,11 @@ void Chart::setYLabelStartValueFloat(float yLabelStartValueFloat) {
     mYLabelStartValue.FloatValue = yLabelStartValueFloat;
 }
 
+void Chart::setYDataFactor(float aYDataFactor) {
+    mYDataFactor = aYDataFactor;
+}
+
+
 /**
  * not tested
  * @retval (YStartValue / mYFactor)

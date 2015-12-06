@@ -5,7 +5,7 @@
  * 	It also implements basic GUI elements as buttons and sliders.
  * 	It sends touch or GUI callback events over Bluetooth back to Arduino.
  * 
- *  Copyright (C) 2014  Armin Joachimsmeyer
+ *  Copyright (C) 2014-2016  Armin Joachimsmeyer
  *  armin.joachimsmeyer@gmail.com
  *  
  * 	This file is part of BlueDisplay.
@@ -52,6 +52,7 @@ import android.media.ToneGenerator;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
+import android.os.SystemClock;
 import android.util.Log;
 import android.util.SparseArray;
 import android.view.GestureDetector.SimpleOnGestureListener;
@@ -61,6 +62,7 @@ import android.view.Surface;
 import android.view.View;
 import android.widget.Toast;
 
+@SuppressLint("HandlerLeak")
 public class RPCView extends View {
 
 	public static final String LOG_TAG = "BD";
@@ -89,6 +91,9 @@ public class RPCView extends View {
 	public static Bitmap mBitmap;
 	private Paint mBitmapPaint; // only used for onDraw() to draw bitmap
 	private Paint mInfoPaint; // for internal info text
+	private static final int TEXT_SIZE_INFO_PAINT = 22;
+	private static final int TEXT_WIDTH_INFO_PAINT = (int) ((TEXT_SIZE_INFO_PAINT * 0.6) + 0.5);
+
 	private Paint mTextPaint; // for all scaled text
 	private Paint mTextBackgroundPaint; // for all scaled text background
 	private Paint mGraphPaintStroke1Fill; // for circle, rectangles and path
@@ -119,7 +124,9 @@ public class RPCView extends View {
 	protected float mScaleFactor = 1;
 	protected float mMaxScaleFactor;
 	float mTouchScaleFactor = 1;
-	Toast mLastScaleValueToast;
+
+	long mLastDebugToastMillis = 0;
+	static final long DEBUG_TOAST_REFRESH_MILLIS = 500;
 
 	/*
 	 * Flags which can be set by client
@@ -136,19 +143,33 @@ public class RPCView extends View {
 	 * Flags for touch event handler
 	 */
 	protected boolean mShowTouchCoordinates = false;
+	protected int mShowTouchCoordinatesLastStringLength = 19;
 	private final float SWIPE_LIMIT = 10; // 10 pixel
 	private final float MICRO_MOVE_LIMIT = 5; // 5 pixel to avoid killing of long touch recognition
-	private boolean mMultiTouchDetected = false;
-	boolean mTouchIsActive = true;
-	// True if switching of mUseUpEventForButtons to true just occurs while button was down (mTouchIsActive == true)
-	boolean mDisableButtonUpOnce = false;
-	private float mTouchDownPositionX;
-	private float mTouchDownPositionY;
-	int mTouchStartsOnButtonNumber = -1; // number of button for last touch_down event
-	boolean mTouchStartsOnSlider = false; // true if touch starts on a slider, used to distinguish between slider and swipe moves
-	boolean mSkipProcessingUntilTouchUp = false; // true if touch down already sends an event (eg. a button down event)
+
 	public static boolean mDeviceListActivityLaunched = false; // to prevent multiple launches of DeviceListActivity()
 	private ScaleGestureDetector mScaleDetector;
+
+	// Global flags
+	// True if switching of mUseUpEventForButtons to true just occurs while button was down (mTouchIsActive == true)
+	boolean mDisableButtonUpOnce = false;
+	// Only one long touch per multitouch
+	private boolean mLongTouchMessageWasSent;
+	private boolean mLongTouchEventWasSent;
+	private int mLongTouchPointerIndex;
+
+	// Flags per touch pointer
+	private final int MAX_POINTER = 5; // 5 different touch pointers supported on most devices
+	boolean mTouchIsActive[];
+	private float mTouchDownPositionX[];
+	private float mTouchDownPositionY[];
+	private float mLastTouchPositionX[];
+	private float mLastTouchPositionY[];
+
+	int[] mTouchStartsOnButtonNumber; // number of button for last touch_down event
+	int[] mTouchStartsOnSliderNumber; // number of slider if touch starts on a slider, used to distinguish between slider and swipe
+										// moves
+	boolean[] mSkipProcessingUntilTouchUpForButton; // true if touch down already sends an event (eg. a button down event)
 
 	// If used as background color for char or text, the background will not filled. Must sign extend constant to 32 bit, since
 	// parameter is also sign extended.
@@ -161,6 +182,16 @@ public class RPCView extends View {
 	 * region description of tags
 	 */
 	// Tags for data buffer 0-7
+	/*
+	 * Data buffer tags
+	 */
+	// private final int DATAFIELD_TAG_BYTE = 0x01;
+	// private final int DATAFIELD_TAG_SHORT = 0x02;
+	// private final int DATAFIELD_TAG_INT = 0x03;
+	// private final int DATAFIELD_TAG_LONG = 0x04;
+	// private final int DATAFIELD_TAG_FLOAT = 0x05;
+	// private final int DATAFIELD_TAG_DOUBLE = 0x06;
+
 	public static final int INDEX_LAST_FUNCTION_DATAFIELD = 0x07;
 
 	// Internal functions 8-F
@@ -188,16 +219,6 @@ public class RPCView extends View {
 	// 0x7F is NOP
 	public static final int INDEX_FIRST_FUNCTION_SLIDER_WITH_DATA = 0x78;
 	public static final int INDEX_LAST_FUNCTION_SLIDER_WITH_DATA = 0x7E;
-
-	/*
-	 * Data buffer tags
-	 */
-	// private final int DATAFIELD_TAG_BYTE = 0x01;
-	// private final int DATAFIELD_TAG_SHORT = 0x02;
-	// private final int DATAFIELD_TAG_INT = 0x03;
-	// private final int DATAFIELD_TAG_LONG = 0x04;
-	// private final int DATAFIELD_TAG_FLOAT = 0x05;
-	// private final int DATAFIELD_TAG_DOUBLE = 0x06;
 
 	/*
 	 * Internal functions
@@ -293,14 +314,16 @@ public class RPCView extends View {
 		sActionMappings.put(MotionEvent.ACTION_MOVE, "move");
 		sActionMappings.put(MotionEvent.ACTION_CANCEL, "cancel");
 		sActionMappings.put(BluetoothSerialService.EVENT_CONNECTION_BUILD_UP, "connection build up");
-		sActionMappings.put(BluetoothSerialService.EVENT_REDRAW_ACTION, "redraw");
-		sActionMappings.put(BluetoothSerialService.EVENT_REORIENTATION_ACTION, "reorientation");
-		sActionMappings.put(BluetoothSerialService.EVENT_LONG_TOUCH_DOWN_CALLBACK_ACTION, "long down");
-		sActionMappings.put(BluetoothSerialService.EVENT_FIRST_CALLBACK_ACTION, "first");
-		sActionMappings.put(BluetoothSerialService.EVENT_BUTTON_CALLBACK_ACTION, "button");
-		sActionMappings.put(BluetoothSerialService.EVENT_SLIDER_CALLBACK_ACTION, "slider");
+		sActionMappings.put(BluetoothSerialService.EVENT_REDRAW, "redraw");
+		sActionMappings.put(BluetoothSerialService.EVENT_REORIENTATION, "reorientation");
+		sActionMappings.put(BluetoothSerialService.EVENT_DISCONNECT, "disconnect");
 
-		sActionMappings.put(BluetoothSerialService.EVENT_SWIPE_CALLBACK_ACTION, "swipe");
+		sActionMappings.put(BluetoothSerialService.EVENT_LONG_TOUCH_DOWN_CALLBACK, "long down");
+		sActionMappings.put(BluetoothSerialService.EVENT_FIRST_CALLBACK, "first");
+		sActionMappings.put(BluetoothSerialService.EVENT_BUTTON_CALLBACK, "button");
+		sActionMappings.put(BluetoothSerialService.EVENT_SLIDER_CALLBACK, "slider");
+
+		sActionMappings.put(BluetoothSerialService.EVENT_SWIPE_CALLBACK, "swipe");
 		sActionMappings.put(BluetoothSerialService.EVENT_NUMBER_CALLBACK, "number");
 		sActionMappings.put(BluetoothSerialService.EVENT_INFO_CALLBACK, "info");
 		sActionMappings.put(BluetoothSerialService.EVENT_FIRST_SENSOR_ACTION_CODE + Sensor.TYPE_ACCELEROMETER, "Accelerometer");
@@ -309,7 +332,8 @@ public class RPCView extends View {
 		sActionMappings.put(BluetoothSerialService.EVENT_FIRST_SENSOR_ACTION_CODE + Sensor.TYPE_LINEAR_ACCELERATION,
 				"LinAccelation");
 		sActionMappings.put(BluetoothSerialService.EVENT_FIRST_SENSOR_ACTION_CODE + Sensor.TYPE_MAGNETIC_FIELD, "Magnetic");
-		sActionMappings.put(BluetoothSerialService.EVENT_NOP_ACTION, "nop (for sync)");
+		sActionMappings.put(BluetoothSerialService.EVENT_NOP, "nop (for sync)");
+		sActionMappings.put(BluetoothSerialService.EVENT_REQUESTED_DATA_CANVAS_SIZE, "return canvas size and timestamp");
 	}
 
 	protected void setMaxScaleFactor() {
@@ -354,7 +378,7 @@ public class RPCView extends View {
 		mInfoPaint = new Paint();
 		mInfoPaint.setTypeface(Typeface.MONOSPACE);
 		mInfoPaint.setStyle(Paint.Style.FILL);
-		mInfoPaint.setTextSize(22);
+		mInfoPaint.setTextSize(TEXT_SIZE_INFO_PAINT);
 		mInfoPaint.setColor(Color.BLACK);
 
 		mTextBackgroundPaint = new Paint();
@@ -399,6 +423,19 @@ public class RPCView extends View {
 		mCanvas = new Canvas(mBitmap);
 		mCanvas.drawColor(Color.WHITE); // background
 		initCharMappingArray();
+
+		/*
+		 * initialize touch event flags
+		 */
+		mTouchStartsOnButtonNumber = new int[MAX_POINTER];
+		mTouchStartsOnSliderNumber = new int[MAX_POINTER];
+		mTouchIsActive = new boolean[MAX_POINTER];
+		mSkipProcessingUntilTouchUpForButton = new boolean[MAX_POINTER];
+		mTouchDownPositionX = new float[MAX_POINTER];
+		mTouchDownPositionY = new float[MAX_POINTER];
+		mLastTouchPositionX = new float[MAX_POINTER];
+		mLastTouchPositionY = new float[MAX_POINTER];
+		resetTouchFlags(0);
 	}
 
 	@Override
@@ -421,7 +458,7 @@ public class RPCView extends View {
 
 		// send new max size to client
 		if (mBlueDisplayContext.mSerialService != null) {
-			mBlueDisplayContext.mSerialService.writeTwoIntegerEvent(BluetoothSerialService.EVENT_REORIENTATION_ACTION, aWidth,
+			mBlueDisplayContext.mSerialService.writeTwoIntegerEventAndTimestamp(BluetoothSerialService.EVENT_REORIENTATION, aWidth,
 					aHeight);
 		}
 		// scale and do not send redraw event, since it may overwrite the client buffer of former reorientation event
@@ -462,82 +499,119 @@ public class RPCView extends View {
 	 */
 	public boolean onTouchEvent(MotionEvent aEvent) {
 		float tDistanceFromTouchDown = 0;
-		boolean doNotRemoveLongTouchDownMessage = false; // Flag for suppressing micro moves on long touch down
+		boolean mayRemoveLongTouchDownMessage = true; // Flag for suppressing micro moves on long touch down
 
 		int tMaskedAction = aEvent.getActionMasked();
 
 		if (MyLog.isVERBOSE()) {
 			MyLog.v(LOG_TAG, "TouchEvent action=" + tMaskedAction);
 		}
-		// process event also by scale detector
-		mScaleDetector.onTouchEvent(aEvent);
 
-		if (aEvent.getActionIndex() > 0) {
-			// multi touch started
-			mMultiTouchDetected = true;
+		int tActionIndex = aEvent.getActionIndex();
+		int tPointerCount = aEvent.getPointerCount();
+
+		/*
+		 * Check which pointer changed on move
+		 */
+		if (tMaskedAction == MotionEvent.ACTION_MOVE) {
+			for (int i = 0; i < tPointerCount && i < MAX_POINTER; i++) {
+				if (mLastTouchPositionX[i] != aEvent.getX(i) || mLastTouchPositionY[i] != aEvent.getY(i)) {
+					mLastTouchPositionX[i] = aEvent.getX(i);
+					mLastTouchPositionY[i] = aEvent.getY(i);
+					// Found new action index
+					tActionIndex = i;
+					break;
+				}
+			}
+		}
+		float tActualX = aEvent.getX(tActionIndex);
+		float tActualY = aEvent.getY(tActionIndex);
+
+		if (mTouchStartsOnButtonNumber[0] < 0 && mTouchStartsOnSliderNumber[0] < 0 && mTouchStartsOnButtonNumber[tActionIndex] < 0
+				&& mTouchStartsOnSliderNumber[tActionIndex] < 0) {
+			// process event by scale detector is started on an empty space
+			mScaleDetector.onTouchEvent(aEvent);
 		}
 
 		if (mShowTouchCoordinates) {
-			int tXPos = (int) (aEvent.getX() + 0.5);
-			int tYPos = (int) (aEvent.getY() + 0.5);
-			int tXPosScaled = (int) (aEvent.getX() / mScaleFactor + 0.5);
-			int tYPosScaled = (int) (aEvent.getY() / mScaleFactor + 0.5);
+			int tXPos = (int) (tActualX + 0.5);
+			int tYPos = (int) (tActualY + 0.5);
+			int tXPosScaled = (int) (tActualX / mScaleFactor + 0.5);
+			int tYPosScaled = (int) (tActualY / mScaleFactor + 0.5);
 			mTextBackgroundPaint.setColor(Color.WHITE);
-			mCanvas.drawRect(0, 0, 210, 24, mTextBackgroundPaint);
-			mCanvas.drawText(tXPos + "/" + tYPos + "->" + tXPosScaled + "/" + tYPosScaled, 0, 20, mInfoPaint);
+			mCanvas.drawRect(0, 0, TEXT_WIDTH_INFO_PAINT * mShowTouchCoordinatesLastStringLength, TEXT_SIZE_INFO_PAINT + 2,
+					mTextBackgroundPaint);
+			String tInfoString = tActionIndex + "|" + tMaskedAction + "  " + tXPos + "/" + tYPos + "->" + tXPosScaled + "/"
+					+ tYPosScaled;
+			mShowTouchCoordinatesLastStringLength = tInfoString.length();
+			mCanvas.drawText(tInfoString, 0, 20, mInfoPaint);
 			invalidate();
+		}
+
+		if (tActionIndex > 0) {
+			// convert pointer actions to plain actions for next evaluations
+			if (tMaskedAction == MotionEvent.ACTION_POINTER_DOWN) {
+				tMaskedAction = MotionEvent.ACTION_DOWN;
+			} else if (tMaskedAction == MotionEvent.ACTION_POINTER_UP) {
+				tMaskedAction = MotionEvent.ACTION_UP;
+			}
 		}
 
 		switch (tMaskedAction) {
 		case MotionEvent.ACTION_DOWN:
-			mTouchIsActive = true;
-			mTouchDownPositionX = aEvent.getX();
-			mTouchDownPositionY = aEvent.getY();
-			mMultiTouchDetected = false;
+			mTouchIsActive[tActionIndex] = true;
+			mTouchDownPositionX[tActionIndex] = tActualX;
+			mTouchDownPositionY[tActionIndex] = tActualY;
+			// mMultiTouchDetected = false;
 			break;
 
 		case MotionEvent.ACTION_MOVE:
-			tDistanceFromTouchDown = Math.max(Math.abs(mTouchDownPositionX - aEvent.getX()),
-					Math.abs(mTouchDownPositionY - aEvent.getY()));
+			tDistanceFromTouchDown = Math.max(Math.abs(mTouchDownPositionX[tActionIndex] - tActualX),
+					Math.abs(mTouchDownPositionY[tActionIndex] - tActualY));
 			// avoid to disable long touch down recognition on pseudo or micro moves
 			if (tDistanceFromTouchDown < MICRO_MOVE_LIMIT) {
-				doNotRemoveLongTouchDownMessage = true;
+				mayRemoveLongTouchDownMessage = false;
+			}
+			if (mSkipProcessingUntilTouchUpForButton[tActionIndex]) {
+				// do not process ACTION_MOVE for buttons
+				return true;
 			}
 			break;
 
 		case MotionEvent.ACTION_UP:
 		case MotionEvent.ACTION_CANCEL:
 		default:
-			mTouchIsActive = false;
-			mMultiTouchDetected = false;
-			if (mSkipProcessingUntilTouchUp) {
-				mSkipProcessingUntilTouchUp = false;
-				mTouchStartsOnButtonNumber = -1;
+			if (mSkipProcessingUntilTouchUpForButton[tActionIndex]) {
+				// Finish processing here
+				resetTouchFlags(tActionIndex);
 				return true;
 			}
 			break;
 		}
 
-		if (mSkipProcessingUntilTouchUp) {
-			// do not process ACTION_MOVE
-			return true;
-		}
-
-		if (mIsLongTouchEnabled && !doNotRemoveLongTouchDownMessage) {
+		/*
+		 * Cancel long touch.
+		 */
+		if (mLongTouchMessageWasSent && mayRemoveLongTouchDownMessage && mLongTouchPointerIndex == tActionIndex) {
 			// reset long touch recognition by clearing messages
 			mLongTouchDownHandler.removeMessages(LONG_TOUCH_DOWN);
+			mLongTouchMessageWasSent = false;
 		}
 
-		// check if event is on CANVAS
-		if (aEvent.getX() > mActualCanvasWidth || aEvent.getY() > mActualCanvasHeight) {
+		/*
+		 * Check if event is outside CANVAS, then open option menu
+		 */
+		if (tActualX > mActualCanvasWidth || tActualY > mActualCanvasHeight) {
 			// open options menu if touch outside of canvas
 			if (tMaskedAction == MotionEvent.ACTION_UP) {
 				mBlueDisplayContext.openOptionsMenu();
 			}
-		} else if (!mMultiTouchDetected && mBlueDisplayContext.mSerialService != null) {
+		} else if (mBlueDisplayContext.mSerialService != null) {
 			if (mBlueDisplayContext.mSerialService.getState() == BluetoothSerialService.STATE_NONE
 					&& mDeviceListActivityLaunched == false) {
-				// Launch the DeviceListActivity to choose device
+				/*
+				 * Launch the DeviceListActivity to choose device if state is "not connected"
+				 */
 				Intent serverIntent = new Intent(mBlueDisplayContext, DeviceListActivity.class);
 				mBlueDisplayContext.startActivityForResult(serverIntent, BlueDisplay.REQUEST_CONNECT_DEVICE);
 				mDeviceListActivityLaunched = true;
@@ -545,98 +619,150 @@ public class RPCView extends View {
 			if (mBlueDisplayContext.mSerialService.getState() == BluetoothSerialService.STATE_CONNECTED) {
 				mDeviceListActivityLaunched = false;
 				/*
-				 * send data if connected and if no multi-touch is present
+				 * Send EVENT data since we are connected
 				 */
 
-				if (tMaskedAction == MotionEvent.ACTION_UP && !mTouchStartsOnSlider) {
+				if (tMaskedAction == MotionEvent.ACTION_UP && mTouchStartsOnSliderNumber[tActionIndex] < 0) {
 					/*
 					 * Check SWIPE callback only if touch did not start on a slider
 					 */
-					tDistanceFromTouchDown = Math.max(Math.abs(mTouchDownPositionX - aEvent.getX()),
-							Math.abs(mTouchDownPositionY - aEvent.getY()));
+					tDistanceFromTouchDown = Math.max(Math.abs(mTouchDownPositionX[tActionIndex] - tActualX),
+							Math.abs(mTouchDownPositionY[tActionIndex] - tActualY));
 					/*
 					 * SWIPE only if move is greater than SWIPE_LIMIT. If SWIPE starts on a button then swipe must be even greater.
 					 */
-					if ((mTouchStartsOnButtonNumber < 0 && tDistanceFromTouchDown > SWIPE_LIMIT)
+					if ((mTouchStartsOnButtonNumber[tActionIndex] < 0 && tDistanceFromTouchDown > SWIPE_LIMIT)
 							|| tDistanceFromTouchDown > 4 * SWIPE_LIMIT) {
-						int tDeltaX = (int) ((aEvent.getX() - mTouchDownPositionX) / mScaleFactor);
-						int tDeltaY = (int) ((aEvent.getY() - mTouchDownPositionY) / mScaleFactor);
+						int tDeltaX = (int) ((tActualX - mTouchDownPositionX[tActionIndex]) / mScaleFactor);
+						int tDeltaY = (int) ((tActualY - mTouchDownPositionY[tActionIndex]) / mScaleFactor);
 						int tIsXDirection = 0;
 						if (Math.abs(tDeltaX) >= Math.abs(tDeltaY)) {
 							// horizontal swipe
 							tIsXDirection = 1;
 						}
 						// send swipe event and suppress UP-event sending
-						mBlueDisplayContext.mSerialService.writeSwipeCallbackEvent(
-								BluetoothSerialService.EVENT_SWIPE_CALLBACK_ACTION, tIsXDirection,
-								(int) (mTouchDownPositionX / mScaleFactor), (int) (mTouchDownPositionY / mScaleFactor), tDeltaX,
-								tDeltaY);
-						// (mis)use mTouchStartsOnSlider flag to suppress other checks on ACTION_UP and sending of UP-event
-						mTouchStartsOnSlider = true;
+						mBlueDisplayContext.mSerialService.writeSwipeCallbackEvent(BluetoothSerialService.EVENT_SWIPE_CALLBACK,
+								tIsXDirection, (int) (mTouchDownPositionX[tActionIndex] / mScaleFactor),
+								(int) (mTouchDownPositionY[tActionIndex] / mScaleFactor), tDeltaX, tDeltaY);
+						// (ab)use mTouchStartsOnSliderNumber flag to suppress other checks on ACTION_UP and sending of UP-event
+						mTouchStartsOnSliderNumber[tActionIndex] = 999;
 					}
 				}
 
 				/*
-				 * Check SLIDERS if ACTION_DOWN or (ACTION_MOVE and slider active)
+				 * Check SLIDERS if ACTION_DOWN
 				 */
-				if (tMaskedAction == MotionEvent.ACTION_DOWN || (tMaskedAction == MotionEvent.ACTION_MOVE && mTouchStartsOnSlider)) {
-					boolean tMatch = TouchSlider.checkAllSliders((int) (aEvent.getX() / mScaleFactor + 0.5), (int) (aEvent.getY()
-							/ mScaleFactor + 0.5));
-					if (tMatch) {
+				if (tMaskedAction == MotionEvent.ACTION_DOWN) {
+					int tSliderNumber = TouchSlider.checkAllSliders((int) (tActualX / mScaleFactor + 0.5), (int) (tActualY
+							/ mScaleFactor + 0.5), false);
+					if (tSliderNumber >= 0) {
+						mTouchStartsOnSliderNumber[tActionIndex] = tSliderNumber;
 						invalidate(); // show new slider bar value
-						if (tMaskedAction == MotionEvent.ACTION_DOWN) {
-							mTouchStartsOnSlider = true;
-						}
+					}
+				} else {
+					/*
+					 * Check SLIDER if ACTION_MOVE
+					 */
+					if (tMaskedAction == MotionEvent.ACTION_MOVE && mTouchStartsOnSliderNumber[tActionIndex] >= 0) {
+						TouchSlider.checkIfTouchInSlider((int) (tActualX / mScaleFactor + 0.5),
+								(int) (tActualY / mScaleFactor + 0.5), mTouchStartsOnSliderNumber[tActionIndex]);
+						invalidate(); // show new slider bar value
 					}
 				}
 
-				if (!mTouchStartsOnSlider) {
-					/*
-					 * Check BUTTONS if no slider active AND (ACTION_DOWN OR if mUseUpEventForButtons AND ACTION_UP and no swipe
-					 * detected)
-					 */
-					if (((tMaskedAction == MotionEvent.ACTION_DOWN && !mUseUpEventForButtons) || (tMaskedAction == MotionEvent.ACTION_UP
-							&& mUseUpEventForButtons && !mDisableButtonUpOnce))) {
-						mTouchStartsOnButtonNumber = TouchButton.checkAllButtons((int) (aEvent.getX() / mScaleFactor + 0.5),
-								(int) (aEvent.getY() / mScaleFactor + 0.5), false);
-						if (mTouchStartsOnButtonNumber >= 0 && tMaskedAction == MotionEvent.ACTION_DOWN) {
+				/*
+				 * Check BUTTONS if no slider active AND (ACTION_DOWN OR if mUseUpEventForButtons AND ACTION_UP and no swipe
+				 * detected / mDisableButtonUpOnce)
+				 */
+
+				if (mTouchStartsOnSliderNumber[tActionIndex] < 0) {
+					if ((tMaskedAction == MotionEvent.ACTION_DOWN && !mUseUpEventForButtons)
+							|| (tMaskedAction == MotionEvent.ACTION_UP && mUseUpEventForButtons && !mDisableButtonUpOnce)) {
+						mTouchStartsOnButtonNumber[tActionIndex] = TouchButton.checkAllButtons(
+								(int) (tActualX / mScaleFactor + 0.5), (int) (tActualY / mScaleFactor + 0.5), false);
+						if (mTouchStartsOnButtonNumber[tActionIndex] >= 0 && tMaskedAction == MotionEvent.ACTION_DOWN) {
 							// signal that we send an event on touch down and to skip processing until touch up
-							mSkipProcessingUntilTouchUp = true;
+							mSkipProcessingUntilTouchUpForButton[tActionIndex] = true;
 						}
 					} else if (tMaskedAction == MotionEvent.ACTION_DOWN) {
 						// Just check if down touch hits a button area
-						mTouchStartsOnButtonNumber = TouchButton.checkAllButtons((int) (aEvent.getX() / mScaleFactor + 0.5),
-								(int) (aEvent.getY() / mScaleFactor + 0.5), true);
+						mTouchStartsOnButtonNumber[tActionIndex] = TouchButton.checkAllButtons(
+								(int) (tActualX / mScaleFactor + 0.5), (int) (tActualY / mScaleFactor + 0.5), true);
 					}
-
+				}
+				/*
+				 * check for LONG TOUCH initialization
+				 */
+				if (tMaskedAction == MotionEvent.ACTION_DOWN && mIsLongTouchEnabled && mTouchStartsOnButtonNumber[tActionIndex] < 0
+						&& mTouchStartsOnSliderNumber[tActionIndex] < 0 && !mLongTouchMessageWasSent && !mLongTouchEventWasSent) {
 					/*
-					 * check for LONG TOUCH initialization
+					 * Send delayed message to handler, witch in turn sends the callback. If another event happens before the delay,
+					 * the message will be simply deleted. Cannot use aEvent.getDownTime(), since it gives time of first touch for
+					 * multitouch.
 					 */
-					if (tMaskedAction == MotionEvent.ACTION_DOWN && mIsLongTouchEnabled && mTouchStartsOnButtonNumber < 0) {
-						/*
-						 * send delayed message to handler, witch in turn sends the callback. If another event happens, the message
-						 * will be simply deleted.
-						 */
-						mLongTouchDownHandler.sendEmptyMessageAtTime(LONG_TOUCH_DOWN, aEvent.getDownTime()
-								+ mLongTouchDownTimeoutMillis);
-					}
+					mLongTouchDownHandler.sendEmptyMessageAtTime(LONG_TOUCH_DOWN, SystemClock.uptimeMillis()
+							+ mLongTouchDownTimeoutMillis);
+					mLongTouchMessageWasSent = true;
+					mLongTouchPointerIndex = tActionIndex;
 				}
 
-				// evaluate local and global flags before sending basic events
-				if (mTouchStartsOnButtonNumber < 0 && !mTouchStartsOnSlider && mTouchBasicEnable
-						&& (mTouchMoveEnable || tMaskedAction != MotionEvent.ACTION_MOVE)) {
+				/*
+				 * Evaluate local and global flags before sending basic events
+				 */
+				if (mTouchStartsOnButtonNumber[tActionIndex] < 0 && mTouchStartsOnSliderNumber[tActionIndex] < 0
+						&& mTouchBasicEnable && (mTouchMoveEnable || tMaskedAction != MotionEvent.ACTION_MOVE)) {
 					// no button/slider touched and touch is enabled -> send touch event to client
-					mBlueDisplayContext.mSerialService.writeTwoIntegerEvent(tMaskedAction,
-							(int) (aEvent.getX() / mScaleFactor + 0.5), (int) (aEvent.getY() / mScaleFactor + 0.5));
+					mBlueDisplayContext.mSerialService.writeTwoIntegerAndAByteEvent(tMaskedAction,
+							(int) (tActualX / mScaleFactor + 0.5), (int) (tActualY / mScaleFactor + 0.5), tActionIndex);
 				}
+
+				/*
+				 * Cleanup for ACTION_UP + ACTION_CANCEL
+				 */
 				if (tMaskedAction == MotionEvent.ACTION_UP || tMaskedAction == MotionEvent.ACTION_CANCEL) {
-					mTouchStartsOnButtonNumber = -1;
-					mTouchStartsOnSlider = false;
-					mDisableButtonUpOnce = false;
+					resetTouchFlags(tActionIndex);
 				}
 			}
 		}
 		return true;
+	}
+
+	/*
+	 * Reset touch related flags. called for ACTION_UP or ACTION_CANCEL
+	 */
+	private void resetTouchFlags(int aActionIndex) {
+		mTouchStartsOnButtonNumber[aActionIndex] = -1;
+		mTouchStartsOnSliderNumber[aActionIndex] = -1;
+		mTouchIsActive[aActionIndex] = false;
+		mSkipProcessingUntilTouchUpForButton[aActionIndex] = false;
+
+		if (aActionIndex == 0) {
+			/*
+			 * Last up action. Reset all.
+			 */
+			for (int i = 0; i < mTouchStartsOnButtonNumber.length; i++) {
+				mTouchStartsOnButtonNumber[i] = -1;
+			}
+			for (int i = 0; i < mTouchStartsOnSliderNumber.length; i++) {
+				mTouchStartsOnSliderNumber[i] = -1;
+			}
+			for (int i = 0; i < mTouchIsActive.length; i++) {
+				mTouchIsActive[i] = false;
+			}
+			for (int i = 0; i < mSkipProcessingUntilTouchUpForButton.length; i++) {
+				mSkipProcessingUntilTouchUpForButton[aActionIndex] = false;
+			}
+			mLongTouchEventWasSent = false;
+			mDisableButtonUpOnce = false;
+		}
+
+		// Cancel long touch. Duplicated here, since routine is also called in switch statement above, which in turn returns
+		// directly.
+		if (mLongTouchMessageWasSent && (mLongTouchPointerIndex == aActionIndex || aActionIndex == 0)) {
+			// reset long touch recognition by clearing messages
+			mLongTouchDownHandler.removeMessages(LONG_TOUCH_DOWN);
+			mLongTouchMessageWasSent = false;
+		}
 	}
 
 	@SuppressLint("HandlerLeak")
@@ -648,9 +774,10 @@ public class RPCView extends View {
 
 			case LONG_TOUCH_DOWN:
 				mDisableButtonUpOnce = true;
-				mBlueDisplayContext.mSerialService.writeTwoIntegerEvent(
-						BluetoothSerialService.EVENT_LONG_TOUCH_DOWN_CALLBACK_ACTION,
-						(int) (mTouchDownPositionX / mScaleFactor + 0.5), (int) (mTouchDownPositionY / mScaleFactor + 0.5));
+				mBlueDisplayContext.mSerialService.writeTwoIntegerEvent(BluetoothSerialService.EVENT_LONG_TOUCH_DOWN_CALLBACK,
+						(int) (mTouchDownPositionX[mLongTouchPointerIndex] / mScaleFactor + 0.5),
+						(int) (mTouchDownPositionY[mLongTouchPointerIndex] / mScaleFactor + 0.5));
+				mLongTouchEventWasSent = true;
 				break;
 
 			default:
@@ -770,7 +897,6 @@ public class RPCView extends View {
 	}
 
 	private char myConvertChar(byte aData) {
-		// TODO help to compute length of string if using special character
 		char tChar;
 		if (aData > 0) {
 			tChar = (char) aData;
@@ -834,16 +960,16 @@ public class RPCView extends View {
 			invalidate();
 			// send new size to client
 			if (mBlueDisplayContext.mSerialService != null && aSendToClient) {
-				mBlueDisplayContext.mSerialService.writeTwoIntegerEvent(BluetoothSerialService.EVENT_REDRAW_ACTION,
-						mActualCanvasWidth, mActualCanvasHeight);
+				mBlueDisplayContext.mSerialService.writeTwoIntegerEvent(BluetoothSerialService.EVENT_REDRAW, mActualCanvasWidth,
+						mActualCanvasHeight);
 			}
 			// show new Values
-			if (mLastScaleValueToast != null) {
-				mLastScaleValueToast.cancel();
+			if (mBlueDisplayContext.mMyToast != null) {
+				mBlueDisplayContext.mMyToast.cancel();
 			}
-			mLastScaleValueToast = Toast.makeText(mBlueDisplayContext, String.format("%5.1f%% ", (mScaleFactor * 100))
+			mBlueDisplayContext.mMyToast = Toast.makeText(mBlueDisplayContext, String.format("%5.1f%% ", (mScaleFactor * 100))
 					+ mActualCanvasWidth + "*" + mActualCanvasHeight, Toast.LENGTH_SHORT);
-			mLastScaleValueToast.show();
+			mBlueDisplayContext.mMyToast.show();
 			return true;
 		}
 
@@ -919,7 +1045,11 @@ public class RPCView extends View {
 		if (MyLog.isVERBOSE()) {
 			StringBuilder tParam = new StringBuilder("cmd=0x" + Integer.toHexString(aCommand) + " / " + aCommand);
 			for (int i = 0; i < aParamsLength; i++) {
-				tParam.append(" ").append(i).append("=").append(aParameters[i]);
+				if (aParameters[i] > 1023 || aParameters[i] < 0) {
+					tParam.append(" p").append(i).append("=0x").append(Integer.toHexString(aParameters[i] & 0xFFFF));
+				} else {
+					tParam.append(" p").append(i).append("=").append(aParameters[i]);
+				}
 			}
 			tParam.append(" data length=" + aDataLength);
 			MyLog.v(LOG_TAG, tParam.toString());
@@ -1045,8 +1175,8 @@ public class RPCView extends View {
 					MyLog.i(LOG_TAG, "Request max canvas size=" + mActualCanvasWidth + "/" + mActualCanvasHeight);
 				}
 				if (mBlueDisplayContext.mSerialService != null) {
-					mBlueDisplayContext.mSerialService.writeTwoIntegerEvent(BluetoothSerialService.EVENT_REORIENTATION_ACTION,
-							mActualViewWidth, mActualViewHeight);
+					mBlueDisplayContext.mSerialService.writeTwoIntegerEventAndTimestamp(
+							BluetoothSerialService.EVENT_REQUESTED_DATA_CANVAS_SIZE, mActualViewWidth, mActualViewHeight);
 				}
 				break;
 
@@ -1207,7 +1337,7 @@ public class RPCView extends View {
 					break;
 
 				case FLAG_WRITE_SETTINGS_SET_LINE_COLUMN:
-					mTextPrintTextActualPosX = (int) (aParameters[1] * mTextPrintTextSize * 0.6);
+					mTextPrintTextActualPosX = (int) ((aParameters[1] * mTextPrintTextSize * 0.6) + 0.5);
 					mTextPrintTextActualPosY = aParameters[2] * mTextPrintTextSize;
 					if (MyLog.isINFO()) {
 						MyLog.i(LOG_TAG, "Set printf start position to: " + aParameters[1] + " / " + aParameters[2] + " = "
@@ -1477,10 +1607,24 @@ public class RPCView extends View {
 
 			case FUNCTION_DEBUG_STRING:
 				tStringParameter = new String(aDataBytes, 0, aDataLength);
+				// show new Values as toast every 500 ms
+				long tMillis = System.currentTimeMillis();
+				if (tMillis > (mLastDebugToastMillis + DEBUG_TOAST_REFRESH_MILLIS)) {
+					mLastDebugToastMillis = tMillis;
+					if (mBlueDisplayContext.mMyToast != null) {
+						mBlueDisplayContext.mMyToast.cancel();
+					}
+					mBlueDisplayContext.mMyToast = Toast.makeText(mBlueDisplayContext, tStringParameter, Toast.LENGTH_SHORT);
+					mBlueDisplayContext.mMyToast.show();
+				}
+
 				// intentionally without enclosing if MyLog.isINFO()
 				MyLog.i(LOG_TAG, "DebugString=" + tStringParameter);
 				break;
 
+			/*
+			 * Writes string with fixed font and do line and page wrapping For print emulation
+			 */
 			case FUNCTION_WRITE_STRING:
 				myConvertChars(aDataBytes, sCharsArray, aDataLength);
 				tStringParameter = new String(sCharsArray, 0, aDataLength);
@@ -1495,7 +1639,7 @@ public class RPCView extends View {
 				int tPrintBufferEnd = aDataLength;
 				float tScaledTextPrintTextSize = mTextPrintTextSize * mScaleFactor;
 				mTextPrintPaint.setTextSize(tScaledTextPrintTextSize);
-				int tTextUnscaledWidth = (int) (mTextPrintTextSize * 0.6);
+				int tTextUnscaledWidth = (int) ((mTextPrintTextSize * 0.6) + 0.5);
 				int tLineLengthInChars = (int) (mRequestedCanvasWidth / tTextUnscaledWidth);
 				boolean doFlushAndNewline = false;
 				int tColumn = (int) (mTextPrintTextActualPosX / tTextUnscaledWidth);
@@ -1583,7 +1727,6 @@ public class RPCView extends View {
 
 			case FUNCTION_DRAW_CHAR:
 			case FUNCTION_DRAW_STRING:
-
 				tTextSize = (int) (aParameters[2] * mScaleFactor);
 				mTextPaint.setTextSize(tTextSize);
 				// ascend for background color. + mScaleFactor for upper margin
@@ -1615,7 +1758,6 @@ public class RPCView extends View {
 				if (tCRIndex >= 0 && (tCRIndex < tIndex || tIndex < 0)) {
 					tIndex = tCRIndex;
 					tDrawBackgroundExtend = true;
-					// tStringParameter = tStringParameter.substring(0, tIndex) + "\n" + tStringParameter.substring(tIndex + 1);
 				}
 
 				boolean tDrawBackground;
@@ -1657,14 +1799,12 @@ public class RPCView extends View {
 						// search for next newline
 						tStartIndex = tIndex + 1;
 						if (tIndex + 1 <= tStringParameter.length()) {
-							tIndex = tStringParameter.indexOf('\n', tIndex + 1);
+							tIndex = tStringParameter.indexOf('\n', tStartIndex);
 							tDrawBackgroundExtend = false;
-							tCRIndex = tStringParameter.indexOf('\r', tIndex + 1);
+							tCRIndex = tStringParameter.indexOf('\r', tStartIndex);
 							if (tCRIndex >= 0 && (tCRIndex < tIndex || tIndex < 0)) {
 								tIndex = tCRIndex;
 								tDrawBackgroundExtend = true;
-								// tStringParameter = tStringParameter.substring(0, tIndex) + "\n"
-								// + tStringParameter.substring(tIndex + 1);
 							}
 
 							if (tIndex < 0) {
@@ -1799,6 +1939,13 @@ public class RPCView extends View {
 		}
 	}
 
+	/******************************************************************************************
+	 * TEST METHODS
+	 ******************************************************************************************/
+
+	private static final int TEST_CANVAS_WIDTH = 320;
+	private static final int TEST_CANVAS_HEIGHT = 240;
+
 	/*
 	 * do length correction for a 1 pixel line; draw 4 lines for tYStart = 2
 	 */
@@ -1856,13 +2003,6 @@ public class RPCView extends View {
 			aCanvas.drawLine(aStartX, aStartY, aStopX, aStopY, aPaint);
 		}
 	}
-
-	/******************************************************************************************
-	 * TEST METHODS
-	 ******************************************************************************************/
-
-	private static final int TEST_CANVAS_WIDTH = 320;
-	private static final int TEST_CANVAS_HEIGHT = 240;
 
 	public void showGraphTestpage() {
 		// adjust canvas size to scale factor 2
@@ -2178,7 +2318,7 @@ public class RPCView extends View {
 		String tString = "Cap=Butt | 5 times (stroke=1/stroke2 1*1-4*4 | 1*4 4*1) each one + 0.2 in Y";
 
 		/*
-		 * draw lines point and rects with stroke 1 and 2 and move by 0.2 in y direction
+		 * Draw lines point and rects with stroke 1 and 2 and move by 0.2 in y direction
 		 */
 		for (int i = 0; i < 2; i++) {
 
@@ -2235,7 +2375,7 @@ public class RPCView extends View {
 		}
 
 		/*
-		 * stars at different positions
+		 * Draw stars at different positions
 		 */
 		tGraph1Paint.setStrokeCap(Cap.BUTT);
 		tGraph2Paint.setStrokeCap(Cap.BUTT);

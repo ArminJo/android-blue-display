@@ -28,23 +28,12 @@
 
 #include <Arduino.h>
 #include "BlueSerial.h"
+#include "BlueDisplay.h"
 #include "EventHandler.h"
 
 // Simple serial is a simple blocking serial version without receive buffer and other overhead.
 // Using it saves up to 1250 byte FLASH and 185 byte RAM since USART is used directly
 #define USE_SIMPLE_SERIAL
-
-// Data field types
-const int DATAFIELD_TAG_BYTE = 0x01;
-const int DATAFIELD_TAG_SHORT = 0x02;
-const int DATAFIELD_TAG_INT = 0x03;
-const int DATAFIELD_TAG_LONG = 0x04;
-const int DATAFIELD_TAG_FLOAT = 0x05;
-const int DATAFIELD_TAG_DOUBLE = 0x06;
-const int LAST_FUNCTION_TAG_DATAFIELD = 0x07;
-
-#define MAX_NUMBER_OF_ARGS 12 // for sending
-#define TOUCH_COMMAND_SIZE_BYTE_MAX  13 // for receiving
 
 // definitions from <wiring_private.h>
 #ifndef cbi
@@ -121,9 +110,8 @@ void USART3_send(char aChar) {
  * RECEIVE BUFFER
  */
 #define RECEIVE_TOUCH_OR_DISPLAY_DATA_SIZE 4
-#define RECEIVE_CALLBACK_DATA_SIZE TOUCH_CALLBACK_DATA_SIZE
 //Buffer for 12 bytes since no need for length and eventType and SYNC_TOKEN be stored
-uint8_t sReceiveBuffer[RECEIVE_CALLBACK_DATA_SIZE];
+uint8_t sReceiveBuffer[RECEIVE_MAX_DATA_SIZE];
 uint8_t sReceiveBufferIndex = 0; // Index of first free position in buffer
 bool sReceiveBufferOutOfSync = false;
 
@@ -167,7 +155,7 @@ void sendUSARTBufferNoSizeCheck(uint8_t * aParameterBufferPointer, int aParamete
  * 4. Short n parameters
  */
 void sendUSART5Args(uint8_t aFunctionTag, uint16_t aXStart, uint16_t aYStart, uint16_t aXEnd, uint16_t aYEnd, uint16_t aColor) {
-    uint16_t tParamBuffer[MAX_NUMBER_OF_ARGS];
+    uint16_t tParamBuffer[MAX_NUMBER_OF_ARGS_FOR_BD_FUNCTIONS];
 
     uint16_t * tBufferPointer = &tParamBuffer[0];
     *tBufferPointer++ = aFunctionTag << 8 | SYNC_TOKEN; // add sync token
@@ -186,11 +174,11 @@ void sendUSART5Args(uint8_t aFunctionTag, uint16_t aXStart, uint16_t aYStart, ui
  * @param aNumberOfArgs currently not more than 12 args (SHORT) are supported
  */
 void sendUSARTArgs(uint8_t aFunctionTag, int aNumberOfArgs, ...) {
-    if (aNumberOfArgs > MAX_NUMBER_OF_ARGS) {
+    if (aNumberOfArgs > MAX_NUMBER_OF_ARGS_FOR_BD_FUNCTIONS) {
         return;
     }
 
-    uint16_t tParamBuffer[MAX_NUMBER_OF_ARGS + 2];
+    uint16_t tParamBuffer[MAX_NUMBER_OF_ARGS_FOR_BD_FUNCTIONS + 2];
     va_list argp;
     uint16_t * tBufferPointer = &tParamBuffer[0];
     *tBufferPointer++ = aFunctionTag << 8 | SYNC_TOKEN; // add sync token
@@ -211,11 +199,11 @@ void sendUSARTArgs(uint8_t aFunctionTag, int aNumberOfArgs, ...) {
  * Last two arguments are length of buffer and buffer pointer (..., size_t aDataLength, uint8_t * aDataBufferPtr)
  */
 void sendUSARTArgsAndByteBuffer(uint8_t aFunctionTag, int aNumberOfArgs, ...) {
-    if (aNumberOfArgs > MAX_NUMBER_OF_ARGS) {
+    if (aNumberOfArgs > MAX_NUMBER_OF_ARGS_FOR_BD_FUNCTIONS) {
         return;
     }
 
-    uint16_t tParamBuffer[MAX_NUMBER_OF_ARGS + 4];
+    uint16_t tParamBuffer[MAX_NUMBER_OF_ARGS_FOR_BD_FUNCTIONS + 4];
     va_list argp;
     uint16_t * tBufferPointer = &tParamBuffer[0];
     *tBufferPointer++ = aFunctionTag << 8 | SYNC_TOKEN; // add sync token
@@ -241,7 +229,7 @@ void sendUSARTArgsAndByteBuffer(uint8_t aFunctionTag, int aNumberOfArgs, ...) {
 void sendUSART5ArgsAndByteBuffer(uint8_t aFunctionTag, uint16_t aXStart, uint16_t aYStart, uint16_t aXEnd, uint16_t aYEnd,
         uint16_t aColor, uint8_t * aBuffer, size_t aBufferLength) {
 
-    uint16_t tParamBuffer[MAX_NUMBER_OF_ARGS];
+    uint16_t tParamBuffer[MAX_NUMBER_OF_ARGS_FOR_BD_FUNCTIONS];
 
     uint16_t * tBufferPointer = &tParamBuffer[0];
     *tBufferPointer++ = aFunctionTag << 8 | SYNC_TOKEN; // add sync token
@@ -264,6 +252,7 @@ void sendUSART5ArgsAndByteBuffer(uint8_t aFunctionTag, uint16_t aXStart, uint16_
  * If OK then interpret content and reset buffer.
  */
 static uint8_t sReceivedEventType = EVENT_NO_EVENT;
+static uint8_t sReceivedDataSize;
 
 #ifdef USE_SIMPLE_SERIAL
 bool allowTouchInterrupts = false; // !!do not enable it, if event handling may take more time than receiving a byte (which then gives buffer overflow)!!!
@@ -279,24 +268,23 @@ ISR(USART_RX_vect) {
         }
     } else {
         if (sReceivedEventType == EVENT_NO_EVENT) {
-            if (sReceiveBufferIndex == 1) {
-                sReceivedEventType = tByte;
-                // skip length and eventType
-                sReceiveBufferIndex = 0;
+            if (sReceiveBufferIndex == 0) {
+                // First byte is raw length so subtract 3 for sync+eventType+length bytes
+                tByte -= 3;
+                if (tByte > RECEIVE_MAX_DATA_SIZE) {
+                    sReceiveBufferOutOfSync = true;
+                } else {
+                    sReceiveBufferIndex++;
+                    sReceivedDataSize = tByte;
+                }
             } else {
-                // Length not used
-                sReceiveBuffer[sReceiveBufferIndex++] = tByte;
+                // Second byte is eventType
+                // setup for receiving plain message bytes
+                sReceivedEventType = tByte;
+                sReceiveBufferIndex = 0;
             }
         } else {
-            uint8_t tDataSize;
-            if (sReceivedEventType < EVENT_FIRST_CALLBACK_ACTION_CODE) {
-                // Touch event
-                tDataSize = RECEIVE_TOUCH_OR_DISPLAY_DATA_SIZE;
-            } else {
-                // Callback event
-                tDataSize = RECEIVE_CALLBACK_DATA_SIZE;
-            }
-            if (sReceiveBufferIndex == tDataSize) {
+            if (sReceiveBufferIndex == sReceivedDataSize) {
                 // now we expect a sync token
                 if (tByte == SYNC_TOKEN) {
                     // event completely received
@@ -311,7 +299,7 @@ ISR(USART_RX_vect) {
 #endif
                     tRemoteTouchEventPtr->EventType = sReceivedEventType;
                     // copy buffer to structure
-                    memcpy(tRemoteTouchEventPtr->EventData.ByteArray, sReceiveBuffer, tDataSize);
+                    memcpy(tRemoteTouchEventPtr->EventData.ByteArray, sReceiveBuffer, sReceivedDataSize);
                     sReceiveBufferIndex = 0;
                     sReceivedEventType = EVENT_NO_EVENT;
 
@@ -361,27 +349,25 @@ void serialEvent(void) {
                  * read message length and event tag first
                  */
                 Serial.readBytes((char *) sReceiveBuffer, 2);
-                // length is not needed
+                // First byte is raw length so subtract 3 for sync+eventType+length bytes
+                sReceivedDataSize = sReceiveBuffer[0]-3;
+                if (sReceivedDataSize > RECEIVE_MAX_DATA_SIZE) {
+                    // invalid length
+                    sReceiveBufferOutOfSync = true;
+                    return;
+                }
                 sReceivedEventType = sReceiveBuffer[1];
                 tBytesAvailable -= 2;
             }
         }
         if (sReceivedEventType != EVENT_NO_EVENT) {
-            uint8_t tDataSize;
-            if (sReceivedEventType < EVENT_FIRST_CALLBACK_ACTION_CODE) {
-                // Touch event
-                tDataSize = RECEIVE_TOUCH_OR_DISPLAY_DATA_SIZE;
-            } else {
-                // Callback event
-                tDataSize = RECEIVE_CALLBACK_DATA_SIZE;
-            }
-            if (tBytesAvailable > tDataSize) {
+            if (tBytesAvailable > sReceivedDataSize) {
                 // touch or size event complete received, now read data and sync token
-                Serial.readBytes((char *) sReceiveBuffer, tDataSize);
+                Serial.readBytes((char *) sReceiveBuffer, sReceivedDataSize);
                 if (Serial.read() == SYNC_TOKEN) {
                     remoteEvent.EventType = sReceivedEventType;
                     // copy buffer to structure
-                    memcpy(remoteEvent.EventData.ByteArray, sReceiveBuffer, tDataSize);
+                    memcpy(remoteEvent.EventData.ByteArray, sReceiveBuffer, sReceivedDataSize);
                     sReceivedEventType = EVENT_NO_EVENT;
                     handleEvent(&remoteEvent);
                 } else {

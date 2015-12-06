@@ -23,6 +23,8 @@
 
 #include <Arduino.h>
 
+#include "Servo.h"
+
 #include "BlueDisplay.h"
 #include "BlueSerial.h"
 #include "EventHandler.h"
@@ -38,6 +40,27 @@ const int BACKWARD_MOTOR_PWM_PIN = 11;
 const int FORWARD_MOTOR_PWM_PIN = 3;
 const int RIGHT_PIN = 4;
 const int LEFT_PIN = 5;
+const int LASER_POWER_PIN = 6;
+const int LASER_SERVO_PIN = 9;
+const int TRIGGER_PIN = 7;
+const int ECHO_PIN = 8;
+
+/*
+ * Distance / Follower mode
+ */
+const int DISTANCE_TO_HOLD_CENTIMETER = 20; // 20 cm
+const int DISTANCE_HYSTERESE_CENTIMETER = 3; // +/- 3 cm
+const int FOLLOWER_MAX_SPEED = 150; // empirical value
+
+#define FILTER_WEIGHT 4 // must be 2^n
+#define FILTER_WEIGHT_EXPONENT 2 // must be n of 2^n
+
+BDButton TouchButtonFollowerOnOff;
+BDSlider SliderShowDistance;
+bool sFollowerMode = false;
+// to start follower mode after first distance < DISTANCE_TO_HOLD
+bool sFollowerModeJustStarted = true;
+void doFollowerOnOff(BDButton * aTheTouchedButton, int16_t aValue);
 
 /*
  * Buttons
@@ -46,6 +69,17 @@ BDButton TouchButtonStartStop;
 void doStartStop(BDButton * aTheTochedButton, int16_t aValue);
 void stopOutputs(void);
 bool doRun = true;
+
+/*
+ * Laser
+ */
+
+BDButton TouchButtonLaserOnOff;
+void doLaserOnOff(BDButton * aTheTouchedButton, int16_t aValue);
+BDSlider SliderLaserPosition;
+void doLaserPosition(BDSlider * aTheTouchedSlider, uint16_t aValue);
+bool LaserOn = true;
+Servo ServoLaser;
 
 BDButton TouchButtonSetZero;
 void doSetZero(BDButton * aTheTouchedButton, int16_t aValue);
@@ -67,6 +101,8 @@ BDSlider SliderVelocityForward;
 BDSlider SliderVelocityBackward;
 int sLastSliderVelocityValue = 0;
 int sLastMotorValue = 0;
+// true if front distance sensor indicates to less clearance
+bool sForwardStopByDistance = false;
 // stop motor if velocity is less or equal MOTOR_DEAD_BAND_VALUE (max velocity value is 255)
 #define MOTOR_DEAD_BAND_VALUE 80
 
@@ -93,6 +129,7 @@ int sActualDisplayHeight;
 int sSliderSize;
 #define VALUE_X_SLIDER_DEAD_BAND (sSliderSize/2)
 int sSliderHeight;
+int sSliderHeightLaser;
 int sSliderWidth;
 #define SLIDER_LEFT_RIGHT_THRESHOLD (sSliderWidth/4)
 int sTextSize;
@@ -116,6 +153,21 @@ void drawGui(void) {
     SliderLeft.drawSlider();
     TouchButtonSetZero.drawButton();
     TouchButtonStartStop.drawButton();
+
+    TouchButtonFollowerOnOff.drawButton();
+    SliderShowDistance.drawSlider();
+    // draw cm string
+    // y Formula is: mPositionY + tSliderLongWidth + aTextLayoutInfo.mMargin + (int) (0.76 * aTextLayoutInfo.mSize)
+    BlueDisplay1.drawText(sActualDisplayWidth / 2 + sSliderSize + 3 * getTextWidth(sTextSize),
+    BUTTON_HEIGHT_4_DYN_LINE_2 - BUTTON_VERTICAL_SPACING_DYN + sTextSize / 2 + getTextAscend(sTextSize), "cm", sTextSize,
+    COLOR_BLACK,
+    COLOR_WHITE);
+    // draw Laser Position string
+    BlueDisplay1.drawText(0, sActualDisplayHeight / 32 + sSliderHeightLaser + sTextSize, "Laser position", sTextSize,
+    COLOR_BLACK, COLOR_WHITE);
+
+    SliderLaserPosition.drawSlider();
+    TouchButtonLaserOnOff.drawButton();
 }
 
 void initDisplay(void) {
@@ -133,11 +185,14 @@ void initDisplay(void) {
      */
     sSliderSize = sActualDisplayWidth / 16;
     sSliderWidth = sActualDisplayHeight / 4;
+
     // 3/8 of sActualDisplayHeight
-    sSliderHeight = ((sActualDisplayHeight / 2) + sSliderWidth) / 2;
+    sSliderHeightLaser = (sActualDisplayHeight / 2) + (sActualDisplayHeight / 8);
+    sSliderHeight = ((sActualDisplayHeight / 2) + sActualDisplayHeight / 4) / 2;
+
     int tSliderThresholdVelocity = (sSliderHeight * (MOTOR_DEAD_BAND_VALUE + 1)) / 255;
     sTextSize = sActualDisplayHeight / 16;
-    sTextSizeVCC = sActualDisplayHeight / 8;
+    sTextSizeVCC = sTextSize * 2;
 
     BlueDisplay1.setFlagsAndSize(BD_FLAG_FIRST_RESET_ALL | BD_FLAG_TOUCH_BASIC_DISABLE, sActualDisplayWidth, sActualDisplayHeight);
 
@@ -146,33 +201,42 @@ void initDisplay(void) {
     registerSensorChangeCallback(FLAG_SENSOR_TYPE_ACCELEROMETER, FLAG_SENSOR_DELAY_UI, FLAG_SENSOR_NO_FILTER, &doSensorChange);
     BlueDisplay1.setScreenOrientationLock(FLAG_SCREEN_ORIENTATION_LOCK_ACTUAL);
 
+    SliderLaserPosition.init(0, sActualDisplayHeight / 32, sSliderSize * 3, sSliderHeightLaser, sSliderHeightLaser,
+            sSliderHeightLaser / 2, SLIDER_BACKGROUND_COLOR, SLIDER_BAR_COLOR, FLAG_SLIDER_VERTICAL_SHOW_NOTHING, &doLaserPosition);
+
     /*
      * 4 Slider
      */
 // Position Slider at middle of screen
+// Top slider
     SliderVelocityForward.init((sActualDisplayWidth - sSliderSize) / 2, (sActualDisplayHeight / 2) - sSliderHeight, sSliderSize,
-            sSliderHeight, tSliderThresholdVelocity, 0, COLOR_WHITE, SLIDER_BAR_COLOR, FLAG_SLIDER_IS_ONLY_OUTPUT,
+            sSliderHeight, tSliderThresholdVelocity, 0, SLIDER_BACKGROUND_COLOR, SLIDER_BAR_COLOR, FLAG_SLIDER_IS_ONLY_OUTPUT,
             NULL);
     SliderVelocityForward.setBarThresholdColor(SLIDER_THRESHOLD_COLOR);
-    SliderVelocityForward.setBarBackgroundColor(SLIDER_BACKGROUND_COLOR);
 
+    // Bottom slider
     SliderVelocityBackward.init((sActualDisplayWidth - sSliderSize) / 2, sActualDisplayHeight / 2, sSliderSize, -(sSliderHeight),
-            tSliderThresholdVelocity, 0, COLOR_WHITE, SLIDER_BAR_COLOR, FLAG_SLIDER_IS_ONLY_OUTPUT, NULL);
+            tSliderThresholdVelocity, 0, SLIDER_BACKGROUND_COLOR, SLIDER_BAR_COLOR, FLAG_SLIDER_IS_ONLY_OUTPUT, NULL);
     SliderVelocityBackward.setBarThresholdColor(SLIDER_THRESHOLD_COLOR);
-    SliderVelocityBackward.setBarBackgroundColor(SLIDER_BACKGROUND_COLOR);
 
 // Position slider right from velocity at middle of screen
     SliderRight.init((sActualDisplayWidth + sSliderSize) / 2, (sActualDisplayHeight - sSliderSize) / 2, sSliderSize, sSliderWidth,
-    SLIDER_LEFT_RIGHT_THRESHOLD, 0, COLOR_WHITE, SLIDER_BAR_COLOR, FLAG_SLIDER_IS_HORIZONTAL | FLAG_SLIDER_IS_ONLY_OUTPUT, NULL);
-    SliderRight.setBarThresholdColor( SLIDER_THRESHOLD_COLOR);
-    SliderRight.setBarBackgroundColor(SLIDER_BACKGROUND_COLOR);
+    SLIDER_LEFT_RIGHT_THRESHOLD, 0, SLIDER_BACKGROUND_COLOR, SLIDER_BAR_COLOR,
+            FLAG_SLIDER_IS_HORIZONTAL | FLAG_SLIDER_IS_ONLY_OUTPUT, NULL);
+    SliderRight.setBarThresholdColor(SLIDER_THRESHOLD_COLOR);
 
 // Position inverse slider left from Velocity at middle of screen
     SliderLeft.init(((sActualDisplayWidth - sSliderSize) / 2) - sSliderWidth, (sActualDisplayHeight - sSliderSize) / 2, sSliderSize,
-            -(sSliderWidth), SLIDER_LEFT_RIGHT_THRESHOLD, 0, COLOR_WHITE, SLIDER_BAR_COLOR,
+            -(sSliderWidth), SLIDER_LEFT_RIGHT_THRESHOLD, 0, SLIDER_BACKGROUND_COLOR, SLIDER_BAR_COLOR,
             FLAG_SLIDER_IS_HORIZONTAL | FLAG_SLIDER_IS_ONLY_OUTPUT, NULL);
     SliderLeft.setBarThresholdColor(SLIDER_THRESHOLD_COLOR);
-    SliderLeft.setBarBackgroundColor(SLIDER_BACKGROUND_COLOR);
+
+    // Distance slider
+    SliderShowDistance.init(sActualDisplayWidth / 2 + sSliderSize,
+    BUTTON_HEIGHT_4_DYN_LINE_2 - sSliderSize - BUTTON_VERTICAL_SPACING_DYN, sSliderSize, sActualDisplayWidth / 2 - sSliderSize, 99,
+            0, COLOR_WHITE, COLOR_GREEN, FLAG_SLIDER_IS_HORIZONTAL | FLAG_SLIDER_IS_ONLY_OUTPUT | FLAG_SLIDER_SHOW_VALUE, NULL);
+    SliderShowDistance.setValueScaleFactor(((float) (sActualDisplayWidth / 2 - sSliderSize)) / 100);
+    SliderShowDistance.setPrintValueProperties(sTextSize, FLAG_SLIDER_CAPTION_ALIGN_LEFT, sTextSize / 2, COLOR_BLACK, COLOR_WHITE);
 
     /*
      * Buttons
@@ -181,12 +245,19 @@ void initDisplay(void) {
     if (doRun) {
         tCaptionPtr = "Stop";
     }
-    TouchButtonStartStop.init(0, sActualDisplayHeight - sActualDisplayHeight / 4, sActualDisplayWidth / 3, sActualDisplayHeight / 4,
-    COLOR_BLUE, tCaptionPtr, sTextSize * 2, BUTTON_FLAG_DO_BEEP_ON_TOUCH | BUTTON_FLAG_TYPE_AUTO_RED_GREEN, doRun, &doStartStop);
+    TouchButtonStartStop.init(0, BUTTON_HEIGHT_4_DYN_LINE_4, BUTTON_WIDTH_3_DYN, BUTTON_HEIGHT_4_DYN,
+    COLOR_BLUE, tCaptionPtr, sTextSizeVCC, BUTTON_FLAG_DO_BEEP_ON_TOUCH | BUTTON_FLAG_TYPE_AUTO_RED_GREEN, doRun, &doStartStop);
 
-    TouchButtonSetZero.init(sActualDisplayWidth - sActualDisplayWidth / 3, sActualDisplayHeight - sActualDisplayHeight / 4,
-            sActualDisplayWidth / 3, sActualDisplayHeight / 4, COLOR_RED, "Zero", sTextSize * 2, BUTTON_FLAG_DO_BEEP_ON_TOUCH, 0,
-            &doSetZero);
+    TouchButtonFollowerOnOff.init(BUTTON_WIDTH_4_DYN_POS_4, BUTTON_HEIGHT_4_DYN_LINE_2,
+    BUTTON_WIDTH_4_DYN, BUTTON_HEIGHT_4_DYN, COLOR_RED, "Follow", sTextSizeVCC,
+            BUTTON_FLAG_DO_BEEP_ON_TOUCH | BUTTON_FLAG_TYPE_AUTO_RED_GREEN, sFollowerMode, &doFollowerOnOff);
+
+    TouchButtonLaserOnOff.init(BUTTON_WIDTH_4_DYN_POS_4, BUTTON_HEIGHT_4_DYN_LINE_3, BUTTON_WIDTH_4_DYN,
+    BUTTON_HEIGHT_4_DYN, COLOR_RED, "Laser", sTextSizeVCC, BUTTON_FLAG_DO_BEEP_ON_TOUCH | BUTTON_FLAG_TYPE_AUTO_RED_GREEN, LaserOn,
+            &doLaserOnOff);
+
+    TouchButtonSetZero.init(BUTTON_WIDTH_3_DYN_POS_3, BUTTON_HEIGHT_4_DYN_LINE_4, BUTTON_WIDTH_3_DYN,
+    BUTTON_HEIGHT_4_DYN, COLOR_RED, "Zero", sTextSizeVCC, BUTTON_FLAG_DO_BEEP_ON_TOUCH, 0, &doSetZero);
 }
 
 void setup() {
@@ -196,24 +267,23 @@ void setup() {
     pinMode(BACKWARD_MOTOR_PWM_PIN, OUTPUT);
     pinMode(RIGHT_PIN, OUTPUT);
     pinMode(LEFT_PIN, OUTPUT);
+    pinMode(LASER_POWER_PIN, OUTPUT);
+    pinMode(TRIGGER_PIN, OUTPUT);
+    pinMode(ECHO_PIN, INPUT);
+
+    digitalWrite(LASER_POWER_PIN, LaserOn);
+    ServoLaser.write(90);
 
     initSimpleSerial(HC_05_BAUD_RATE, false);
+    ServoLaser.attach(LASER_SERVO_PIN);
 
-// Register callback handler
-    registerConnectCallback(&initDisplay);
-    registerRedrawCallback(&drawGui);
-    // This in turn initializes the display
-    registerReorientationCallback(&initDisplay);
-    BlueDisplay1.requestMaxCanvasSize(); // this results in a reorientation event
-    // clean up old sent data
-    checkAndHandleEvents();
-    for (uint8_t i = 0; i < 30; ++i) {
-        // wait for size to be sent back. Time measured is between 50 and 150 ms
-        delayMillisWithCheckAndHandleEvents(10);
-    }
+    // Register callback handler and check for connection
+    BlueDisplay1.initCommunication(&initDisplay, &drawGui);
 }
 
 void loop() {
+    static long sPulseLengthFiltered;
+    static int sCentimeterOld;
     uint32_t tMillis = millis();
 
     /*
@@ -235,6 +305,107 @@ void loop() {
      * Check if receive buffer contains an event
      */
     checkAndHandleEvents();
+
+    if (doRun) {
+        /*
+         * Measure distance
+         */
+        // need 10 usec Trigger Pulse
+        digitalWrite(TRIGGER_PIN, HIGH);
+        delayMicroseconds(40);
+        // falling edge starts measurement
+        digitalWrite(TRIGGER_PIN, LOW);
+
+        unsigned long tPulseLength = pulseIn(ECHO_PIN, HIGH, 5850); // timeout at 1m
+        if (tPulseLength != 0) {
+            /*
+             * Filter value
+             */
+            // tCurrentZeroCrossingCount = 7/4 * old
+            sPulseLengthFiltered *= (FILTER_WEIGHT - 1);
+            // + 1/4 * new
+            sPulseLengthFiltered += tPulseLength;
+            sPulseLengthFiltered = sPulseLengthFiltered >> FILTER_WEIGHT_EXPONENT;
+            // +1cm was measured at working device
+            int tCentimeterNew = (sPulseLengthFiltered / 58) + 1;
+
+            if (sCentimeterOld != tCentimeterNew) {
+                SliderShowDistance.setActualValueAndDrawBar(tCentimeterNew);
+                sCentimeterOld = tCentimeterNew;
+            }
+
+            if (sFollowerMode) {
+                int tDeviationFromTargetDistance = tCentimeterNew - DISTANCE_TO_HOLD_CENTIMETER;
+
+                if (tDeviationFromTargetDistance > DISTANCE_HYSTERESE_CENTIMETER) {
+                    sForwardStopByDistance = false;
+                    if (!sFollowerModeJustStarted) {
+                        analogWrite(BACKWARD_MOTOR_PWM_PIN, 0);
+                        // go forward
+                        int tSpeed = (tDeviationFromTargetDistance * 4) + MOTOR_DEAD_BAND_VALUE;
+                        if (tSpeed > FOLLOWER_MAX_SPEED) {
+                            tSpeed = FOLLOWER_MAX_SPEED;
+                        }
+                        analogWrite(FORWARD_MOTOR_PWM_PIN, tSpeed);
+                        sprintf(StringBuffer, "%3d", tSpeed);
+                        SliderVelocityBackward.printValue(StringBuffer);
+                    }
+
+                } else if (tDeviationFromTargetDistance < -DISTANCE_HYSTERESE_CENTIMETER) {
+                    // enable follower mode
+                    sFollowerModeJustStarted = false;
+                    analogWrite(FORWARD_MOTOR_PWM_PIN, 0);
+                    // go backward
+                    sForwardStopByDistance = true;
+                    int tSpeed = ((-tDeviationFromTargetDistance) * 2) + MOTOR_DEAD_BAND_VALUE;
+                    if (tSpeed > FOLLOWER_MAX_SPEED) {
+                        tSpeed = FOLLOWER_MAX_SPEED;
+                    }
+                    analogWrite(BACKWARD_MOTOR_PWM_PIN, tSpeed);
+                    sprintf(StringBuffer, "%3d", tSpeed);
+                    SliderVelocityBackward.printValue(StringBuffer);
+                } else {
+                    sForwardStopByDistance = false;
+                    analogWrite(FORWARD_MOTOR_PWM_PIN, 0);
+                    analogWrite(BACKWARD_MOTOR_PWM_PIN, 0);
+                }
+            }
+        } else if (sCentimeterOld != 100) {
+            SliderShowDistance.setActualValueAndDrawBar(100);
+            sCentimeterOld = 100;
+        }
+    } else if (sCentimeterOld != 0) {
+        SliderShowDistance.setActualValueAndDrawBar(0);
+        sCentimeterOld = 0;
+    }
+}
+
+/*
+ * Handle follower mode
+ */
+void doFollowerOnOff(BDButton * aTheTouchedButton, int16_t aValue) {
+    sFollowerMode = !sFollowerMode;
+    if (sFollowerMode) {
+        sFollowerModeJustStarted = true;
+    }
+    aTheTouchedButton->setValueAndDraw(sFollowerMode);
+}
+
+/*
+ * Handle Laser
+ */
+void doLaserOnOff(BDButton * aTheTouchedButton, int16_t aValue) {
+    LaserOn = !LaserOn;
+    digitalWrite(LASER_POWER_PIN, LaserOn);
+    aTheTouchedButton->setValueAndDraw(LaserOn);
+}
+
+/*
+ * Convert 0 to
+ */
+void doLaserPosition(BDSlider * aTheTouchedSlider, uint16_t aValue) {
+    int tValue = map(aValue, 0, sSliderHeightLaser, 0, 180);
+    ServoLaser.write(tValue);
 }
 
 /*
@@ -273,19 +444,25 @@ void doSetZero(BDButton * aTheTouchedButton, int16_t aValue) {
 }
 
 /*
+ * Forward / backward speed
  * Values are between +10 at 90 degree canvas top is up and -10 (canvas bottom is up)
  */
-void processYSensorValue(float tSensorValue) {
+void processVerticalSensorValue(float tSensorValue) {
 
-    // Scale value for full speed = 0xFF at 30 degree
+// Scale value for full speed = 0xFF at 30 degree
     int tMotorValue = -((tSensorValue - sYZeroValue) * ((255 * 3) / 10));
 
-    // forward backward handling
+// forward backward handling
     uint8_t tActiveMotorPin;
     uint8_t tInactiveMotorPin;
     BDSlider tActiveSlider;
     BDSlider tInactiveSlider;
     if (tMotorValue >= 0) {
+        // Forward
+//        if (sForwardStopByDistance) {
+//            // distance to less
+//            tMotorValue = 0;
+//        }
         tActiveMotorPin = FORWARD_MOTOR_PWM_PIN;
         tInactiveMotorPin = BACKWARD_MOTOR_PWM_PIN;
         tActiveSlider = SliderVelocityForward;
@@ -298,18 +475,18 @@ void processYSensorValue(float tSensorValue) {
         tMotorValue = -tMotorValue;
     }
 
-    // dead band handling
+// dead band handling
     if (tMotorValue <= MOTOR_DEAD_BAND_VALUE) {
         tMotorValue = 0;
     }
 
-    // overflow handling since analogWrite only accepts byte values
+// overflow handling since analogWrite only accepts byte values
     if (tMotorValue > 0xFF) {
         tMotorValue = 0xFF;
     }
 
     analogWrite(tInactiveMotorPin, 0);
-    // use this as delay between deactivating one channel and activating the other
+// use this as delay between deactivating one channel and activating the other
     int tSliderValue = -((tSensorValue - sYZeroValue) * ((sSliderHeight * 3) / 10));
     if (tSliderValue < 0) {
         tSliderValue = -tSliderValue;
@@ -328,14 +505,15 @@ void processYSensorValue(float tSensorValue) {
 }
 
 /*
+ * Left / right coil
  * Values are between +10 at 90 degree canvas right is up and -10 (canvas left is up)
  */
-void processXSensorValue(float tSensorValue) {
+void processHorizontalSensorValue(float tSensorValue) {
 
-    // scale value for full scale =SLIDER_WIDTH at at 30 degree
+// scale value for full scale =SLIDER_WIDTH at at 30 degree
     int tLeftRightValue = tSensorValue * ((sSliderWidth * 3) / 10);
 
-    // left right handling
+// left right handling
     uint8_t tActivePin;
     uint8_t tInactivePin;
     BDSlider tActiveSlider;
@@ -353,7 +531,7 @@ void processXSensorValue(float tSensorValue) {
         tLeftRightValue = -tLeftRightValue;
     }
 
-    // dead band handling for slider
+// dead band handling for slider
     uint8_t tActiveValue = HIGH;
     if (tLeftRightValue > VALUE_X_SLIDER_DEAD_BAND) {
         tLeftRightValue = tLeftRightValue - VALUE_X_SLIDER_DEAD_BAND;
@@ -361,18 +539,18 @@ void processXSensorValue(float tSensorValue) {
         tLeftRightValue = 0;
     }
 
-    // dead band handling for steering synchronous to slider threshold
+// dead band handling for steering synchronous to slider threshold
     if (tLeftRightValue < SLIDER_LEFT_RIGHT_THRESHOLD) {
         tActiveValue = LOW;
     }
 
-    // overflow handling
+// overflow handling
     if (tLeftRightValue > sSliderWidth) {
         tLeftRightValue = sSliderWidth;
     }
 
     digitalWrite(tInactivePin, LOW);
-    // use this as delay between deactivating one pin and activating the other
+// use this as delay between deactivating one pin and activating the other
     if (sLastLeftRightValue != tLeftRightValue) {
         sLastLeftRightValue = tLeftRightValue;
         tActiveSlider.setActualValueAndDrawBar(tLeftRightValue);
@@ -408,9 +586,9 @@ void doSensorChange(uint8_t aSensorType, struct SensorCallback * aSensorCallback
     } else {
         tSensorChangeCallCount = CALLS_FOR_ZERO_ADJUSTMENT + 1; // to prevent overflow
 //        printSensorInfo(aSensorCallbackInfo);
-        if (doRun) {
-            processYSensorValue(aSensorCallbackInfo->ValueY);
-            processXSensorValue(aSensorCallbackInfo->ValueX);
+        if (doRun && !sFollowerMode) {
+            processVerticalSensorValue(aSensorCallbackInfo->ValueY);
+            processHorizontalSensorValue(aSensorCallbackInfo->ValueX);
         }
     }
     sMillisOfLastReveivedEvent = millis();
@@ -470,6 +648,6 @@ void printVCCAndTemperature(void) {
     dtostrf(tVCCVoltage, 4, 2, &StringBuffer[30]);
     float tTemp = getTemperature();
     dtostrf(tTemp, 4, 1, &StringBuffer[40]);
-    sprintf(StringBuffer, "%s Volt\n%s\xB0" "C", &StringBuffer[30], &StringBuffer[40]);
-    BlueDisplay1.drawText(sTextSize / 2, sTextSizeVCC, StringBuffer, sTextSizeVCC, COLOR_BLACK, COLOR_NO_BACKGROUND_EXTEND);
+    sprintf(StringBuffer, "%s Volt %s\xB0" "C", &StringBuffer[30], &StringBuffer[40]);
+    BlueDisplay1.drawText(sActualDisplayWidth / 4, sTextSize, StringBuffer, sTextSize, COLOR_BLACK, COLOR_WHITE);
 }

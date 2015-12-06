@@ -34,6 +34,7 @@ import java.util.List;
 
 import android.annotation.SuppressLint;
 import android.graphics.Color;
+import android.util.Log;
 
 public class TouchSlider {
 
@@ -86,15 +87,18 @@ public class TouchSlider {
 	private static final int FLAG_SLIDER_IS_ONLY_OUTPUT = 0x20;
 
 	int mActualTouchValue;
+	// Values are as delivered by client. Before internal use they must be scaled by mScaleFactorForValue
 	// This value can be different from mActualTouchValue and is provided by callback handler
 	int mActualValue;
-
 	int mThresholdValue;
+	float mScaleFactorForValue; // scale factor only for (normalized) value - default is 1
+
 	int mListIndex; // index in sSliderList
 	int mOnChangeHandlerCallbackAddress;
 	boolean mIsActive;
 	boolean mIsInitialized;
 
+	static int sDefaultBorderColor = Color.BLUE;
 	static int sDefaultBackgroundColor = Color.WHITE;
 	static int sDefaultThresholdColor = Color.RED;
 
@@ -114,6 +118,7 @@ public class TouchSlider {
 	private static final int SUBFUNCTION_SLIDER_SET_POSITION = 0x04;
 	private static final int SUBFUNCTION_SLIDER_SET_ACTIVE = 0x05;
 	private static final int SUBFUNCTION_SLIDER_RESET_ACTIVE = 0x06;
+	private static final int SUBFUNCTION_SLIDER_SET_VALUE_SCALE_FACTOR = 0x07;
 
 	private static final int SUBFUNCTION_SLIDER_SET_CAPTION_PROPERTIES = 0x08;
 	private static final int SUBFUNCTION_SLIDER_SET_PRINT_VALUE_PROPERTIES = 0x09;
@@ -142,7 +147,6 @@ public class TouchSlider {
 			final int aThresholdValue, final int aInitalValue, final int aSliderColor, final int aBarColor, final int aOptions,
 			final int aOnChangeHandlerCallbackAddress) {
 
-		mBarBackgroundColor = sDefaultBackgroundColor;
 		mBarThresholdColor = sDefaultThresholdColor;
 
 		mCaption = null;
@@ -154,7 +158,6 @@ public class TouchSlider {
 		mPositionX = aPositionX;
 		mPositionY = aPositionY;
 
-		mSliderColor = aSliderColor;
 		mBarColor = aBarColor;
 
 		mOptions = aOptions;
@@ -182,7 +185,16 @@ public class TouchSlider {
 		if ((mOptions & FLAG_SLIDER_SHOW_BORDER) == 0) {
 			tLongBordersAddedWidth = 0;
 			tShortBordersAddedWidth = 0;
+			/*
+			 * If no border specified, then take unused slider color as bar background color.
+			 */
+			mBarBackgroundColor = aSliderColor;
+			mSliderColor = sDefaultBorderColor; // is Color.BLUE
+		} else {
+			mSliderColor = aSliderColor;
+			mBarBackgroundColor = sDefaultBackgroundColor;
 		}
+
 		/*
 		 * compute lower right corner and validate
 		 */
@@ -220,6 +232,7 @@ public class TouchSlider {
 		mCaptionLayoutInfo = new TextLayoutInfo();
 		mCaptionLayoutInfo.mAbove = true;
 		mCaptionLayoutInfo.mSize = mRPCView.mRequestedCanvasHeight / 12;
+		mScaleFactorForValue = (float) 1.0;
 
 		mIsActive = false;
 		mIsInitialized = true;
@@ -281,7 +294,7 @@ public class TouchSlider {
 	 * (re)draws the middle bar according to actual value
 	 */
 	void drawBar() {
-		int tActualValue = mActualValue;
+		int tActualValue = (int) (mActualValue * mScaleFactorForValue);
 		if (tActualValue > mBarLength) {
 			tActualValue = mBarLength;
 		}
@@ -304,13 +317,13 @@ public class TouchSlider {
 			 * switch colors and invert value
 			 */
 			tBarBackgroundColor = tBarColor;
-			if (tActualValue > mThresholdValue) {
+			if (tActualValue > (mThresholdValue * mScaleFactorForValue)) {
 				tBarBackgroundColor = mBarThresholdColor;
 			}
 			tBarColor = mBarBackgroundColor;
 			tActualValue = mBarLength - tActualValue;
 		} else {
-			if (tActualValue > mThresholdValue) {
+			if (tActualValue > (mThresholdValue * mScaleFactorForValue)) {
 				tBarColor = mBarThresholdColor;
 			}
 		}
@@ -343,7 +356,7 @@ public class TouchSlider {
 			return;
 		}
 
-		int tTextPixelLength = (int) (0.6 * aTextLayoutInfo.mSize * aText.length());
+		int tTextPixelLength = (int) ((0.6 * aTextLayoutInfo.mSize * aText.length()) + 0.5);
 
 		int tSliderShortWidth = mBarWidth;
 		int tSliderLongWidth = mBarLength;
@@ -354,7 +367,6 @@ public class TouchSlider {
 
 		if ((mOptions & FLAG_SLIDER_IS_HORIZONTAL) != 0) {
 			// Horizontal slider
-
 			if (aTextLayoutInfo.mAlign == FLAG_SLIDER_CAPTION_ALIGN_RIGHT) {
 				aTextLayoutInfo.mPositionX = mPositionX + tSliderLongWidth - tTextPixelLength;
 			} else if (aTextLayoutInfo.mAlign == FLAG_SLIDER_CAPTION_ALIGN_MIDDLE) {
@@ -364,10 +376,10 @@ public class TouchSlider {
 			}
 			if (aTextLayoutInfo.mAbove) {
 				aTextLayoutInfo.mPositionY = mPositionY - aTextLayoutInfo.mMargin - aTextLayoutInfo.mSize
-						+ (int) (0.76 * aTextLayoutInfo.mSize);
+						+ (int) ((0.76 * aTextLayoutInfo.mSize) + 0.5);
 			} else {
 				aTextLayoutInfo.mPositionY = mPositionY + tSliderShortWidth + aTextLayoutInfo.mMargin
-						+ (int) (0.76 * aTextLayoutInfo.mSize);
+						+ (int) ((0.76 * aTextLayoutInfo.mSize) + 0.5);
 			}
 
 		} else {
@@ -381,10 +393,10 @@ public class TouchSlider {
 			}
 			if (aTextLayoutInfo.mAbove) {
 				aTextLayoutInfo.mPositionY = mPositionY - aTextLayoutInfo.mMargin - aTextLayoutInfo.mSize
-						+ (int) (0.76 * aTextLayoutInfo.mSize);
+						+ (int) ((0.76 * aTextLayoutInfo.mSize)+ 0.5);
 			} else {
 				aTextLayoutInfo.mPositionY = mPositionY + tSliderLongWidth + aTextLayoutInfo.mMargin
-						+ (int) (0.76 * aTextLayoutInfo.mSize);
+						+ (int) ((0.76 * aTextLayoutInfo.mSize) + 0.5);
 			}
 		}
 	}
@@ -392,7 +404,7 @@ public class TouchSlider {
 	/*
 	 * Check if touch event is in slider. If yes - set bar and value call callback function and return true. If no - return false
 	 */
-	boolean checkIfTouchInSlider(final int aTouchPositionX, final int aTouchPositionY) {
+	boolean checkIfTouchInSlider(final int aTouchPositionX, final int aTouchPositionY, boolean aJustCheck) {
 		if ((mOptions & FLAG_SLIDER_IS_ONLY_OUTPUT) != 0) {
 			return false;
 		}
@@ -415,6 +427,10 @@ public class TouchSlider {
 		/*
 		 * Touch position is in slider (plus additional touch border) here
 		 */
+		if (aJustCheck) {
+			return true;
+		}
+
 		// adjust value according to size of upper and lower border
 		int tActualTouchValue;
 		if ((mOptions & FLAG_SLIDER_IS_HORIZONTAL) != 0) {
@@ -438,17 +454,18 @@ public class TouchSlider {
 			tActualTouchValue = mBarLength - tActualTouchValue;
 		}
 
-		if (tActualTouchValue != mActualTouchValue) {
-			mActualTouchValue = tActualTouchValue;
+		int tActualTouchValueInt = (int) (tActualTouchValue / mScaleFactorForValue);
+
+		if (tActualTouchValueInt != mActualTouchValue) {
+			mActualTouchValue = tActualTouchValueInt;
 			if (mOnChangeHandlerCallbackAddress != 0) {
 				// call change handler
-				mRPCView.mBlueDisplayContext.mSerialService.writeGuiCallbackEvent(
-						BluetoothSerialService.EVENT_SLIDER_CALLBACK_ACTION, mListIndex, mOnChangeHandlerCallbackAddress,
-						tActualTouchValue);
+				mRPCView.mBlueDisplayContext.mSerialService.writeGuiCallbackEvent(BluetoothSerialService.EVENT_SLIDER_CALLBACK,
+						mListIndex, mOnChangeHandlerCallbackAddress, tActualTouchValueInt);
 			}
 			if ((mOptions & FLAG_SLIDER_VALUE_BY_CALLBACK) == 0) {
 				// store value and redraw
-				mActualValue = tActualTouchValue;
+				mActualValue = tActualTouchValueInt;
 				drawBar();
 				if ((mOptions & FLAG_SLIDER_SHOW_VALUE) != 0) {
 					printValue();
@@ -462,15 +479,24 @@ public class TouchSlider {
 	 * 
 	 * @param aTouchPositionX
 	 * @param aTouchPositionY
-	 * @param doCallback
-	 * @return true if a match was found
+	 * @param aJustCheck
+	 *            - do not call callback function of slider
+	 * @return number of slider if touched else -1
 	 */
-	static boolean checkAllSliders(int aTouchPositionX, int aTouchPositionY) {
+	static int checkAllSliders(int aTouchPositionX, int aTouchPositionY, boolean aJustCheck) {
 		// walk through list of active elements
 		for (TouchSlider tSlider : sSliderList) {
-			if (tSlider.mIsActive && tSlider.checkIfTouchInSlider(aTouchPositionX, aTouchPositionY)) {
-				return true;
+			if (tSlider.mIsActive && tSlider.checkIfTouchInSlider(aTouchPositionX, aTouchPositionY, aJustCheck)) {
+				return tSlider.mListIndex;
 			}
+		}
+		return -1;
+	}
+
+	static boolean checkIfTouchInSlider(final int aTouchPositionX, final int aTouchPositionY, final int aSliderNumber) {
+		TouchSlider tSlider = sSliderList.get(aSliderNumber);
+		if (tSlider.mIsActive) {
+			return tSlider.checkIfTouchInSlider(aTouchPositionX, aTouchPositionY, false);
 		}
 		return false;
 	}
@@ -699,6 +725,17 @@ public class TouchSlider {
 					}
 					break;
 
+				case SUBFUNCTION_SLIDER_SET_VALUE_SCALE_FACTOR:
+					// convert 2 short parameters to one float
+					int tFloat = aParameters[2] & 0xFFFF;
+					tFloat = tFloat | ((aParameters[3] & 0xFFFF) << 16);
+					float tNewScaleFactor = Float.intBitsToFloat(tFloat);
+					if (MyLog.isINFO()) {
+						MyLog.i(LOG_TAG, "Set value scale factor from " + tSlider.mScaleFactorForValue + " to " + tNewScaleFactor
+								+ " for SliderNr=" + tSliderNumber);
+					}
+					tSlider.mScaleFactorForValue = tNewScaleFactor;
+					break;
 				}
 				break;
 

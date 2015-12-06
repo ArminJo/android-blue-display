@@ -33,78 +33,19 @@
 //#define DO_NOT_NEED_BASIC_TOUCH_EVENTS // outcommenting or better defining for the compiler with -DDO_NOT_NEED_BASIC_TOUCH_EVENTS saves 620 bytes FLASH and 36 bytes RAM
 #endif
 
-#include "BlueDisplay.h" // for struct XYSize
 #include "BlueDisplayProtocol.h"
 
-//#ifdef LOCAL_DISPLAY_EXISTS
+#ifdef LOCAL_DISPLAY_EXISTS
+#include "BlueDisplay.h" // for Color_t
 //#include "ADS7846.h"
 //extern ADS7846 TouchPanel;
-//#endif
+#endif
 
 #define TOUCH_STANDARD_CALLBACK_PERIOD_MILLIS 20 // Period between callbacks while touched (a swipe is app 100 ms)
 #define TOUCH_STANDARD_LONG_TOUCH_TIMEOUT_MILLIS 800 // Millis after which a touch is classified as a long touch
 //
 #define TOUCH_SWIPE_THRESHOLD 10  // threshold for swipe detection to suppress long touch handler calling
 #define TOUCH_SWIPE_RESOLUTION_MILLIS 20
-
-struct XYPosition {
-    uint16_t PosX;
-    uint16_t PosY;
-};
-
-struct Swipe {
-    bool SwipeMainDirectionIsX; // true if TouchDeltaXAbs >= TouchDeltaYAbs
-    uint8_t Filler;
-    uint16_t Free;
-    uint16_t TouchStartX;
-    uint16_t TouchStartY;
-    int16_t TouchDeltaX;
-    int16_t TouchDeltaY;
-    uint16_t TouchDeltaAbsMax; // max of TouchDeltaXAbs and TouchDeltaYAbs to easily decide if swipe is large enough to be accepted
-};
-
-struct GuiCallback {
-    uint16_t ObjectIndex;
-    uint16_t Free;
-#if (FLASHEND > 65535 || AVR != 1)
-    void * Handler;
-#else
-    void * Handler;
-    void * Handler_upperWord; // not used on 16 bit address cpu
-#endif
-    union ValueForHandler {
-        uint16_t Int16Value;
-        uint32_t Int32Value;
-        float FloatValue;
-    } ValueForHandler;
-};
-
-struct SensorCallback {
-    float ValueX;
-    float ValueY;
-    float ValueZ;
-};
-
-struct IntegerInfoCallback {
-    uint16_t SubFunction;
-    uint16_t Special;
-    void * Handler;
-    uint16_t Int16Value1;
-    uint16_t Int16Value2;
-};
-
-struct BluetoothEvent {
-    uint8_t EventType;
-    union EventData {
-        unsigned char ByteArray[TOUCH_CALLBACK_DATA_SIZE]; // To copy data from input buffer
-        struct XYPosition TouchPosition;
-        struct XYSize DisplaySize;
-        struct GuiCallback GuiCallbackInfo;
-        struct Swipe SwipeInfo;
-        struct SensorCallback SensorCallbackInfo;
-        struct IntegerInfoCallback IntegerInfoCallbackData;
-    } EventData;
-};
 
 #ifdef LOCAL_DISPLAY_EXISTS
 extern struct BluetoothEvent localTouchEvent;
@@ -117,7 +58,7 @@ extern bool sSliderTouched;
 extern bool sNothingTouched;
 extern bool sSliderIsMoveTarget;
 extern bool sDisableTouchUpOnce; // set normally by application if long touch action was made
-extern bool sDisableUntilTouchUpIsDone;// Skip all touch move and touch up events until touch is released
+extern bool sDisableUntilTouchUpIsDone; // Skip all touch move and touch up events until touch is released
 
 void resetTouchFlags(void);
 #endif
@@ -130,16 +71,16 @@ extern struct BluetoothEvent remoteTouchDownEvent;
 
 #ifndef DO_NOT_NEED_BASIC_TOUCH_EVENTS
 extern bool sTouchIsStillDown;
-extern struct XYPosition sDownPosition;
-extern struct XYPosition sActualPosition;
-extern struct XYPosition sUpPosition;
+extern struct TouchEvent sDownPosition;
+extern struct TouchEvent sActualPosition;
+extern struct TouchEvent sUpPosition;
 #endif
 
-void delayMillisWithCheckAndHandleEvents(int32_t aTimeMillis);
+void delayMillisWithCheckAndHandleEvents(unsigned long aTimeMillis);
 
 void checkAndHandleEvents(void);
 
-void registerLongTouchDownCallback(void (*aLongTouchCallback)(struct XYPosition *), uint16_t aLongTouchTimeoutMillis);
+void registerLongTouchDownCallback(void (*aLongTouchCallback)(struct TouchEvent *), uint16_t aLongTouchTimeoutMillis);
 
 void registerSwipeEndCallback(void (*aSwipeEndCallback)(struct Swipe *));
 void setSwipeEndCallbackEnabled(bool aSwipeEndCallbackEnabled);
@@ -164,21 +105,21 @@ void registerSensorChangeCallback(uint8_t aSensorType, uint8_t aSensorRate, uint
 #define getSimpleResizeAndConnectCallback() getRedrawCallback()
 
 #ifndef DO_NOT_NEED_BASIC_TOUCH_EVENTS
-void registerTouchDownCallback(void (*aTouchDownCallback)(struct XYPosition * aActualPositionPtr));
-void registerTouchMoveCallback(void (*aTouchMoveCallback)(struct XYPosition * aActualPositionPtr));
-void registerTouchUpCallback(void (*aTouchUpCallback)(struct XYPosition * aActualPositionPtr));
+void registerTouchDownCallback(void (*aTouchDownCallback)(struct TouchEvent * aActualPositionPtr));
+void registerTouchMoveCallback(void (*aTouchMoveCallback)(struct TouchEvent * aActualPositionPtr));
+void registerTouchUpCallback(void (*aTouchUpCallback)(struct TouchEvent * aActualPositionPtr));
 void setTouchUpCallbackEnabled(bool aTouchUpCallbackEnabled);
-void (* getTouchUpCallback(void))(struct XYPosition * );
+void (* getTouchUpCallback(void))(struct TouchEvent * );
 #endif
 
 #ifdef LOCAL_DISPLAY_EXISTS
 void handleLocalTouchUp(void);
 void callbackLongTouchDownTimeout(void);
-void simpleTouchDownHandler(struct XYPosition * aActualPositionPtr);
-void simpleTouchHandlerOnlyForButtons(struct XYPosition * aActualPositionPtr);
-void simpleTouchDownHandlerOnlyForSlider(struct XYPosition * aActualPositionPtr);
-void simpleTouchDownHandlerForSlider(struct XYPosition * aActualPositionPtr);
-void simpleTouchMoveHandlerForSlider(struct XYPosition * aActualPositionPtr);
+void simpleTouchDownHandler(struct TouchEvent * aActualPositionPtr);
+void simpleTouchHandlerOnlyForButtons(struct TouchEvent * aActualPositionPtr);
+void simpleTouchDownHandlerOnlyForSlider(struct TouchEvent * aActualPositionPtr);
+void simpleTouchDownHandlerForSlider(struct TouchEvent * aActualPositionPtr);
+void simpleTouchMoveHandlerForSlider(struct TouchEvent * aActualPositionPtr);
 
 // for local autorepeat button
 void registerPeriodicTouchCallback(bool (*aPeriodicTouchCallback)(int, int), uint32_t aCallbackPeriodMillis);
@@ -190,9 +131,9 @@ void printTPData(int x, int y, Color_t aColor, Color_t aBackColor);
 #endif
 
 #ifdef __cplusplus
-extern"C" {
+extern "C" {
 #endif
-    void handleEvent(struct BluetoothEvent * aEvent);
+void handleEvent(struct BluetoothEvent * aEvent);
 #ifdef __cplusplus
 }
 #endif

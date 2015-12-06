@@ -47,7 +47,9 @@
 // Pin 13 has an LED connected on most Arduino boards.
 const int LED_PIN = 13;
 const int TONE_PIN = 2;
+const int ANALOG_INPUT_PIN = A0;
 
+bool sConnected = false;
 volatile bool doBlink = true;
 volatile int sDelay = 600;
 
@@ -76,66 +78,81 @@ void doDelay(BDSlider * aTheTochedSlider, uint16_t aSliderValue);
 void printDelayValue(void);
 
 // Callback handler for (re)connect and resize
-void initDisplay(void);
 void drawGui(void);
 void printDemoString(void);
+
+void initDisplay(void);
 
 void setup() {
     // initialize the digital pin as an output.
     pinMode(LED_PIN, OUTPUT);
     pinMode(TONE_PIN, OUTPUT);
+    pinMode(ANALOG_INPUT_PIN, INPUT);
 #ifdef USE_SIMPLE_SERIAL  // see line 50 in BlueSerial.h
     initSimpleSerial(HC_05_BAUD_RATE, false);
 #else
     Serial.begin(HC_05_BAUD_RATE);
 #endif
-    // Must be called first since it sets the display size,
-    // which is used by internal slider plausibility
-    initDisplay();
+    // Register callback handler and check for connection
+    BlueDisplay1.initCommunication(&initDisplay, &drawGui);
 
-    // Register callback handler
-    registerConnectCallback(&initDisplay);
-    registerRedrawCallback(&drawGui);
-    drawGui();
     // to signal that boot has finished
     tone(TONE_PIN, 2000, 200);
 
 }
 
 void loop() {
-    if (doBlink) {
-        uint8_t i;
-        digitalWrite(LED_PIN, HIGH);  // LED on
-        BlueDisplay1.fillCircle(DISPLAY_WIDTH / 2, DISPLAY_HEIGHT / 2, 20, COLOR_RED);
-        // wait for delay time but check touch events 8 times while waiting
-        for (i = 0; i < 8; ++i) {
-#ifdef USE_SIMPLE_SERIAL
-            checkAndHandleEvents();
-#else
-            serialEvent();
-#endif
-            delay(sDelay / 8);
-            printDemoString();
-        }
-        digitalWrite(LED_PIN, LOW);  // LED off
-        BlueDisplay1.fillCircle(DISPLAY_WIDTH / 2, DISPLAY_HEIGHT / 2, 20, COLOR_DEMO_BACKGROUND);
-        for (i = 0; i < 8; ++i) {
-#ifdef USE_SIMPLE_SERIAL
-            checkAndHandleEvents();
-#else
-            serialEvent();
-#endif
-            delay(sDelay / 8);
-            printDemoString();
-        }
-        printDemoString();
+    if (!BlueDisplay1.mConnectionEstablished) {
+        int tBlinkDuration = analogRead(ANALOG_INPUT_PIN);
+        digitalWrite(LED_PIN, HIGH);
+        delay(tBlinkDuration / 2);
+        digitalWrite(LED_PIN, LOW);
+        delay(tBlinkDuration / 2);
     } else {
+        if (doBlink) {
+            uint8_t i;
+            /*
+             * LED on
+             */
+            digitalWrite(LED_PIN, HIGH);
+            BlueDisplay1.fillCircle(DISPLAY_WIDTH / 2, DISPLAY_HEIGHT / 2, 20, COLOR_RED);
+            /*
+             *  Wait for delay time and update "Demo" string at a rate 16 times the blink rate.
+             *  For Arduino serial check touch events 8 times while waiting.
+             */
+            for (i = 0; i < 8; ++i) {
 #ifdef USE_SIMPLE_SERIAL
-        checkAndHandleEvents();
+                delayMillisWithCheckAndHandleEvents(sDelay / 8);
 #else
-        serialEvent();
+                serialEvent();
+                delay(sDelay / 8);
 #endif
+                printDemoString();
+            }
+            /*
+             * LED off
+             */
+            digitalWrite(LED_PIN, LOW);
+            BlueDisplay1.fillCircle(DISPLAY_WIDTH / 2, DISPLAY_HEIGHT / 2, 20, COLOR_DEMO_BACKGROUND);
+            for (i = 0; i < 8; ++i) {
+#ifdef USE_SIMPLE_SERIAL
+                delayMillisWithCheckAndHandleEvents(sDelay / 8);
+#else
+                serialEvent();
+                delay(sDelay / 8);
+#endif
+                printDemoString();
+            }
+            printDemoString();
+        }
     }
+
+#ifdef USE_SIMPLE_SERIAL
+    checkAndHandleEvents();
+#else
+    serialEvent();
+#endif
+
 }
 
 void initDisplay(void) {

@@ -27,27 +27,16 @@
  */
 
 #include "BlueSerial.h"
+#include "BlueDisplay.h"
+
 #include "EventHandler.h"
 #include "timing.h"
 #include "stm32fx0xPeripherals.h" // For Watchdog_reload()
 
 #include <string.h> // for memcpy
 #include <stdarg.h>  // for varargs
-/*
- * Serial Display protocol values
- */
-//#define USE_SIMPLE_SERIAL
-// Data field types
-const int DATAFIELD_TAG_BYTE = 0x01;
-const int DATAFIELD_TAG_SHORT = 0x02;
-const int DATAFIELD_TAG_INT = 0x03;
-const int DATAFIELD_TAG_LONG = 0x04;
-const int DATAFIELD_TAG_FLOAT = 0x05;
-const int DATAFIELD_TAG_DOUBLE = 0x06;
-const int LAST_FUNCTION_TAG_DATAFIELD = 0x07;
 
-#define MAX_NUMBER_OF_ARGS 12 // for sending
-#define TOUCH_COMMAND_SIZE_BYTE_MAX  TOUCH_CALLBACK_DATA_SIZE + 3 // for receiving plausi
+//#define USE_SIMPLE_SERIAL
 
 DMA_HandleTypeDef DMA_UART_BD_TXHandle;
 DMA_HandleTypeDef DMA_UART_BD_RXHandle;
@@ -80,7 +69,7 @@ uint8_t * sUSARTSendBufferPointerOutTmp; // value of sUSARTSendBufferPointerOut 
 volatile bool sDMATransferOngoing = false;  // synchronizing flag for ISR <-> thread
 
 // Circular receive buffer
-#define USART_RECEIVE_BUFFER_SIZE (TOUCH_COMMAND_SIZE_BYTE_MAX * 10 -1) // not a multiple of TOUCH_COMMAND_SIZE_BYTE in order to discover overruns
+#define USART_RECEIVE_BUFFER_SIZE (TOUCH_COMMAND_MAX_DATA_SIZE * 10 -1) // not a multiple of TOUCH_COMMAND_SIZE_BYTE in order to discover overruns
 uint8_t USARTReceiveBuffer[USART_RECEIVE_BUFFER_SIZE] __attribute__ ((aligned(4)));
 uint8_t * sUSARTReceiveBufferPointer; // point to first byte not yet processed (of next received message)
 int32_t sLastRXDMACount;
@@ -94,10 +83,8 @@ bool sReceiveBufferOutOfSync = false;
  */
 void HAL_UART_MspInit(UART_HandleTypeDef * aUARTHandle) {
     if (aUARTHandle == &UART_BD_Handle) {
-        UART_BD_CLOCK_ENABLE()
-        ;
-        UART_BD_IO_CLOCK_ENABLE()
-        ;
+        UART_BD_CLOCK_ENABLE();
+        UART_BD_IO_CLOCK_ENABLE();
 
         GPIO_InitTypeDef GPIO_InitStructure;
         // Bluetooth state pin
@@ -127,8 +114,7 @@ void HAL_UART_MspInit(UART_HandleTypeDef * aUARTHandle) {
 #endif
         HAL_GPIO_Init(UART_BD_PORT, &GPIO_InitStructure);
 
-        UART_BD_DMA_CLOCK_ENABLE()
-        ;
+        UART_BD_DMA_CLOCK_ENABLE();
         DMA_UART_BD_TXHandle.Instance = UART_BD_DMA_TX_CHANNEL;
 
         /*
@@ -360,13 +346,12 @@ int getSendBufferFreeSpace(void) {
  * Copy content of both buffers to send buffer, check for buffer wrap around and call USART_BD_DMA_TX_start() with right parameters.
  * Do blocking wait if not enough space left in buffer
  */
-void sendUSARTBufferNoSizeCheck(uint8_t * aParameterBufferPointer, size_t aParameterBufferLength, uint8_t * aDataBufferPointer,
-        size_t aDataBufferLength) {
+void sendUSARTBufferNoSizeCheck(uint8_t * aParameterBufferPointer, size_t aParameterBufferLength,
+        uint8_t * aDataBufferPointer, size_t aDataBufferLength) {
 #ifdef USE_SIMPLE_SERIAL
     sendUSARTBufferSimple(aParameterBufferPointer, aParameterBufferLength, aDataBufferPointer, aDataBufferLength);
-return;
+    return;
 #else
-
 
     if (!sDMATransferOngoing) {
         // safe to reset buffer pointers since no transmit pending
@@ -457,7 +442,7 @@ void sendUSARTBuffer(uint8_t * aParameterBufferPointer, size_t aParameterBufferL
         size_t aDataBufferLength) {
 #ifdef USE_SIMPLE_SERIAL
     sendUSARTBufferSimple(aParameterBufferPointer, aParameterBufferLength, aDataBufferPointer, aDataBufferLength);
-return;
+    return;
 #else
     if ((aParameterBufferLength + aDataBufferLength) > UART_SEND_BUFFER_SIZE) {
         // first send command
@@ -474,7 +459,8 @@ return;
             tSize -= UART_SEND_BUFFER_SIZE;
         }
     } else {
-        sendUSARTBufferNoSizeCheck(aParameterBufferPointer, aParameterBufferLength, aDataBufferPointer, aDataBufferLength);
+        sendUSARTBufferNoSizeCheck(aParameterBufferPointer, aParameterBufferLength, aDataBufferPointer,
+                aDataBufferLength);
     }
 #endif
 }
@@ -524,7 +510,8 @@ void sendUSARTBufferSimple(uint8_t * aParameterBufferPointer, size_t aParameterB
  * 3. Short length of parameters (here 5*2)
  * 4. Short n parameters
  */
-void sendUSART5Args(uint8_t aFunctionTag, uint16_t aXStart, uint16_t aYStart, uint16_t aXEnd, uint16_t aYEnd, uint16_t aColor) {
+void sendUSART5Args(uint8_t aFunctionTag, uint16_t aXStart, uint16_t aYStart, uint16_t aXEnd, uint16_t aYEnd,
+        uint16_t aColor) {
     uint16_t tParamBuffer[7];
 
     uint16_t * tBufferPointer = &tParamBuffer[0];
@@ -544,9 +531,9 @@ void sendUSART5Args(uint8_t aFunctionTag, uint16_t aXStart, uint16_t aYStart, ui
  * @param aNumberOfArgs currently not more than 12 args (SHORT) are supported
  */
 void sendUSARTArgs(uint8_t aFunctionTag, int aNumberOfArgs, ...) {
-    assertParamMessage((aNumberOfArgs <= MAX_NUMBER_OF_ARGS), aNumberOfArgs, "only 12 params max");
+    assertParamMessage((aNumberOfArgs <= MAX_NUMBER_OF_ARGS_FOR_BD_FUNCTIONS), aNumberOfArgs, "only 12 params max");
 
-    uint16_t tParamBuffer[MAX_NUMBER_OF_ARGS + 2];
+    uint16_t tParamBuffer[MAX_NUMBER_OF_ARGS_FOR_BD_FUNCTIONS + 2];
     va_list argp;
     uint16_t * tBufferPointer = &tParamBuffer[0];
     *tBufferPointer++ = aFunctionTag << 8 | SYNC_TOKEN; // add sync token
@@ -569,11 +556,11 @@ void sendUSARTArgs(uint8_t aFunctionTag, int aNumberOfArgs, ...) {
  * Last two arguments are length of buffer and buffer pointer (..., size_t aDataLength, uint8_t * aDataBufferPtr)
  */
 void sendUSARTArgsAndByteBuffer(uint8_t aFunctionTag, int aNumberOfArgs, ...) {
-    if (aNumberOfArgs > MAX_NUMBER_OF_ARGS) {
+    if (aNumberOfArgs > MAX_NUMBER_OF_ARGS_FOR_BD_FUNCTIONS) {
         return;
     }
 
-    uint16_t tParamBuffer[MAX_NUMBER_OF_ARGS + 4];
+    uint16_t tParamBuffer[MAX_NUMBER_OF_ARGS_FOR_BD_FUNCTIONS + 4];
     va_list argp;
     uint16_t * tBufferPointer = &tParamBuffer[0];
     *tBufferPointer++ = aFunctionTag << 8 | SYNC_TOKEN; // add sync token
@@ -598,8 +585,8 @@ void sendUSARTArgsAndByteBuffer(uint8_t aFunctionTag, int aNumberOfArgs, ...) {
 /**
  * Assembles parameter header and appends header for data field
  */
-void sendUSART5ArgsAndByteBuffer(uint8_t aFunctionTag, uint16_t aXStart, uint16_t aYStart, uint16_t aParam3, uint16_t aParam4,
-        Color_t aColor, uint8_t * aBuffer, size_t aBufferLength) {
+void sendUSART5ArgsAndByteBuffer(uint8_t aFunctionTag, uint16_t aXStart, uint16_t aYStart, uint16_t aParam3,
+        uint16_t aParam4, Color_t aColor, uint8_t * aBuffer, size_t aBufferLength) {
 
     uint16_t tParamBuffer[9];
 
@@ -622,8 +609,8 @@ void sendUSART5ArgsAndByteBuffer(uint8_t aFunctionTag, uint16_t aXStart, uint16_
 /**
  * Assembles parameter header and appends header for data field
  */
-void sendUSART5ArgsAndShortBuffer(uint8_t aFunctionTag, uint16_t aXStart, uint16_t aYStart, uint16_t aParam3, uint16_t aParam4,
-        Color_t aColor, uint16_t * aBuffer, size_t aBufferLength) {
+void sendUSART5ArgsAndShortBuffer(uint8_t aFunctionTag, uint16_t aXStart, uint16_t aYStart, uint16_t aParam3,
+        uint16_t aParam4, Color_t aColor, uint16_t * aBuffer, size_t aBufferLength) {
 
     uint16_t tParamBuffer[9];
 
@@ -709,6 +696,7 @@ int32_t getReceiveBytesAvailable(void) {
  * Function is not synchronized because it should only be used by main thread
  */
 static uint8_t sReceivedEventType = EVENT_NO_EVENT;
+static uint8_t sReceivedDataSize;
 
 void checkAndHandleMessageReceived(void) {
 // get actual DMA byte count
@@ -736,9 +724,9 @@ void checkAndHandleMessageReceived(void) {
                 /*
                  * read message length and event tag first
                  */
-                // length is not needed
-                int tLength = getReceiveBufferByte();
-                if (tLength > TOUCH_COMMAND_SIZE_BYTE_MAX) {
+                // First byte is raw length so subtract 3 for sync+eventType+length bytes
+                sReceivedDataSize = getReceiveBufferByte() - 3;
+                if (sReceivedDataSize > RECEIVE_MAX_DATA_SIZE) {
                     // invalid length
                     sReceiveBufferOutOfSync = true;
                     return;
@@ -748,20 +736,12 @@ void checkAndHandleMessageReceived(void) {
             }
         }
         if (sReceivedEventType != EVENT_NO_EVENT) {
-            uint8_t tDataSize;
-            if (sReceivedEventType < EVENT_FIRST_CALLBACK_ACTION_CODE) {
-                // Touch event
-                tDataSize = RECEIVE_TOUCH_OR_DISPLAY_DATA_SIZE;
-            } else {
-                // Callback event
-                tDataSize = RECEIVE_CALLBACK_DATA_SIZE;
-            }
-            if (tBytesAvailable > tDataSize) {
+            if (tBytesAvailable > sReceivedDataSize) {
                 // touch or size event complete received, now read data and sync token
                 // copy buffer to structure
                 unsigned char * tByteArrayPtr = remoteEvent.EventData.ByteArray;
                 int i;
-                for (i = 0; i < tDataSize; ++i) {
+                for (i = 0; i < sReceivedDataSize; ++i) {
                     *tByteArrayPtr++ = getReceiveBufferByte();
                 }
                 // Check for sync token

@@ -46,19 +46,19 @@ BDSlider::BDSlider(BDSliderHandle_t aSliderHandle, TouchSlider * aLocalSliderPoi
 #endif
 
 /**
- * @brief initialization with all parameters except BarBackgroundColor
- * @param aPositionX determines upper left corner
- * @param aPositionY determines upper left corner
- * @param aBarWidth width of bar (and border) in pixel
- * @param aBarLength size of slider bar in pixel = maximum slider value
- * @param aThresholdValue value - if bigger, then color of bar changes from BarColor to BarBackgroundColor
+ * @brief initialization with all parameters (except BarBackgroundColor)
+ * @param aPositionX - Determines upper left corner
+ * @param aPositionY - Determines upper left corner
+ * @param aBarWidth - Width of bar (and border) in pixel
+ * @param aBarLength - Size of slider bar in pixel = maximum slider value
+ * @param aThresholdValue - If selected value is bigger, then color of bar changes from BarColor to BarBackgroundColor
  * @param aInitalValue
- * @param aSliderColor color of slider frame
+ * @param aSliderColor - Color of slider border. If no border specified, then bar background color.
  * @param aBarColor
- * @param aOptions see #FLAG_SLIDER_SHOW_BORDER etc.
- * @param aOnChangeHandler - if NULL no update of bar is done on touch
+ * @param aOptions - See #FLAG_SLIDER_SHOW_BORDER etc.
+ * @param aOnChangeHandler - If NULL no update of bar is done on touch
  */
-void BDSlider::init(uint16_t aPositionX, uint16_t aPositionY, uint8_t aBarWidth, int16_t aBarLength, int16_t aThresholdValue,
+void BDSlider::init(uint16_t aPositionX, uint16_t aPositionY, uint16_t aBarWidth, int16_t aBarLength, int16_t aThresholdValue,
         int16_t aInitalValue, Color_t aSliderColor, Color_t aBarColor, uint8_t aFlags,
         void (*aOnChangeHandler)(BDSlider *, uint16_t)) {
     BDSliderHandle_t tSliderNumber = sLocalSliderIndex++;
@@ -158,16 +158,30 @@ void BDSlider::setCaption(const char * aCaption) {
     }
 }
 
-void BDSlider::setPrintValueProperties(uint8_t aPrintValueSize, uint8_t aPrintValuePosition, uint8_t aPrintValueMargin,
+void BDSlider::setPrintValueProperties(uint8_t aPrintValueTextSize, uint8_t aPrintValuePosition, uint8_t aPrintValueMargin,
         Color_t aPrintValueColor, Color_t aPrintValueBackgroundColor) {
 #ifdef LOCAL_DISPLAY_EXISTS
     mLocalSliderPointer->setValueStringColors(aPrintValueColor, aPrintValueBackgroundColor);
 #endif
     if (USART_isBluetoothPaired()) {
-        sendUSARTArgs(FUNCTION_SLIDER_SETTINGS, 7, mSliderHandle, SUBFUNCTION_SLIDER_SET_VALUE_STRING_PROPERTIES, aPrintValueSize,
+        sendUSARTArgs(FUNCTION_SLIDER_SETTINGS, 7, mSliderHandle, SUBFUNCTION_SLIDER_SET_VALUE_STRING_PROPERTIES, aPrintValueTextSize,
                 aPrintValuePosition, aPrintValueMargin, aPrintValueColor, aPrintValueBackgroundColor);
     }
 }
+
+/*
+ * initial + threshold + actual values are scaled by aScaleFactorValue
+ */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstrict-aliasing"
+void BDSlider::setValueScaleFactor(float aScaleFactorValue) {
+    if (USART_isBluetoothPaired()) {
+        long tScaleFactorValue = *reinterpret_cast<uint32_t*>(&aScaleFactorValue);
+        sendUSARTArgs(FUNCTION_SLIDER_SETTINGS, 4, mSliderHandle, SUBFUNCTION_SLIDER_SET_VALUE_SCALE_FACTOR,
+                (uint16_t) tScaleFactorValue & 0XFFFF, (uint16_t) (tScaleFactorValue >> 16));
+    }
+}
+#pragma GCC diagnostic pop
 
 void BDSlider::printValue(const char * aValueString) {
 #ifdef LOCAL_DISPLAY_EXISTS

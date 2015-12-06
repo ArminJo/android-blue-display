@@ -2,7 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="de.joachimsmeyer.android.bluedisplay"
     android:installLocation="auto"
-    android:versionCode="9"
+    android:versionCode="10"
     android:versionName="@string/app_version" >
 
     <!-- android:launchMode = "singleInstance" -->
@@ -15,7 +15,8 @@
         android:xlargeScreens="true" />
 
     <uses-sdk android:minSdkVersion="10" />
-    <!-- use 10 because this enables the menu button -->
+    <!-- use 10 and omit entry android:targetSdkVersion="xx" because only this enables the menu button -->
+    
 
     <application
         android:allowBackup="true"

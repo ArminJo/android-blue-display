@@ -53,17 +53,16 @@
 #define BAUD_921600 ( 921600)
 #define BAUD_1382400 (1382400)
 
-#define PAIRED_PIN 5
-
-#define SYNC_TOKEN 0xA5
-extern const int DATAFIELD_TAG_BYTE;
-extern const int LAST_FUNCTION_TAG_DATAFIELD;
-
+/*
+ * common functions
+ */
 void sendUSARTArgs(uint8_t aFunctionTag, int aNumberOfArgs, ...);
 void sendUSARTArgsAndByteBuffer(uint8_t aFunctionTag, int aNumberOfArgs, ...);
 void sendUSART5Args(uint8_t aFunctionTag, uint16_t aXStart, uint16_t aYStart, uint16_t aXEnd, uint16_t aYEnd, uint16_t aColor);
 void sendUSART5ArgsAndByteBuffer(uint8_t aFunctionTag, uint16_t aXStart, uint16_t aYStart, uint16_t aXEnd, uint16_t aYEnd,
         uint16_t aColor, uint8_t * aBuffer, size_t aBufferLength);
+
+#define PAIRED_PIN 5
 
 #ifdef LOCAL_DISPLAY_EXISTS
 bool USART_isBluetoothPaired(void);

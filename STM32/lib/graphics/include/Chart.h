@@ -145,6 +145,7 @@ public:
 	// Start value
 	void setYLabelStartValue(int yLabelStartValue);
 	void setYLabelStartValueFloat(float yLabelStartValueFloat);
+	void setYDataFactor(float aYDataFactor);
 	int_float_union getYLabelStartValue(void) const;
 	uint16_t getYLabelStartValueRawFromFloat(void);
 	uint16_t getYLabelEndValueRawFromFloat(void);

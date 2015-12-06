@@ -84,17 +84,17 @@ bool BDButton::operator!=(const BDButton &aButton) {
  * If local display is attached, allocate a button from the local pool, so do not forget to call deinit()
  */
 void BDButton::init(uint16_t aPositionX, uint16_t aPositionY, uint16_t aWidthX, uint16_t aHeightY, Color_t aButtonColor,
-        const char * aCaption, uint8_t aCaptionSize, uint8_t aFlags, int16_t aValue, void (*aOnTouchHandler)(BDButton*, int16_t)) {
+        const char * aCaption, uint16_t aCaptionSize, uint8_t aFlags, int16_t aValue, void (*aOnTouchHandler)(BDButton*, int16_t)) {
 
     BDButtonHandle_t tButtonNumber = sLocalButtonIndex++;
     if (USART_isBluetoothPaired()) {
 #if (FLASHEND > 65535 || AVR != 1)
-        sendUSARTArgsAndByteBuffer(FUNCTION_BUTTON_CREATE, 10, tButtonNumber, aPositionX, aPositionY, aWidthX, aHeightY,
-                aButtonColor, aCaptionSize | (aFlags << 8), aValue, aOnTouchHandler,
+        sendUSARTArgsAndByteBuffer(FUNCTION_BUTTON_CREATE, 11, tButtonNumber, aPositionX, aPositionY, aWidthX,
+                aHeightY, aButtonColor, aCaptionSize, aFlags, aValue, aOnTouchHandler,
                 (reinterpret_cast<uint32_t>(aOnTouchHandler) >> 16), strlen(aCaption), aCaption);
 #else
-        sendUSARTArgsAndByteBuffer(FUNCTION_BUTTON_CREATE, 9, tButtonNumber, aPositionX, aPositionY, aWidthX, aHeightY,
-                aButtonColor, aCaptionSize | (aFlags << 8), aValue, aOnTouchHandler, strlen(aCaption), aCaption);
+        sendUSARTArgsAndByteBuffer(FUNCTION_BUTTON_CREATE, 10, tButtonNumber, aPositionX, aPositionY, aWidthX, aHeightY,
+                aButtonColor, aCaptionSize, aFlags, aValue, aOnTouchHandler, strlen(aCaption), aCaption);
 #endif
     }
     mButtonHandle = tButtonNumber;
@@ -106,7 +106,8 @@ void BDButton::init(uint16_t aPositionX, uint16_t aPositionY, uint16_t aWidthX, 
     }
     // Cast needed here. At runtime the right pointer is returned because of FLAG_USE_BDBUTTON_FOR_CALLBACK
     mLocalButtonPtr->initButton(aPositionX, aPositionY, aWidthX, aHeightY, aButtonColor, aCaption, aCaptionSize,
-            aFlags | FLAG_USE_BDBUTTON_FOR_CALLBACK, aValue, reinterpret_cast<void (*)(TouchButton*, int16_t)> (aOnTouchHandler));
+            aFlags | FLAG_USE_BDBUTTON_FOR_CALLBACK, aValue,
+            reinterpret_cast<void (*)(TouchButton*, int16_t)> (aOnTouchHandler));
 
     mLocalButtonPtr ->mBDButtonPtr = this;
 #endif
@@ -239,8 +240,8 @@ void BDButton::setPosition(int16_t aPositionX, int16_t aPositionY) {
 void BDButton::setButtonAutorepeatTiming(uint16_t aMillisFirstDelay, uint16_t aMillisFirstRate, uint16_t aFirstCount,
         uint16_t aMillisSecondRate) {
 #ifdef LOCAL_DISPLAY_EXISTS
-    ((TouchButtonAutorepeat*) mLocalButtonPtr)->setButtonAutorepeatTiming(aMillisFirstDelay, aMillisFirstRate, aFirstCount,
-            aMillisSecondRate);
+    ((TouchButtonAutorepeat*) mLocalButtonPtr)->setButtonAutorepeatTiming(aMillisFirstDelay, aMillisFirstRate,
+            aFirstCount, aMillisSecondRate);
 #endif
     if (USART_isBluetoothPaired()) {
         sendUSARTArgs(FUNCTION_BUTTON_SETTINGS, 7, mButtonHandle, SUBFUNCTION_BUTTON_SET_AUTOREPEAT_TIMING, aMillisFirstDelay,
@@ -330,8 +331,8 @@ void BDButton::initPGM(uint16_t aPositionX, uint16_t aPositionY, uint16_t aWidth
         if (tCaptionLength < STRING_BUFFER_STACK_SIZE) {
             char StringBuffer[STRING_BUFFER_STACK_SIZE];
             strcpy_P(StringBuffer, aPGMCaption);
-            sendUSARTArgsAndByteBuffer(FUNCTION_BUTTON_CREATE, 9, tButtonNumber, aPositionX, aPositionY, aWidthX, aHeightY,
-                    aButtonColor, aCaptionSize | (aFlags << 8), aValue, aOnTouchHandler, tCaptionLength, StringBuffer);
+            sendUSARTArgsAndByteBuffer(FUNCTION_BUTTON_CREATE, 10, tButtonNumber, aPositionX, aPositionY, aWidthX, aHeightY,
+                    aButtonColor, aCaptionSize, aFlags, aValue, aOnTouchHandler, tCaptionLength, StringBuffer);
         }
     }
     mButtonHandle = tButtonNumber;

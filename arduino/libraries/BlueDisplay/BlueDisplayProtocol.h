@@ -33,23 +33,24 @@
  * 3. Short length (in bytes units -> always multiple of 2) of parameters
  * 4. Short n parameters
  *
- * Data (for function code >= 0x60):
+ * Data (expected for messages with function code >= 0x60):
  * 1. Sync Byte A5
- * 2. Byte Data_Size_Type token (byte, short etc.)
- * 3. Short length of data
+ * 2. Byte Data_Size_Type token (byte, short etc.) - only byte used
+ * 3. Short length of data in byte units
  * 4. Length items of data values
  *
  *
  * RECEIVE PROTOCOL USED:
  *
- * Touch/size message has 7 bytes:
+ * Touch/size message has 8 bytes:
  * 1 - Gross message length in bytes
  * 2 - Function code
  * 3 - X Position LSB
  * 4 - X Position MSB
  * 5 - Y Position LSB
  * 6 - Y Position MSB
- * 7 - Sync token
+ * 7 - Pointer index
+ * 8 - Sync token
  *
  * Callback message has 15 bytes:
  * 1 - Gross message length in bytes
@@ -65,11 +66,156 @@
 #ifndef BLUEDISPLAYPROTOCOL_H_
 #define BLUEDISPLAYPROTOCOL_H_
 
-static const int INDEX_FIRST_FUNCTION_WITH_DATA = 0x60;
+#include <stdint.h>
+#include <stdbool.h>
+
+#define SYNC_TOKEN 0xA5
+
+/**********************
+ * Event codes
+ *********************/
+// eventType can be one of the following:
+//see also android.view.MotionEvent
+#define EVENT_TOUCH_ACTION_DOWN 0x00
+#define EVENT_TOUCH_ACTION_UP   0x01
+#define EVENT_TOUCH_ACTION_MOVE 0x02
+#define EVENT_TOUCH_ACTION_ERROR 0xFF
+
+// connection event sent after (re)connecting from host
+#define EVENT_CONNECTION_BUILD_UP 0x10
+// redraw event if canvas size was changed manually on host
+#define EVENT_REDRAW 0x11
+// reorientation event sent if orientation changed or requestMaxCanvasSize() was called
+#define EVENT_REORIENTATION 0x12
+// disconnect event sent if manually disconnected (does not cover out of range etc.)
+#define EVENT_DISCONNECT 0x14
+
+// command sizes
+#define TOUCH_COMMAND_MAX_DATA_SIZE 15
+#define RECEIVE_MAX_DATA_SIZE (TOUCH_COMMAND_MAX_DATA_SIZE - 3) // 15 - command, length and sync token
+// events with a lower number have RECEIVE_TOUCH_OR_DISPLAY_DATA_SIZE
+// events with a greater number have RECEIVE_CALLBACK_DATA_SIZE
+#define EVENT_FIRST_CALLBACK_ACTION_CODE 0x20
+
+// GUI elements (button, slider, get number) callback codes
+#define EVENT_BUTTON_CALLBACK  0x20
+#define EVENT_SLIDER_CALLBACK  0x21
+#define EVENT_SWIPE_CALLBACK  0x22
+#define EVENT_LONG_TOUCH_DOWN_CALLBACK  0x23
+
+#define EVENT_NUMBER_CALLBACK 0x28
+#define EVENT_INFO_CALLBACK  0x29
+
+#define EVENT_TEXT_CALLBACK  0x2C
+
+// NOP used for synchronizing
+#define EVENT_NOP 0x2F
+
+// Sensor callback codes
+// Tag number is 0x30 + sensor type constant from android.hardware.Sensor
+#define EVENT_FIRST_SENSOR_ACTION_CODE 0x30
+#define EVENT_LAST_SENSOR_ACTION_CODE 0x3F
+
+#define EVENT_REQUESTED_DATA_CANVAS_SIZE 0x60
+
+#define EVENT_NO_EVENT 0xFF
+
+/*********************
+ * Event structures
+ *********************/
+struct XYSize {
+    uint16_t XWidth;
+    uint16_t YHeight;
+};
+
+struct XYPosition {
+    uint16_t PosX;
+    uint16_t PosY;
+};
+
+struct TouchEvent {
+    struct XYPosition TouchPosition;
+    uint8_t TouchPointerIndex;
+};
+
+struct DisplaySizeAndUnixTimestamp {
+    struct XYSize DisplaySize;
+    uint32_t UnixTimestamp;
+};
+
+struct Swipe {
+    bool SwipeMainDirectionIsX; // true if TouchDeltaXAbs >= TouchDeltaYAbs
+    uint8_t Filler;
+    uint16_t Free;
+    uint16_t TouchStartX;
+    uint16_t TouchStartY;
+    int16_t TouchDeltaX;
+    int16_t TouchDeltaY;
+    uint16_t TouchDeltaAbsMax; // max of TouchDeltaXAbs and TouchDeltaYAbs to easily decide if swipe is large enough to be accepted
+};
+
+union ShortLongFloatUnion {
+    uint16_t Int16Value;
+    uint32_t Int32Value;
+    float FloatValue;
+};
+
+struct GuiCallback {
+    uint16_t ObjectIndex;
+    uint16_t Free;
+#if (FLASHEND > 65535 || AVR != 1)
+    void * Handler;
+#else
+    void * Handler;
+    void * Handler_upperWord; // not used on 16 bit address cpu
+#endif
+    union ShortLongFloatUnion ValueForHandler;
+};
+
+struct SensorCallback {
+    float ValueX;
+    float ValueY;
+    float ValueZ;
+};
+
+struct IntegerInfoCallback {
+    uint16_t SubFunction;
+    uint16_t Special;
+    void * Handler;
+    uint16_t Int16Value1;
+    uint16_t Int16Value2;
+};
+
+struct BluetoothEvent {
+    uint8_t EventType;
+    union EventData {
+        unsigned char ByteArray[RECEIVE_MAX_DATA_SIZE]; // To copy data from input buffer
+        struct TouchEvent TouchEventInfo; // for EVENT_TOUCH_ACTION_*
+        struct XYSize DisplaySize;
+        struct DisplaySizeAndUnixTimestamp DisplaySizeAndTimestamp;
+        struct GuiCallback GuiCallbackInfo; // EVENT_*_CALLBACK
+        struct Swipe SwipeInfo;
+        struct SensorCallback SensorCallbackInfo;
+        struct IntegerInfoCallback IntegerInfoCallbackData;
+    } EventData;
+};
+
+/**********************
+ * Data field types
+ *********************/
+const int DATAFIELD_TAG_BYTE = 0x01;
+const int DATAFIELD_TAG_SHORT = 0x02;
+//const int DATAFIELD_TAG_INT = 0x03;
+//const int DATAFIELD_TAG_LONG = 0x04;
+//const int DATAFIELD_TAG_FLOAT = 0x05;
+//const int DATAFIELD_TAG_DOUBLE = 0x06;
+const int LAST_FUNCTION_TAG_DATAFIELD = 0x07;
 
 /**********************
  * Internal functions
  *********************/
+static const int INDEX_FIRST_FUNCTION_WITH_DATA = 0x60;
+
 static const int FUNCTION_GLOBAL_SETTINGS = 0x08;
 // Sub functions for GLOBAL_SETTINGS
 static const int SUBFUNCTION_GLOBAL_SET_FLAGS_AND_SIZE = 0x00;
@@ -191,6 +337,7 @@ static const int SUBFUNCTION_SLIDER_SET_VALUE_AND_DRAW_BAR = 0x03;
 static const int SUBFUNCTION_SLIDER_SET_POSITION = 0x04;
 static const int SUBFUNCTION_SLIDER_SET_ACTIVE = 0x05;
 static const int SUBFUNCTION_SLIDER_RESET_ACTIVE = 0x06;
+static const int SUBFUNCTION_SLIDER_SET_VALUE_SCALE_FACTOR = 0x07;
 
 static const int SUBFUNCTION_SLIDER_SET_CAPTION_PROPERTIES = 0x08;
 static const int SUBFUNCTION_SLIDER_SET_VALUE_STRING_PROPERTIES = 0x09;
@@ -204,47 +351,4 @@ static const int FUNCTION_SLIDER_GLOBAL_SETTINGS = 0x5A;
 const int FUNCTION_SLIDER_SET_CAPTION = 0x78;
 const int FUNCTION_SLIDER_PRINT_VALUE = 0x79;
 
-/**********************
- * Event codes
- *********************/
-// eventType can be one of the following:
-//see also android.view.MotionEvent
-#define EVENT_TOUCH_ACTION_DOWN 0x00
-#define EVENT_TOUCH_ACTION_UP   0x01
-#define EVENT_TOUCH_ACTION_MOVE 0x02
-#define EVENT_TOUCH_ACTION_ERROR 0xFF
-
-//connection + redraw + reorientation handling
-#define EVENT_CONNECTION_BUILD_UP 0x10
-#define EVENT_REDRAW_ACTION 0x11
-#define EVENT_REORIENTATION_ACTION 0x12
-// Must be below 0x20 since it only sends 4 bytes data
-#define EVENT_LONG_TOUCH_DOWN_CALLBACK_ACTION  0x18
-
-// command sizes
-#define RECEIVE_TOUCH_OR_DISPLAY_DATA_SIZE 4
-#define TOUCH_CALLBACK_DATA_SIZE  12 // 15 - command, length and sync token
-#define RECEIVE_CALLBACK_DATA_SIZE TOUCH_CALLBACK_DATA_SIZE
-// events with a lower number have RECEIVE_TOUCH_OR_DISPLAY_DATA_SIZE
-// events with a greater number have RECEIVE_CALLBACK_DATA_SIZE
-#define EVENT_FIRST_CALLBACK_ACTION_CODE 0x20
-
-// GUI elements (button, slider, get number) callback codes
-#define EVENT_BUTTON_CALLBACK_ACTION  0x20
-#define EVENT_SLIDER_CALLBACK_ACTION  0x21
-#define EVENT_SWIPE_CALLBACK_ACTION  0x22
-#define EVENT_NUMBER_CALLBACK 0x28
-#define EVENT_INFO_CALLBACK  0x29
-
-#define EVENT_TEXT_CALLBACK  0x2C
-
-// NOP used for synchronizing
-#define EVENT_NOP_ACTION 0x2F
-
-// Sensor callback codes
-// Tag number is 0x30 + sensor type constant from android.hardware.Sensor
-#define EVENT_FIRST_SENSOR_ACTION_CODE 0x30
-#define EVENT_LAST_SENSOR_ACTION_CODE 0x3F
-
-#define EVENT_NO_EVENT 0xFF
 #endif /* BLUEDISPLAYPROTOCOL_H_ */

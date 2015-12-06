@@ -29,8 +29,8 @@
  */
 
 #include "BlueDisplay.h"
-#include "BlueDisplayProtocol.h"
 #include "BlueSerial.h"
+#include "EventHandler.h" // for registerRedrawCallback() ...
 
 #ifdef LOCAL_DISPLAY_EXISTS
 #include "thickLine.h"
@@ -45,6 +45,7 @@
 BlueDisplay::BlueDisplay(void) {
     mReferenceDisplaySize.XWidth = DISPLAY_DEFAULT_WIDTH;
     mReferenceDisplaySize.YHeight = DISPLAY_DEFAULT_HEIGHT;
+    mConnectionEstablished = false;
 }
 
 // One instance of BlueDisplay called BlueDisplay1
@@ -56,6 +57,76 @@ void BlueDisplay::resetLocal(void) {
     // reset local buttons to be synchronized
     BDButton::resetAllButtons();
     BDSlider::resetAllSliders();
+}
+
+/**
+ * Sets callback handler and calls host for requestMaxCanvasSize().
+ * This results in a data callback event.
+ * If connection established successfully, call all 3 handlers once.
+ */
+void BlueDisplay::initCommunication(void (*aConnectCallback)(void), void (*aReorientationCallback)(void),
+        void (*aRedrawCallback)(void)) {
+    registerConnectCallback(aConnectCallback);
+    registerReorientationCallback(aReorientationCallback);
+    registerRedrawCallback(aRedrawCallback);
+
+    mConnectionEstablished = false;
+// This results in a data event, which sends size and timestamp
+    requestMaxCanvasSize();
+
+    // clean up old sent data
+    checkAndHandleEvents();
+    for (uint8_t i = 0; i < 30; ++i) {
+        // wait for size to be sent back by a reorientation event. Time measured is between 50 and 150 ms
+        delayMillisWithCheckAndHandleEvents(10);
+        if (mConnectionEstablished) {
+            /*
+             * Call handler initially
+             */
+            if (aConnectCallback != NULL) {
+                aConnectCallback();
+            }
+            if (aReorientationCallback != NULL) {
+                aReorientationCallback();
+            }
+            if (aRedrawCallback != NULL) {
+                aRedrawCallback();
+            }
+            break;
+        }
+    }
+}
+
+/*
+ * simple version since reorientation and reconnect callback functions are sometimes the same
+ */
+void BlueDisplay::initCommunication(void (*aConnectAndReorientationCallback)(void), void (*aRedrawCallback)(void)) {
+    registerConnectCallback(aConnectAndReorientationCallback);
+    registerReorientationCallback(aConnectAndReorientationCallback);
+    registerRedrawCallback(aRedrawCallback);
+
+    mConnectionEstablished = false;
+    // This results in a data event,
+    requestMaxCanvasSize();
+
+    // clean up old sent data
+    checkAndHandleEvents();
+    for (uint8_t i = 0; i < 30; ++i) {
+        // wait for size to be sent back by a data event. Time measured is between 50 and 150 ms
+        delayMillisWithCheckAndHandleEvents(10);
+        if (mConnectionEstablished) {
+            /*
+             * Call handler initially
+             */
+            if (aConnectAndReorientationCallback != NULL) {
+                aConnectAndReorientationCallback();
+            }
+            if (aRedrawCallback != NULL) {
+                aRedrawCallback();
+            }
+            break;
+        }
+    }
 }
 
 // sends 4 byte function and 24 byte data message
@@ -300,9 +371,8 @@ uint16_t BlueDisplay::drawChar(uint16_t aPosX, uint16_t aPosY, char aChar, uint1
 /**
  * @param aXStart left position
  * @param aYStart upper position
- * @param aStringPtr is (const char *) to avoid endless casts for string constants
- * @param aBGColor if COLOR_NO_BACKGROUND, then the background will not filled (implies also COLOR_NO_BACKGROUND_EXTEND)
- *          if COLOR_NO_BACKGROUND_EXTEND, then do not clear rest of line for multiline text
+ * @param aStringPtr  If /r is used as newline character, rest of line will be cleared, if /n is used, rest of line will not be cleared.
+ * @param aBGColor if COLOR_NO_BACKGROUND, then the background will not filled
  * @return uint16_t start x for next character - next x Parameter
  */
 uint16_t BlueDisplay::drawText(uint16_t aPosX, uint16_t aPosY, const char *aStringPtr, uint16_t aTextSize, Color_t aFGColor,
@@ -597,17 +667,18 @@ uint16_t BlueDisplay::drawTextPGM(uint16_t aPosX, uint16_t aPosY, const char * a
         Color_t aBGColor) {
     uint16_t tRetValue = 0;
     uint8_t tCaptionLength = strlen_P(aPGMString);
-    if (tCaptionLength < STRING_BUFFER_STACK_SIZE) {
-        char StringBuffer[STRING_BUFFER_STACK_SIZE];
-        strcpy_P(StringBuffer, aPGMString);
+    if (tCaptionLength > STRING_BUFFER_STACK_SIZE) {
+        tCaptionLength = STRING_BUFFER_STACK_SIZE;
+    }
+    char StringBuffer[STRING_BUFFER_STACK_SIZE];
+    strncpy_P(StringBuffer, aPGMString, tCaptionLength);
 #ifdef LOCAL_DISPLAY_EXISTS
-        tRetValue = LocalDisplay.drawTextPGM(aPosX, aPosY - getTextAscend(aTextSize), aPGMString, getLocalTextSize(aTextSize), aFGColor, aBGColor);
+    tRetValue = LocalDisplay.drawTextPGM(aPosX, aPosY - getTextAscend(aTextSize), aPGMString, getLocalTextSize(aTextSize), aFGColor, aBGColor);
 #endif
-        if (USART_isBluetoothPaired()) {
-            tRetValue = aPosX + tCaptionLength * getTextWidth(aTextSize);
-            sendUSART5ArgsAndByteBuffer(FUNCTION_DRAW_STRING, aPosX, aPosY, aTextSize, aFGColor, aBGColor, (uint8_t*) StringBuffer,
-                    tCaptionLength);
-        }
+    if (USART_isBluetoothPaired()) {
+        tRetValue = aPosX + tCaptionLength * getTextWidth(aTextSize);
+        sendUSART5ArgsAndByteBuffer(FUNCTION_DRAW_STRING, aPosX, aPosY, aTextSize, aFGColor, aBGColor, (uint8_t*) StringBuffer,
+                tCaptionLength);
     }
     return tRetValue;
 }
@@ -675,7 +746,7 @@ void BlueDisplay::getInfo(uint16_t aInfoSubcommand, void (*aInfoHandler)(uint8_t
 }
 
 /*
- *  This results in a reorientation event
+ *  This results in a data event
  */
 void BlueDisplay::requestMaxCanvasSize(void) {
     if (USART_isBluetoothPaired()) {
@@ -687,17 +758,18 @@ void BlueDisplay::requestMaxCanvasSize(void) {
 void BlueDisplay::getNumberWithShortPromptPGM(void (*aNumberHandler)(float), const char *aPGMShortPromptString) {
     if (USART_isBluetoothPaired()) {
         uint8_t tShortPromptLength = strlen_P(aPGMShortPromptString);
-        if (tShortPromptLength < STRING_BUFFER_STACK_SIZE) {
-            char StringBuffer[STRING_BUFFER_STACK_SIZE];
-            strcpy_P(StringBuffer, aPGMShortPromptString);
-#if (FLASHEND > 65535)
-            sendUSARTArgsAndByteBuffer(FUNCTION_GET_NUMBER_WITH_SHORT_PROMPT, 2, aNumberHandler, aNumberHandler,
-                    (reinterpret_cast<uint32_t>(aNumberHandler) >> 16), tShortPromptLength, (uint8_t*) StringBuffer);
-#else
-            sendUSARTArgsAndByteBuffer(FUNCTION_GET_NUMBER_WITH_SHORT_PROMPT, 1, aNumberHandler, tShortPromptLength,
-                    (uint8_t*) StringBuffer);
-#endif
+        if (tShortPromptLength > STRING_BUFFER_STACK_SIZE) {
+            tShortPromptLength = STRING_BUFFER_STACK_SIZE;
         }
+        char StringBuffer[STRING_BUFFER_STACK_SIZE];
+        strncpy_P(StringBuffer, aPGMShortPromptString, tShortPromptLength);
+#if (FLASHEND > 65535)
+        sendUSARTArgsAndByteBuffer(FUNCTION_GET_NUMBER_WITH_SHORT_PROMPT, 2, aNumberHandler, aNumberHandler,
+                (reinterpret_cast<uint32_t>(aNumberHandler) >> 16), tShortPromptLength, (uint8_t*) StringBuffer);
+#else
+        sendUSARTArgsAndByteBuffer(FUNCTION_GET_NUMBER_WITH_SHORT_PROMPT, 1, aNumberHandler, tShortPromptLength,
+                (uint8_t*) StringBuffer);
+#endif
     }
 }
 
@@ -874,18 +946,20 @@ BDButtonHandle_t BlueDisplay::createButtonPGM(uint16_t aPositionX, uint16_t aPos
     BDButtonHandle_t tButtonNumber = sLocalButtonIndex++;
     if (USART_isBluetoothPaired()) {
         uint8_t tCaptionLength = strlen_P(aPGMCaption);
-        if (tCaptionLength < STRING_BUFFER_STACK_SIZE) {
-            char StringBuffer[STRING_BUFFER_STACK_SIZE];
-            strcpy_P(StringBuffer, aPGMCaption);
-#if (FLASHEND > 65535)
-            sendUSARTArgsAndByteBuffer(FUNCTION_BUTTON_CREATE, 10, tButtonNumber, aPositionX, aPositionY, aWidthX, aHeightY,
-                    aButtonColor, aCaptionSize | (aFlags << 8), aValue, aOnTouchHandler,
-                    (reinterpret_cast<uint32_t>(aOnTouchHandler) >> 16), tCaptionLength, StringBuffer);
-#else
-            sendUSARTArgsAndByteBuffer(FUNCTION_BUTTON_CREATE, 9, tButtonNumber, aPositionX, aPositionY, aWidthX, aHeightY,
-                    aButtonColor, aCaptionSize | (aFlags << 8), aValue, aOnTouchHandler, tCaptionLength, StringBuffer);
-#endif
+        if (tCaptionLength > STRING_BUFFER_STACK_SIZE) {
+            tCaptionLength = STRING_BUFFER_STACK_SIZE;
         }
+        char StringBuffer[STRING_BUFFER_STACK_SIZE];
+        strncpy_P(StringBuffer, aPGMCaption, tCaptionLength);
+#if (FLASHEND > 65535)
+        sendUSARTArgsAndByteBuffer(FUNCTION_BUTTON_CREATE, 10, tButtonNumber, aPositionX, aPositionY, aWidthX, aHeightY,
+                aButtonColor, aCaptionSize | (aFlags << 8), aValue, aOnTouchHandler,
+                (reinterpret_cast<uint32_t>(aOnTouchHandler) >> 16), tCaptionLength, StringBuffer);
+#else
+        sendUSARTArgsAndByteBuffer(FUNCTION_BUTTON_CREATE, 9, tButtonNumber, aPositionX, aPositionY, aWidthX, aHeightY,
+                aButtonColor, aCaptionSize | (aFlags << 8), aValue, aOnTouchHandler, tCaptionLength, StringBuffer);
+#endif
+
     }
     return tButtonNumber;
 }
@@ -893,16 +967,17 @@ BDButtonHandle_t BlueDisplay::createButtonPGM(uint16_t aPositionX, uint16_t aPos
 void BlueDisplay::setButtonCaptionPGM(BDButtonHandle_t aButtonNumber, const char * aPGMCaption, bool doDrawButton) {
     if (USART_isBluetoothPaired()) {
         uint8_t tCaptionLength = strlen_P(aPGMCaption);
-        if (tCaptionLength < STRING_BUFFER_STACK_SIZE) {
-            char StringBuffer[STRING_BUFFER_STACK_SIZE];
-            strcpy_P(StringBuffer, aPGMCaption);
-
-            uint8_t tFunctionCode = FUNCTION_BUTTON_SET_CAPTION;
-            if (doDrawButton) {
-                tFunctionCode = FUNCTION_BUTTON_SET_CAPTION_AND_DRAW_BUTTON;
-            }
-            sendUSARTArgsAndByteBuffer(tFunctionCode, 1, aButtonNumber, tCaptionLength, StringBuffer);
+        if (tCaptionLength > STRING_BUFFER_STACK_SIZE) {
+            tCaptionLength = STRING_BUFFER_STACK_SIZE;
         }
+        char StringBuffer[STRING_BUFFER_STACK_SIZE];
+        strncpy_P(StringBuffer, aPGMCaption, tCaptionLength);
+
+        uint8_t tFunctionCode = FUNCTION_BUTTON_SET_CAPTION;
+        if (doDrawButton) {
+            tFunctionCode = FUNCTION_BUTTON_SET_CAPTION_AND_DRAW_BUTTON;
+        }
+        sendUSARTArgsAndByteBuffer(tFunctionCode, 1, aButtonNumber, tCaptionLength, StringBuffer);
     }
 }
 #endif
@@ -1158,7 +1233,7 @@ void BlueDisplay::drawStar(int aXPos, int aYPos, int tOffsetCenter, int tLength,
         Color_t aColor) {
 
     int X = aXPos + tOffsetCenter;
-    // first right then left lines
+// first right then left lines
     for (int i = 0; i < 2; i++) {
         drawLineRel(X, aYPos, tLength, 0, aColor);
         // < 45 degree
@@ -1169,7 +1244,7 @@ void BlueDisplay::drawStar(int aXPos, int aYPos, int tOffsetCenter, int tLength,
     }
 
     int Y = aYPos + tOffsetCenter;
-    // first lower then upper lines
+// first lower then upper lines
     for (int i = 0; i < 2; i++) {
         drawLineRel(aXPos, Y, 0, tLength, aColor);
         drawLineRel(aXPos - tOffsetDiagonal, Y, -aLengthDiagonal, tLength, aColor);

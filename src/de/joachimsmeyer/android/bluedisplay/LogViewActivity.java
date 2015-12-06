@@ -38,6 +38,7 @@ import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowManager;
 import android.widget.AdapterView;
 import android.widget.AdapterView.OnItemClickListener;
 import android.widget.ArrayAdapter;
@@ -46,6 +47,7 @@ import android.widget.TextView;
 
 public class LogViewActivity extends ListActivity {
 	LogViewActivity sInstance;
+
 	@Override
 	public void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
@@ -80,6 +82,20 @@ public class LogViewActivity extends ListActivity {
 				tAlertDialog.show();
 			}
 		});
+	}
+
+	@Override
+	public synchronized void onResume() {
+		super.onResume();
+		// set window to always on
+		getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+	}
+
+	@Override
+	public synchronized void onPause() {
+		super.onPause();
+		// set window to normal (not persistent) state
+		getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 	}
 
 	private class ColoredLogAdapter extends ArrayAdapter<String> {

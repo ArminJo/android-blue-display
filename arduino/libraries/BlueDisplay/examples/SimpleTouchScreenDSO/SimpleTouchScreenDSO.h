@@ -19,13 +19,38 @@
  */
 #define HC_05_BAUD_RATE BAUD_115200
 
-// Display size
+/*
+ *  Display size
+ */
 const int DISPLAY_HEIGHT = 256;
 const int DISPLAY_WIDTH = 320;
 
 #define THOUSANDS_SEPARATOR '.'
 
-#define MAX_ADC_CHANNEL 5
+/*
+ * Pins on port D
+ * AC/DC, attenuator control, AC/DC sense and external trigger input
+ */
+#define CONTROL_PORT PORTD
+#define CONTROL_DDR  DDRD
+#define EXTERN_TRIGGER_INPUT_PIN 2
+#define AC_DC_PIN        3  // PCINT19
+#define ATTENUATOR_MASK 0x18 // Bit 4+5
+#define CONTROL_MASK    0xF0 // Bit 4-7
+// did not choose pin 2 since pin2 may get noise from TX pin
+#define ATTENUATOR_0_PIN 4
+#define ATTENUATOR_1_PIN 5
+#define AC_DC_RELAIS_PIN_1 6
+#define AC_DC_RELAIS_PIN_2 7
+
+/*
+ * Pins on port B
+ */
+#define OUTPUT_MASK_PORTB   0X0C
+#define ATTENUATOR_DETECT_PIN_0 8 // PortB0
+#define ATTENUATOR_DETECT_PIN_1 9
+#define TIMER_1_OUTPUT_PIN 10 // Frequency generation OC1B TIMER1
+#define VEE_PIN 11 // OC2A TIMER2 Square wave for VEE (-5V) generation
 
 /*
  * COLORS
@@ -48,10 +73,9 @@ const int DISPLAY_WIDTH = 320;
 #define COLOR_TIMING_LINES RGB(0x00,0x98,0x00)
 
 // GUI element colors
-#define COLOR_GUI_CONTROL RGB(0xC0,0x00,0x00)
-#define COLOR_GUI_TRIGGER RGB(0x00,0x00,0xD0) // blue
-#define COLOR_GUI_SOURCE_TIMEBASE RGB(0x00,0x90,0x00)
-#define COLOR_GUI_DISPLAY_CONTROL RGB(0xC8,0xC8,0x00)
+#define COLOR_GUI_CONTROL RGB(0xE8,0x00,0x00)
+#define COLOR_GUI_TRIGGER RGB(0x00,0x00,0xFF) // blue
+#define COLOR_GUI_SOURCE_TIMEBASE RGB(0x00,0xE0,0x00)
 
 #define COLOR_INFO_BACKGROUND RGB(0xC8,0xC8,0x00)
 
@@ -60,11 +84,14 @@ const int DISPLAY_WIDTH = 320;
 /*
  * POSITIONS + SIZES
  */
+#define INFO_UPPER_MARGIN (1 + TEXT_SIZE_11_ASCEND)
+#define INFO_LEFT_MARGIN 0
+
 #define FONT_SIZE_INFO_SHORT        TEXT_SIZE_18    // for 1 line info
-#define FONT_SIZE_INFO_LONG         TEXT_SIZE_11    // for 3 lines info
-#define FONT_SIZE_INFO_SHORT_ASC    TEXT_SIZE_18_ASCEND    // for 3 lines info
-#define FONT_SIZE_INFO_LONG_ASC     TEXT_SIZE_11_ASCEND    // for 3 lines info
-#define FONT_SIZE_INFO_LONG_WIDTH   TEXT_SIZE_11_WIDTH    // for 3 lines info
+#define FONT_SIZE_INFO_LONG         TEXT_SIZE_11    // for 2 lines info
+#define FONT_SIZE_INFO_SHORT_ASC    TEXT_SIZE_18_ASCEND
+#define FONT_SIZE_INFO_LONG_ASC     TEXT_SIZE_11_ASCEND
+#define FONT_SIZE_INFO_LONG_WIDTH   TEXT_SIZE_11_WIDTH
 
 #define SLIDER_SIZE 24
 #define SLIDER_VPICKER_POS_X        0 // Position of slider
@@ -78,12 +105,30 @@ const int DISPLAY_WIDTH = 320;
 #define TRIGGER_LEVEL_INFO_SHORT_Y  (FONT_SIZE_INFO_SHORT + FONT_SIZE_INFO_SHORT_ASC)
 #define TRIGGER_LEVEL_INFO_LONG_Y   FONT_SIZE_INFO_LONG_ASC
 
+/*
+ * Trigger values
+ */
 #define TRIGGER_MODE_AUTO 0
 #define TRIGGER_MODE_MANUAL 1
-#define TRIGGER_MODE_FREE 2
+#define TRIGGER_MODE_FREE 2 // waits at least 23 ms (255 samples) for trigger
+#define TRIGGER_MODE_EXTERN 3
+
+#define TRIGGER_DELAY_NONE 0
+#define TRIGGER_DELAY_MICROS 1
+#define TRIGGER_DELAY_MILLIS 2
+
+#define TRIGGER_DELAY_MICROS_ISR_ADJUST_COUNT 4 // estimated value to be subtracted from value because of ISR initial delay
+
+
+// States of tTriggerStatus
+#define TRIGGER_STATUS_START 0 // No trigger condition met
+#define TRIGGER_STATUS_BEFORE_THRESHOLD 1 // slope condition met, wait to go beyond threshold hysteresis
+#define TRIGGER_STATUS_FOUND 2 // Trigger condition met - Used for shorten ISR handling
+#define TRIGGER_STATUS_FOUND_AND_WAIT_FOR_DELAY 3 // Trigger condition met and waiting for ms delay
+#define TRIGGER_STATUS_FOUND_AND_NOW_GET_ONE_VALUE 4 // Trigger condition met (and delay gone), now get first value for min/max initialization
 
 /*
- * EXTERNAL ATTENUATOR
+ * External attenuator values
  */
 #define ATTENUATOR_TYPE_NO_ATTENUATOR 0
 #define ATTENUATOR_TYPE_FIXED_ATTENUATOR 1  // assume manual AC/DC switch
@@ -92,12 +137,13 @@ const int DISPLAY_WIDTH = 320;
 #define ATTENUATOR_TYPE_ACTIVE_ATTENUATOR 2 // and 3
 #define NUMBER_OF_CHANNEL_WITH_ACTIVE_ATTENUATOR 2
 
+#define MAX_ADC_CHANNEL 5
+
 struct MeasurementControlStruct {
     // State
     bool isRunning;
     bool StopRequested;
-    // Trigger flag for ISR and single shot mode
-    bool searchForTrigger;
+    // Used to disable trigger timeout and to specify full buffer read with stop after first read.
     bool isSingleShotMode;
 
     float VCC; // Volt of VCC
@@ -120,10 +166,15 @@ struct MeasurementControlStruct {
     uint16_t TriggerLevelLower;
     uint16_t ValueBeforeTrigger;
 
+    uint32_t TriggerDelayMillisEnd; // value of millis() at end of milliseconds trigger delay
+    uint16_t TriggerDelayMillisOrMicros;
+    uint8_t TriggerDelay; //  TRIGGER_DELAY_NONE 0, TRIGGER_DELAY_MICROS 1, TRIGGER_DELAY_MILLIS 2
+
     uint8_t TriggerMode; // adjust values automatically
     bool OffsetAutomatic; // false -> offset = 0 Volt
-    uint8_t TriggerStatus;
-    uint16_t TriggerSampleCount; // for trigger timeout
+    uint8_t TriggerStatus; //TRIGGER_STATUS_START 0, TRIGGER_STATUS_BEFORE_THRESHOLD 1, TRIGGER_STATUS_OK 2
+    uint8_t TriggerSampleCountPrecaler; // for dividing sample count by 256 - to avoid 32bit variables in ISR
+    uint16_t TriggerSampleCountDividedBy256; // for trigger timeout
     uint16_t TriggerTimeoutSampleCount; // ISR max samples before trigger timeout
 
     // Statistics (for info and auto trigger)
@@ -138,6 +189,7 @@ struct MeasurementControlStruct {
     // Timebase
     bool TimebaseFastFreerunningMode;
     uint8_t TimebaseIndex;
+    uint8_t TimebaseHWValue;
     // volatile saves 2 registers push in ISR
     // delay loop duration - 1/4 micros resolution
     volatile uint16_t TimebaseDelay;

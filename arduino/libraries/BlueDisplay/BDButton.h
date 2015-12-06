@@ -76,7 +76,7 @@ public:
     bool operator!=(const BDButton &aButton);
 
     void init(uint16_t aPositionX, uint16_t aPositionY, uint16_t aWidthX, uint16_t aHeightY, Color_t aButtonColor,
-            const char * aCaption, uint8_t aCaptionSize, uint8_t aFlags, int16_t aValue,
+            const char * aCaption, uint16_t aCaptionSize, uint8_t aFlags, int16_t aValue,
             void (*aOnTouchHandler)(BDButton*, int16_t));
 
     void drawButton(void);

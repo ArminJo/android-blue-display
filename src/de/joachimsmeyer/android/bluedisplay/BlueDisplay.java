@@ -114,6 +114,8 @@ public class BlueDisplay extends Activity {
 	 */
 	protected RPCView mRPCView;
 
+	Toast mMyToast;
+
 	/*
 	 * Bluetooth socket handler
 	 */
@@ -362,7 +364,11 @@ public class BlueDisplay extends Activity {
 				Intent tDeviceListIntent = new Intent(this, DeviceListActivity.class);
 				startActivityForResult(tDeviceListIntent, REQUEST_CONNECT_DEVICE);
 			} else if (mSerialService.getState() == BluetoothSerialService.STATE_CONNECTED) {
+				// TODO ??? reset locked orientation in turn
 				// disconnect request here -> stop running service + reset locked orientation in turn
+				// send disconnect message
+				mSerialService.writeTwoIntegerEvent(BluetoothSerialService.EVENT_DISCONNECT, mRPCView.mActualViewWidth,
+						mRPCView.mActualViewHeight);
 				mSerialService.stop();
 			}
 			return true;
@@ -450,9 +456,9 @@ public class BlueDisplay extends Activity {
 				// set window to always on and reset all structures and flags
 				getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
-				Toast.makeText(getApplicationContext(),
-						getString(R.string.toast_connected_to) + " " + mSerialService.mConnectedDeviceName, Toast.LENGTH_SHORT)
-						.show();
+				mMyToast = Toast.makeText(getApplicationContext(),
+						getString(R.string.toast_connected_to) + " " + mSerialService.mConnectedDeviceName, Toast.LENGTH_SHORT);
+				mMyToast.show();
 				break;
 
 			case MESSAGE_DISCONNECT:
@@ -610,7 +616,8 @@ public class BlueDisplay extends Activity {
 		final boolean tDoNumber = aDoNumber;
 		final EditText tUserInput = (EditText) tInputView.findViewById(R.id.editTextDialogUserInput);
 		if (aDoNumber) {
-			tUserInput.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+			tUserInput.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL
+					| InputType.TYPE_NUMBER_FLAG_SIGNED);
 		}
 		if (aInitialValue != Integer.MIN_VALUE) {
 			tUserInput.setText(Integer.toString(aInitialValue));

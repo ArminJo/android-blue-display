@@ -85,7 +85,7 @@ public class TouchButton {
 	boolean mIsInitialized;
 	static int sTouchBeepIndex = ToneGenerator.TONE_CDMA_KEYPAD_VOLUME_KEY_LITE;
 	static ToneGenerator sToneGenerator;
-	static int sActualToneDurationMillis = -1;
+	static int sActualToneDurationMillis = -1; // -1 means till end of tone or forever
 	static int sActualToneVolume;
 
 	static int sDefaultButtonColor = Color.RED;
@@ -148,9 +148,19 @@ public class TouchButton {
 		sTouchBeepIndex = ToneGenerator.TONE_CDMA_KEYPAD_VOLUME_KEY_LITE;
 	}
 
+	/*
+	 * Old pre 3.2.5 version
+	 */
 	void initButton(final RPCView aRPCView, final int aPositionX, final int aPositionY, final int aWidthX, final int aHeightY,
 			final int aButtonColor, final String aCaptionForLogging, final String[] aCaptionArray, final int aCaptionSizeAndFlags,
 			final int aValue, final int aCallbackAddress) {
+		initButton(aRPCView, aPositionX, aPositionY, aWidthX, aHeightY, aButtonColor, aCaptionForLogging, aCaptionArray,
+				aCaptionSizeAndFlags & 0xFF, aCaptionSizeAndFlags >> 8, aValue, aCallbackAddress);
+	}
+
+	void initButton(final RPCView aRPCView, final int aPositionX, final int aPositionY, final int aWidthX, final int aHeightY,
+			final int aButtonColor, final String aCaptionForLogging, final String[] aCaptionArray, final int aCaptionSize,
+			final int aFlags, final int aValue, final int aCallbackAddress) {
 		mRPCView = aRPCView;
 
 		mEscapedCaption = aCaptionForLogging; // for logging purposes do it here
@@ -166,7 +176,7 @@ public class TouchButton {
 		mCallbackAddress = aCallbackAddress;
 		mCaptionColor = sDefaultCaptionColor;
 
-		mCaptionSize = aCaptionSizeAndFlags & 0xFF;
+		mCaptionSize = aCaptionSize;
 		positionCaption();
 
 		if (aButtonColor == 0) {
@@ -176,7 +186,7 @@ public class TouchButton {
 		/*
 		 * local flags
 		 */
-		int tFlags = aCaptionSizeAndFlags >> 8;
+		int tFlags = aFlags;
 		mDoBeep = false;
 		mIsRedGreen = false;
 		mIsAutorepeatButton = false;
@@ -227,9 +237,9 @@ public class TouchButton {
 				if (mCaptionSize * mCaptionStrings.length >= mHeight) {
 					// Font height to big
 					MyLog.w(LOG_TAG, "caption\"" + mEscapedCaption + "\" with " + mCaptionStrings.length + " lines to high");
-					mCaptionPositionY = mPositionY + (int) (0.76 * mCaptionSize); // Fallback - start at top + ascend
+					mCaptionPositionY = mPositionY + (int) ((0.76 * mCaptionSize) + 0.5); // Fallback - start at top + ascend
 				} else {
-					mCaptionPositionY = (mPositionY + ((mHeight - mCaptionSize * (mCaptionStrings.length)) / 2) + (int) (0.76 * mCaptionSize));
+					mCaptionPositionY = (mPositionY + ((mHeight - mCaptionSize * (mCaptionStrings.length)) / 2) + (int) ((0.76 * mCaptionSize) + 0.5));
 				}
 				mCaptionPositionX = -1; // to indicate multiline caption
 
@@ -237,7 +247,7 @@ public class TouchButton {
 				/*
 				 * Single line caption - just try to position the string in the middle of the box
 				 */
-				int tLength = (int) (0.6 * mCaptionSize * mEscapedCaption.length());
+				int tLength = (int) ((0.6 * mCaptionSize * mEscapedCaption.length()) + 0.5);
 				if (tLength >= mWidth) {
 					// String too long here
 					mCaptionPositionX = mPositionX;
@@ -251,7 +261,7 @@ public class TouchButton {
 					MyLog.w(LOG_TAG, "caption\"" + mEscapedCaption + "\" to high");
 				}
 				// (0.76 * mCaptionSize) is Ascend
-				mCaptionPositionY = (int) (mPositionY + ((mHeight - mCaptionSize) / 2) + (0.76 * mCaptionSize));
+				mCaptionPositionY = (int) ((mPositionY + ((mHeight - mCaptionSize) / 2) + (0.76 * mCaptionSize)) + 0.5);
 			}
 		}
 	}
@@ -270,7 +280,7 @@ public class TouchButton {
 				// Multiline caption
 				for (int i = 0; i < mCaptionStrings.length; i++) {
 					// try to position the string in the middle of the box
-					int tLength = (int) (0.6 * mCaptionSize * mCaptionStrings[i].length());
+					int tLength = (int) ((0.6 * mCaptionSize * mCaptionStrings[i].length())+ 0.5);
 					int tCaptionPositionX;
 					if (tLength >= mWidth) {
 						// String too long here
@@ -306,9 +316,12 @@ public class TouchButton {
 
 	/**
 	 * Check if touch event is in button area if yes - call callback function and return true if no - return false
+	 * 
+	 * @param aJustCheck
+	 * @return true if any active button touched
 	 */
 	boolean checkIfTouchInButton(int aTouchPositionX, int aTouchPositionY, boolean aJustCheck) {
-		if (mIsActive && mCallbackAddress != 0 && checkButtonInArea(aTouchPositionX, aTouchPositionY)) {
+		if (mIsActive && mCallbackAddress != 0 && checkIfTouchInButton(aTouchPositionX, aTouchPositionY)) {
 			if (!aJustCheck) {
 				/*
 				 * Touch position is in button - call callback function
@@ -316,8 +329,8 @@ public class TouchButton {
 				if (mDoBeep) {
 					sToneGenerator.startTone(sTouchBeepIndex, sActualToneDurationMillis);
 				}
-				mRPCView.mBlueDisplayContext.mSerialService.writeGuiCallbackEvent(
-						BluetoothSerialService.EVENT_BUTTON_CALLBACK_ACTION, mListIndex, mCallbackAddress, mValue);
+				mRPCView.mBlueDisplayContext.mSerialService.writeGuiCallbackEvent(BluetoothSerialService.EVENT_BUTTON_CALLBACK,
+						mListIndex, mCallbackAddress, mValue);
 				/*
 				 * Handle autorepeat
 				 */
@@ -342,8 +355,9 @@ public class TouchButton {
 	 * 
 	 * @param aTouchPositionX
 	 * @param aTouchPositionY
-	 * @param doCallback
-	 * @return true if a match was found
+	 * @param aJustCheck
+	 *            - do not call callback function of button
+	 * @return number of button if touched else -1
 	 */
 	static int checkAllButtons(int aTouchPositionX, int aTouchPositionY, boolean aJustCheck) {
 		// walk through list of active elements
@@ -353,6 +367,14 @@ public class TouchButton {
 			}
 		}
 		return -1;
+	}
+
+	static boolean checkIfTouchInButton(final int aTouchPositionX, final int aTouchPositionY, final int aButtonNumber) {
+		TouchButton tButton = sButtonList.get(aButtonNumber);
+		if (tButton.mIsActive) {
+			return tButton.checkIfTouchInButton(aTouchPositionX, aTouchPositionY, false);
+		}
+		return false;
 	}
 
 	/**
@@ -383,7 +405,7 @@ public class TouchButton {
 	/**
 	 * Check if touch event is in button area if yes - return true if no - return false
 	 */
-	private boolean checkButtonInArea(int aTouchPositionX, int aTouchPositionY) {
+	private boolean checkIfTouchInButton(int aTouchPositionX, int aTouchPositionY) {
 		if (aTouchPositionX < mPositionX || aTouchPositionX > mPositionX + mWidth || aTouchPositionY < mPositionY
 				|| aTouchPositionY > (mPositionY + mHeight)) {
 			return false;
@@ -395,13 +417,13 @@ public class TouchButton {
 	private final Handler mAutorepeatHandler = new Handler() {
 		@Override
 		public void handleMessage(Message msg) {
-			if (mRPCView.mTouchIsActive) {
+			if (mRPCView.mTouchIsActive[0]) {
 				// send click
 				if (mDoBeep) {
 					sToneGenerator.startTone(sTouchBeepIndex, sActualToneDurationMillis);
 				}
-				mRPCView.mBlueDisplayContext.mSerialService.writeGuiCallbackEvent(
-						BluetoothSerialService.EVENT_BUTTON_CALLBACK_ACTION, mListIndex, mCallbackAddress, mValue);
+				mRPCView.mBlueDisplayContext.mSerialService.writeGuiCallbackEvent(BluetoothSerialService.EVENT_BUTTON_CALLBACK,
+						mListIndex, mCallbackAddress, mValue);
 				if (sAutorepeatState == BUTTON_AUTOREPEAT_FIRST_PERIOD) {
 					sAutorepeatCount--;
 					if (sAutorepeatCount <= 0) {
@@ -476,7 +498,7 @@ public class TouchButton {
 
 		case FUNCTION_BUTTON_GLOBAL_SETTINGS:
 			if ((aParameters[0] & FLAG_BUTTON_GLOBAL_USE_UP_EVENTS_FOR_BUTTONS) != 0) {
-				if (aRPCView.mTouchIsActive && !aRPCView.mUseUpEventForButtons) {
+				if (aRPCView.mTouchIsActive[0] && !aRPCView.mUseUpEventForButtons) {
 					// since we switched mode while button was down
 					aRPCView.mDisableButtonUpOnce = true;
 				}
@@ -676,10 +698,16 @@ public class TouchButton {
 			aRPCView.myConvertChars(aDataBytes, RPCView.sCharsArray, aDataLength);
 			tButtonCaption = new String(RPCView.sCharsArray, 0, aDataLength);
 			tString = tButtonCaption.replaceAll("\n", " | ");
-			int tCallbackAddress = aParameters[8] & 0x0000FFFF;
-			if (aParamsLength == 10) {
+			int tCallbackAddress;
+			if (aParamsLength == 9) {
+				// pre 3.2.5 parameters
+				tCallbackAddress = aParameters[8] & 0x0000FFFF;
+			} else {
+				tCallbackAddress = aParameters[9] & 0x0000FFFF;
+			}
+			if (aParamsLength == 11) {
 				// 32 bit callback address
-				tCallbackAddress = tCallbackAddress | (aParameters[9] << 16);
+				tCallbackAddress = tCallbackAddress | (aParameters[10] << 16);
 			}
 
 			if (tButton == null) {
@@ -699,19 +727,38 @@ public class TouchButton {
 				}
 				tButton.mListIndex = tButtonNumber;
 			}
+			if (aParamsLength == 9) {
+				// pre 3.2.5 parameters
+				if (MyLog.isINFO()) {
+					MyLog.i(LOG_TAG,
+							"Create button. ButtonNr=" + tButtonNumber + ", new TouchButton(\"" + tString + "\", x="
+									+ aParameters[1] + ", y=" + aParameters[2] + ", width=" + aParameters[3] + ", height="
+									+ aParameters[4] + ", color=" + RPCView.shortToColorString(aParameters[5]) + ", flags="
+									+ Integer.toHexString((aParameters[6] >> 8)) + ", size=" + (aParameters[6] & 0xFF) + ", value="
+									+ aParameters[7] + ", callback=0x" + Integer.toHexString(tCallbackAddress) + ") ListSize="
+									+ sButtonList.size());
+				}
 
-			if (MyLog.isINFO()) {
-				MyLog.i(LOG_TAG,
-						"Create button. ButtonNr=" + tButtonNumber + ", new TouchButton(\"" + tString + "\", x=" + aParameters[1]
-								+ ", y=" + aParameters[2] + ", width=" + aParameters[3] + ", height=" + aParameters[4] + ", color="
-								+ RPCView.shortToColorString(aParameters[5]) + ", flags=" + aParameters[6] + ", value="
-								+ aParameters[7] + ", callback=0x" + Integer.toHexString(tCallbackAddress) + ") ListSize="
-								+ sButtonList.size());
+				tButton.initButton(aRPCView, aParameters[1], aParameters[2], aParameters[3], aParameters[4],
+						RPCView.shortToLongColor(aParameters[5]), tString, tButtonCaption.split("\n"), aParameters[6],
+						aParameters[7], tCallbackAddress);
+			} else {
+				// new Parameter set since version 3.2.5
+				if (MyLog.isINFO()) {
+					MyLog.i(LOG_TAG,
+							"Create button. ButtonNr=" + tButtonNumber + ", new TouchButton(\"" + tString + "\", x="
+									+ aParameters[1] + ", y=" + aParameters[2] + ", width=" + aParameters[3] + ", height="
+									+ aParameters[4] + ", color=" + RPCView.shortToColorString(aParameters[5]) + ", size="
+									+ aParameters[6] + ", flags=" + Integer.toHexString(aParameters[7]) + ", value="
+									+ aParameters[8] + ", callback=0x" + Integer.toHexString(tCallbackAddress) + ") ListSize="
+									+ sButtonList.size());
+				}
+
+				tButton.initButton(aRPCView, aParameters[1], aParameters[2], aParameters[3], aParameters[4],
+						RPCView.shortToLongColor(aParameters[5]), tString, tButtonCaption.split("\n"), aParameters[6],
+						aParameters[7], aParameters[8], tCallbackAddress);
+
 			}
-
-			tButton.initButton(aRPCView, aParameters[1], aParameters[2], aParameters[3], aParameters[4],
-					RPCView.shortToLongColor(aParameters[5]), tString, tButtonCaption.split("\n"), aParameters[6], aParameters[7],
-					tCallbackAddress);
 			break;
 
 		default:

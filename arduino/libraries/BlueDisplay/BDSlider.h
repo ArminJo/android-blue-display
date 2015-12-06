@@ -75,8 +75,8 @@ public:
      * @param aOptions see #FLAG_SLIDER_SHOW_BORDER etc.
      * @param aOnChangeHandler - if NULL no update of bar is done on touch
      */
-    void init(uint16_t aPositionX, uint16_t aPositionY, uint8_t aBarWidth, int16_t aBarLength,
-            int16_t aThresholdValue, int16_t aInitalValue, Color_t aSliderColor, Color_t aBarColor, uint8_t aFlags,
+    void init(uint16_t aPositionX, uint16_t aPositionY, uint16_t aBarWidth, int16_t aBarLength, int16_t aThresholdValue,
+            int16_t aInitalValue, Color_t aSliderColor, Color_t aBarColor, uint8_t aFlags,
             void (*aOnChangeHandler)(BDSlider *, uint16_t));
 
     void drawSlider(void);
@@ -86,12 +86,14 @@ public:
     void setBarThresholdColor(Color_t aBarThresholdColor);
     void setBarBackgroundColor(Color_t aBarBackgroundColor);
 
-    void setCaptionProperties(uint8_t aCaptionSize, uint8_t aCaptionPosition, uint8_t aCaptionMargin,
-            Color_t aCaptionColor, Color_t aCaptionBackgroundColor);
+    void setCaptionProperties(uint8_t aCaptionSize, uint8_t aCaptionPosition, uint8_t aCaptionMargin, Color_t aCaptionColor,
+            Color_t aCaptionBackgroundColor);
     void setCaption(const char * aCaption);
     void setPrintValueProperties(uint8_t aPrintValueSize, uint8_t aPrintValuePosition, uint8_t aPrintValueMargin,
             Color_t aPrintValueColor, Color_t aPrintValueBackgroundColor);
     void printValue(const char * aValueString);
+    void setScaleFactor(float aScaleFactorX, float aScaleFactorY);
+    void setValueScaleFactor(float aScaleFactorValue);
 
     void activate(void);
     void deactivate(void);
