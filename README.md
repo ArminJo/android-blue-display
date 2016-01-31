@@ -22,18 +22,20 @@ No Android programming needed!
 - C++ Libraries for Arduino and ARM (STM).
 
 ### Example for Hex + ASCII output:
-V BTSerial RawData=00 4C 13 A5 01 08 00 53 65 74 74 69 6E 67 73 A5 | ??L???Settings?
-V BTSerial RawData=70 12 00 04 00 00 00 00 00 60 00 34 00 00 F8 0B | p????????????`??4?????
-V BTSerial RawData=03 00 00 30 21 A5 01 07 00 48 69 73 74 6F 72 79 | ????0!???History
+```
+V BTSerial RawData=00 4C 13 A5 01 08 00 53 65 74 74 69 6E 67 73 A5 |  L      Settings 
+V BTSerial RawData=70 12 00 04 00 00 00 00 00 60 00 34 00 00 F8 0B | p             ` 
+V BTSerial RawData=03 00 00 30 21 A5 01 07 00 48 69 73 74 6F 72 79 |   0!     History
+```
 
 ## Hint
 To enable programming of the Arduino while the HC-05 module is connected, use a diode to connect Arduino rx and HC-05 tx.
-<pre>
-	                  |\ |
-		Arduino-rx ___| \|___ HC-05-tx
-	                  | /|
-	                  |/ |
-</pre>
+```
+                 |\ |
+   Arduino-rx ___| \|___ HC-05-tx
+                 | /|
+                 |/ |
+```
 
 Fritzing schematics
 ![Fritzing schematics](https://github.com/ArminJo/android-blue-display/blob/gh-pages/schematics/BlueDisplayBlink_Steckplatine.png)
