@@ -64,17 +64,6 @@ void doGetOffset(BDButton * aTheTouchedButton, int16_t aValue) {
 }
 
 /*
- * Function used as callback handler for redraw too
- */
-void drawGui(void) {
-    BlueDisplay1.clearDisplay(COLOR_BLUE);
-    BlueDisplay1.drawText(sCaptionStartX, sCaptionTextSize, "Distance", sCaptionTextSize, COLOR_WHITE, COLOR_BLUE);
-    SliderShowDistance.drawSlider();
-    TouchButtonStartStop.drawButton();
-    TouchButtonOffset.drawButton();
-}
-
-/*
  * Handle change from landscape to portrait
  */
 void handleConnectAndReorientation(void) {
@@ -110,6 +99,18 @@ void handleConnectAndReorientation(void) {
 
     TouchButtonOffset.init(BUTTON_WIDTH_3_DYN_POS_3, BUTTON_HEIGHT_5_DYN_LINE_5, BUTTON_WIDTH_3_DYN, BUTTON_HEIGHT_5_DYN, COLOR_RED,
             "Offset", sCaptionTextSize / 3, BUTTON_FLAG_DO_BEEP_ON_TOUCH, 0, &doGetOffset);
+}
+
+
+/*
+ * Function used as callback handler for redraw event
+ */
+void drawGui(void) {
+    BlueDisplay1.clearDisplay(COLOR_BLUE);
+    BlueDisplay1.drawText(sCaptionStartX, sCaptionTextSize, "Distance", sCaptionTextSize, COLOR_WHITE, COLOR_BLUE);
+    SliderShowDistance.drawSlider();
+    TouchButtonStartStop.drawButton();
+    TouchButtonOffset.drawButton();
 }
 
 void setup(void) {
@@ -163,10 +164,10 @@ void loop(void) {
         sCentimeterNew = (tPulseLength / 58) + 1 - sOffset;
         if (sCentimeterNew != sCentimeterOld) {
             if (sActualDisplayHeight > 0) {
-                uint16_t tPosition = BlueDisplay1.drawUnsignedByte(getTextWidth(sCaptionTextSize * 2), sValueStartY, sCentimeterNew,
+                uint16_t tCmXPosition = BlueDisplay1.drawUnsignedByte(getTextWidth(sCaptionTextSize * 2), sValueStartY, sCentimeterNew,
                         sCaptionTextSize * 2, COLOR_YELLOW,
                         COLOR_BLUE);
-                BlueDisplay1.drawText(tPosition, sValueStartY, "cm", sCaptionTextSize, COLOR_WHITE, COLOR_BLUE);
+                BlueDisplay1.drawText(tCmXPosition, sValueStartY, "cm", sCaptionTextSize, COLOR_WHITE, COLOR_BLUE);
                 SliderShowDistance.setActualValueAndDrawBar(sCentimeterNew);
             }
             if (sCentimeterNew >= 40 || !doTone) {

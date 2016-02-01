@@ -1,9 +1,9 @@
 /*
  * BlueDisplay.cpp
- * C stub for Android BlueDisplay app and the local MI0283QT2 Display from Watterott.
+ * C stub for Android BlueDisplay app (and the local MI0283QT2 Display from Watterott).
  * It implements a few display test functions.
  *
- *   SUMMARY
+ *  SUMMARY
  *  Blue Display is an Open Source Android remote Display for Arduino etc.
  *  It receives basic draw requests from Arduino etc. over Bluetooth and renders it.
  *  It also implements basic GUI elements as buttons and sliders.
@@ -1138,7 +1138,7 @@ uint16_t getTextAscend(uint16_t aTextSize) {
     if (aTextSize == TEXT_SIZE_22) {
         return TEXT_SIZE_22_ASCEND;
     }
-    uint16_t tRetvalue = aTextSize;
+    uint32_t tRetvalue = aTextSize;
     tRetvalue = ((tRetvalue * 195) + 128) >> 8;
     return tRetvalue;
 #endif
@@ -1160,7 +1160,7 @@ uint16_t getTextDecend(uint16_t aTextSize) {
     if (aTextSize == TEXT_SIZE_22) {
         return TEXT_SIZE_22_ASCEND;
     }
-    uint16_t tRetvalue = aTextSize;
+    uint32_t tRetvalue = aTextSize;
     tRetvalue = ((tRetvalue * 61) + 128) >> 8;
     return tRetvalue;
 #endif
@@ -1181,7 +1181,7 @@ uint16_t getTextAscendMinusDescend(uint16_t aTextSize) {
     if (aTextSize == TEXT_SIZE_22) {
         return TEXT_SIZE_22_ASCEND - TEXT_SIZE_22_DECEND;
     }
-    uint16_t tRetvalue = aTextSize;
+    uint32_t tRetvalue = aTextSize;
     tRetvalue = ((tRetvalue * 133) + 128) >> 8;
     return tRetvalue;
 #endif
@@ -1200,7 +1200,7 @@ uint16_t getTextMiddle(uint16_t aTextSize) {
     if (aTextSize == TEXT_SIZE_22) {
         return (TEXT_SIZE_22_ASCEND - TEXT_SIZE_22_DECEND) / 2;
     }
-    uint16_t tRetvalue = aTextSize;
+    uint32_t tRetvalue = aTextSize;
     tRetvalue = ((tRetvalue * 66) + 128) >> 8;
     return tRetvalue;
 #endif

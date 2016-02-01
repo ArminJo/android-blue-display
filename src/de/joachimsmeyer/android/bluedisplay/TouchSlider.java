@@ -34,7 +34,6 @@ import java.util.List;
 
 import android.annotation.SuppressLint;
 import android.graphics.Color;
-import android.util.Log;
 
 public class TouchSlider {
 

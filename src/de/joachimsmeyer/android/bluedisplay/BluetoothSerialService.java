@@ -186,8 +186,12 @@ public class BluetoothSerialService {
 		tReturn += "Buffer wrap arounds=" + mStatisticNumberOfBufferWrapArounds + "\n";
 		int tInputBufferOutIndex = mReceiveBufferOutIndex;
 		int tBytes = getBufferBytesAvailable();
-		tReturn += "InputBuffer: in=" + mReceiveBufferInIndex + ", out=" + tInputBufferOutIndex + ", not processed=" + tBytes
-				+ ", size=" + SIZE_OF_IN_BUFFER + "\n";
+		String tsearchStateDataLengthToWaitForString = "";
+		if (searchStateDataLengthToWaitFor > MIN_MESSAGE_SIZE) {
+			tsearchStateDataLengthToWaitForString = ", waited for " + searchStateDataLengthToWaitFor;
+		}
+		tReturn += "InputBuffer: size=" + SIZE_OF_IN_BUFFER + ", in=" + mReceiveBufferInIndex + ", out=" + tInputBufferOutIndex
+				+ ", not processed=" + tBytes + tsearchStateDataLengthToWaitForString + "\n";
 		if (MyLog.isDEBUG()) {
 			if (tBytes > 0) {
 				if (tBytes > 20) {
@@ -547,6 +551,7 @@ public class BluetoothSerialService {
 	private int searchStateParamsLength;
 	private byte searchStateCommandReceived;
 	private int searchStateDataLengthToWaitFor = MIN_MESSAGE_SIZE;
+	private long sTimestampOfLastDataWait = 0;
 
 	public static final byte SYNC_TOKEN = (byte) 0xA5;
 	public static final int MAX_NUMBER_OF_PARAMS = 12;
@@ -609,9 +614,11 @@ public class BluetoothSerialService {
 		return tByte;
 	}
 
-	/*
+	/**
 	 * Search the input buffer for valid commands and call interpretCommand() as long as there is data available Returns true if it
 	 * must be called again.
+	 * @param aRPCView
+	 * @return true if view should be updated, false if no view update needed (e.g. in case of error)
 	 */
 	boolean searchCommand(RPCView aRPCView) {
 		if (inBufferReadingLock || (mReceiveBufferOutIndex == mReceiveBufferInIndex)) {
@@ -634,6 +641,23 @@ public class BluetoothSerialService {
 		int tStartIn = mReceiveBufferInIndex;
 		int tStartOut = mReceiveBufferOutIndex;
 
+		/*
+		 * 2 seconds timeout for data messages which does not arrive (because of reprogramming the client and misinterpreting the
+		 * program data)
+		 */
+		long tActualNanos = System.nanoTime();
+		if (searchStateDataLengthToWaitFor > MIN_MESSAGE_SIZE && getBufferBytesAvailable() < searchStateDataLengthToWaitFor) {
+			// here we wait for a bigger chunk of data, but it was not received yet
+			if (sTimestampOfLastDataWait + 2000000000 < tActualNanos) {
+				// reset state and continue with searching for sync token
+				searchStateDataLengthToWaitFor = MIN_COMMAND_SIZE;
+				searchStateMustBeLoaded = false;
+				sTimestampOfLastDataWait = tActualNanos;
+			}
+		} else {
+			sTimestampOfLastDataWait = tActualNanos;
+		}
+
 		// If data command, wait also for data
 		while (getBufferBytesAvailable() >= searchStateDataLengthToWaitFor) {
 			mNeedUpdateViewMessage = false;
@@ -646,10 +670,11 @@ public class BluetoothSerialService {
 				tParamsLength = searchStateParamsLength;
 				searchStateMustBeLoaded = false;
 			} else {
+				
+				/*
+				 * check for SYNC Token
+				 */
 				do {
-					/*
-					 * check for SYNC Token
-					 */
 					tByte = getByteFromBuffer();
 					if (tByte != SYNC_TOKEN) {
 						if (mReceiveBufferOutIndex == mReceiveBufferInIndex) {
@@ -682,8 +707,7 @@ public class BluetoothSerialService {
 
 				if (MyLog.isVERBOSE()) {
 					if (tCommandReceived <= RPCView.INDEX_LAST_FUNCTION_DATAFIELD) {
-						MyLog.v(LOG_TAG, "Data: length=" + tLengthReceived
-								+ " at ptr=" + (mReceiveBufferOutIndex - 1));
+						MyLog.v(LOG_TAG, "Data: length=" + tLengthReceived + " at ptr=" + (mReceiveBufferOutIndex - 1));
 					} else {
 						MyLog.v(LOG_TAG, "Command=0x" + Integer.toHexString(tCommandReceived) + " length=" + tLengthReceived
 								+ " at ptr=" + (mReceiveBufferOutIndex - 1));

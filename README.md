@@ -45,3 +45,10 @@ DSO settings menu
 ![DSO settings menu](https://github.com/ArminJo/android-blue-display/blob/gh-pages/screenshots/DSOSettings.png)
 DSO frequency generator menu
 ![Frequency generator menu](https://github.com/ArminJo/android-blue-display/blob/gh-pages/screenshots/Frequency.png)
+DSO with passive attenuator on breadboard
+![DSO with passive attenuator on breadboard](https://github.com/ArminJo/android-blue-display/blob/gh-pages/pictures/ArduinoDSO.jpg)
+Hacked RC car
+![Hacked RC car](https://github.com/ArminJo/android-blue-display/blob/gh-pages/pictures/RCCarControl.jpg)
+RC car control display
+![RC car control display](https://github.com/ArminJo/android-blue-display/blob/gh-pages/screenshots/RCCarControl.png)
+
