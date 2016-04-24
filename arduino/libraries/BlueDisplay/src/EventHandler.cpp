@@ -28,8 +28,6 @@
 
 #include <Arduino.h>
 #include "BlueDisplay.h"
-#include "EventHandler.h"
-#include "BlueSerial.h"
 
 #ifdef LOCAL_DISPLAY_EXISTS
 #include "ADS7846.h"
@@ -47,8 +45,6 @@ struct TouchEvent sUpPosition;
  * helper variables
  */
 //
-bool sButtonTouched = false;// flag if autorepeat button was touched - to influence long button press handling
-bool sAutorepeatButtonTouched = false;// flag if autorepeat button was touched - to influence long button press handling
 bool sNothingTouched = false;// = !(sSliderTouched || sButtonTouched || sAutorepeatButtonTouched)
 bool sSliderIsMoveTarget = false;// true if slider was touched by DOWN event
 
@@ -174,7 +170,7 @@ void checkAndHandleEvents(void) {
 void handleEvent(struct BluetoothEvent * aEvent) {
     uint8_t tEventType = aEvent->EventType;
 
-// local event since the values in the event may be overwritten if the handler needs long time for its action
+// local copy of event since the values in the original event may be overwritten if the handler needs long time for its action
     struct BluetoothEvent tEvent = *aEvent;
 
 // avoid using event twice

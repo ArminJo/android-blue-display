@@ -33,12 +33,12 @@
 //#define DO_NOT_NEED_BASIC_TOUCH_EVENTS // outcommenting or better defining for the compiler with -DDO_NOT_NEED_BASIC_TOUCH_EVENTS saves 620 bytes FLASH and 36 bytes RAM
 #endif
 
-#include "BlueDisplayProtocol.h"
-
 #ifdef LOCAL_DISPLAY_EXISTS
 #include "BlueDisplay.h" // for Color_t
 //#include "ADS7846.h"
 //extern ADS7846 TouchPanel;
+#else
+#include "BlueDisplayProtocol.h"
 #endif
 
 #define TOUCH_STANDARD_CALLBACK_PERIOD_MILLIS 20 // Period between callbacks while touched (a swipe is app 100 ms)
@@ -52,9 +52,6 @@ extern struct BluetoothEvent localTouchEvent;
 /*
  * helper variables
  */
-extern bool sButtonTouched;
-extern bool sAutorepeatButtonTouched;
-extern bool sSliderTouched;
 extern bool sNothingTouched;
 extern bool sSliderIsMoveTarget;
 extern bool sDisableTouchUpOnce; // set normally by application if long touch action was made

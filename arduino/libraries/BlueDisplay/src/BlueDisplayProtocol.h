@@ -163,11 +163,11 @@ union ShortLongFloatUnion {
 struct GuiCallback {
     uint16_t ObjectIndex;
     uint16_t Free;
-#if (FLASHEND > 65535 || AVR != 1)
+#ifndef AVR
     void * Handler;
 #else
     void * Handler;
-    void * Handler_upperWord; // not used on 16 bit address cpu
+    void * Handler_upperWord; // not used on  <= 17 bit address cpu, since pointer to functions are address_of_function >> 1
 #endif
     union ShortLongFloatUnion ValueForHandler;
 };
@@ -317,7 +317,7 @@ const int FUNCTION_BUTTON_GLOBAL_SETTINGS = 0x4A;
 
 // Function with variable data size
 const int FUNCTION_BUTTON_CREATE = 0x70;
-const int FUNCTION_BUTTON_CREATE_32 = 0x71;
+
 const int FUNCTION_BUTTON_SET_CAPTION = 0x72;
 const int FUNCTION_BUTTON_SET_CAPTION_AND_DRAW_BUTTON = 0x73;
 

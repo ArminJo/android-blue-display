@@ -29,12 +29,14 @@
  */
 
 #include "BlueDisplay.h"
-#include "BlueSerial.h"
-#include "EventHandler.h" // for registerRedrawCallback() ...
 
 #ifdef LOCAL_DISPLAY_EXISTS
 #include "thickLine.h"
-#include "myprint.h"
+#endif
+
+#if defined(LOCAL_DISPLAY_EXISTS) || not defined(AVR)
+#define PRINT_SUPPORTED
+#include "tinyPrint.h"
 #endif
 
 #include <string.h>  // for strlen
@@ -470,11 +472,12 @@ uint16_t BlueDisplay::drawLong(uint16_t aPosX, uint16_t aPosY, int32_t aLong, ui
     return tRetValue;
 }
 
+#ifdef PRINT_SUPPORTED
 /*
  * for printf implementation
  */
 void BlueDisplay::setPrintfSizeAndColorAndFlag(uint16_t aPrintSize, Color_t aPrintColor, Color_t aPrintBackgroundColor,
-bool aClearOnNewScreen) {
+        bool aClearOnNewScreen) {
 #ifdef LOCAL_DISPLAY_EXISTS
     printSetOptions(getLocalTextSize(aPrintSize), aPrintColor, aPrintBackgroundColor, aClearOnNewScreen);
 #endif
@@ -520,6 +523,7 @@ extern "C" void writeStringC(const char *aStringPtr, uint8_t aStringLength) {
         sendUSARTArgsAndByteBuffer(FUNCTION_WRITE_STRING, 0, aStringLength, (uint8_t*) aStringPtr);
     }
 }
+#endif
 
 /**
  * Output String as error log
@@ -673,7 +677,8 @@ uint16_t BlueDisplay::drawTextPGM(uint16_t aPosX, uint16_t aPosY, const char * a
     char StringBuffer[STRING_BUFFER_STACK_SIZE];
     strncpy_P(StringBuffer, aPGMString, tCaptionLength);
 #ifdef LOCAL_DISPLAY_EXISTS
-    tRetValue = LocalDisplay.drawTextPGM(aPosX, aPosY - getTextAscend(aTextSize), aPGMString, getLocalTextSize(aTextSize), aFGColor, aBGColor);
+    tRetValue = LocalDisplay.drawTextPGM(aPosX, aPosY - getTextAscend(aTextSize), aPGMString, getLocalTextSize(aTextSize), aFGColor,
+            aBGColor);
 #endif
     if (USART_isBluetoothPaired()) {
         tRetValue = aPosX + tCaptionLength * getTextWidth(aTextSize);
@@ -692,7 +697,7 @@ uint16_t BlueDisplay::drawTextPGM(uint16_t aPosX, uint16_t aPosY, const char * a
 
 void BlueDisplay::getNumber(void (*aNumberHandler)(float)) {
     if (USART_isBluetoothPaired()) {
-#if (FLASHEND > 65535 || AVR != 1)
+#ifndef AVR
         sendUSARTArgs(FUNCTION_GET_NUMBER, 2, aNumberHandler, (reinterpret_cast<uint32_t>(aNumberHandler) >> 16));
 #else
         sendUSARTArgs(FUNCTION_GET_NUMBER, 1, aNumberHandler);
@@ -700,9 +705,12 @@ void BlueDisplay::getNumber(void (*aNumberHandler)(float)) {
     }
 }
 
+/*
+ * Message size 1 or 2 shorts
+ */
 void BlueDisplay::getNumberWithShortPrompt(void (*aNumberHandler)(float), const char *aShortPromptString) {
     if (USART_isBluetoothPaired()) {
-#if (FLASHEND > 65535 || AVR != 1)
+#ifndef AVR
         sendUSARTArgsAndByteBuffer(FUNCTION_GET_NUMBER_WITH_SHORT_PROMPT, 2, aNumberHandler,
                 (reinterpret_cast<uint32_t>(aNumberHandler) >> 16), strlen(aShortPromptString), (uint8_t*) aShortPromptString);
 #else
@@ -712,22 +720,29 @@ void BlueDisplay::getNumberWithShortPrompt(void (*aNumberHandler)(float), const 
     }
 }
 
+/*
+ * Message size 3 or 4 shorts
+ */
 void BlueDisplay::getNumberWithShortPrompt(void (*aNumberHandler)(float), const char *aShortPromptString, float aInitialValue) {
     if (USART_isBluetoothPaired()) {
-#if (FLASHEND > 65535 || AVR != 1)
-        sendUSARTArgsAndByteBuffer(FUNCTION_GET_NUMBER_WITH_SHORT_PROMPT, 3, aInitialValue, aNumberHandler,
-                (reinterpret_cast<uint32_t>(aNumberHandler) >> 16), strlen(aShortPromptString), (uint8_t*) aShortPromptString);
+        union {
+            float floatValue;
+            uint16_t shortArray[2];
+        } floatToShortArray;
+        floatToShortArray.floatValue = aInitialValue;
+#ifndef AVR
+        sendUSARTArgsAndByteBuffer(FUNCTION_GET_NUMBER_WITH_SHORT_PROMPT, 4, aNumberHandler,
+                (reinterpret_cast<uint32_t>(aNumberHandler) >> 16), floatToShortArray.shortArray[0], floatToShortArray.shortArray[1], strlen(aShortPromptString), (uint8_t*) aShortPromptString);
 #else
-        // send 3 byte otherwise receiver cannot distinguish it from 32 bit handler address without value
-        sendUSARTArgsAndByteBuffer(FUNCTION_GET_NUMBER_WITH_SHORT_PROMPT, 3, aInitialValue, aNumberHandler, 0,
-                strlen(aShortPromptString), (uint8_t*) aShortPromptString);
+        sendUSARTArgsAndByteBuffer(FUNCTION_GET_NUMBER_WITH_SHORT_PROMPT, 3, aNumberHandler, floatToShortArray.shortArray[0],
+                floatToShortArray.shortArray[1], strlen(aShortPromptString), (uint8_t*) aShortPromptString);
 #endif
     }
 }
 
 //void BlueDisplay::getText(void (*aTextHandler)(char *)) {
 //    if (USART_isBluetoothPaired()) {
-//#if (FLASHEND > 65535 || AVR != 1)
+//#ifndef AVR
 //        sendUSARTArgs(FUNCTION_GET_TEXT, 2, aTextHandler, (reinterpret_cast<uint32_t>(aTextHandler) >> 16));
 //#else
 //        sendUSARTArgs(FUNCTION_GET_TEXT, 1, aTextHandler);
@@ -737,7 +752,7 @@ void BlueDisplay::getNumberWithShortPrompt(void (*aNumberHandler)(float), const 
 
 void BlueDisplay::getInfo(uint16_t aInfoSubcommand, void (*aInfoHandler)(uint8_t *)) {
     if (USART_isBluetoothPaired()) {
-#if (FLASHEND > 65535 || AVR != 1)
+#ifndef AVR
         sendUSARTArgs(FUNCTION_GET_INFO, 3, aInfoSubcommand, aInfoHandler, (reinterpret_cast<uint32_t>(aInfoHandler) >> 16));
 #else
         sendUSARTArgs(FUNCTION_GET_INFO, 2, aInfoSubcommand, aInfoHandler);
@@ -763,13 +778,27 @@ void BlueDisplay::getNumberWithShortPromptPGM(void (*aNumberHandler)(float), con
         }
         char StringBuffer[STRING_BUFFER_STACK_SIZE];
         strncpy_P(StringBuffer, aPGMShortPromptString, tShortPromptLength);
-#if (FLASHEND > 65535)
-        sendUSARTArgsAndByteBuffer(FUNCTION_GET_NUMBER_WITH_SHORT_PROMPT, 2, aNumberHandler, aNumberHandler,
-                (reinterpret_cast<uint32_t>(aNumberHandler) >> 16), tShortPromptLength, (uint8_t*) StringBuffer);
-#else
         sendUSARTArgsAndByteBuffer(FUNCTION_GET_NUMBER_WITH_SHORT_PROMPT, 1, aNumberHandler, tShortPromptLength,
                 (uint8_t*) StringBuffer);
-#endif
+    }
+}
+
+void BlueDisplay::getNumberWithShortPromptPGM(void (*aNumberHandler)(float), const char *aPGMShortPromptString,
+        float aInitialValue) {
+    if (USART_isBluetoothPaired()) {
+        uint8_t tShortPromptLength = strlen_P(aPGMShortPromptString);
+        if (tShortPromptLength > STRING_BUFFER_STACK_SIZE) {
+            tShortPromptLength = STRING_BUFFER_STACK_SIZE;
+        }
+        char StringBuffer[STRING_BUFFER_STACK_SIZE];
+        strncpy_P(StringBuffer, aPGMShortPromptString, tShortPromptLength);
+        union {
+            float floatValue;
+            uint16_t shortArray[2];
+        } floatToShortArray;
+        floatToShortArray.floatValue = aInitialValue;
+        sendUSARTArgsAndByteBuffer(FUNCTION_GET_NUMBER_WITH_SHORT_PROMPT, 3, aNumberHandler, floatToShortArray.shortArray[0],
+                floatToShortArray.shortArray[1], tShortPromptLength, (uint8_t*) StringBuffer);
     }
 }
 
@@ -780,7 +809,7 @@ void BlueDisplay::getNumberWithShortPromptPGM(void (*aNumberHandler)(float), con
 //            char StringBuffer[STRING_BUFFER_STACK_SIZE];
 //            strcpy_P(StringBuffer, aPGMShortPromptString);
 //
-//#if (FLASHEND > 65535 || AVR != 1)
+//#ifndef AVR
 //            sendUSARTArgsAndByteBuffer(FUNCTION_GET_TEXT_WITH_SHORT_PROMPT, 2, aTextHandler,
 //                    (reinterpret_cast<uint32_t>(aTextHandler) >> 16), tShortPromptLength, (uint8_t*) StringBuffer);
 //#else
@@ -822,7 +851,7 @@ BDButtonHandle_t BlueDisplay::createButton(uint16_t aPositionX, uint16_t aPositi
     BDButtonHandle_t tButtonNumber = sLocalButtonIndex++;
 
     if (USART_isBluetoothPaired()) {
-#if (FLASHEND > 65535 || AVR != 1)
+#ifndef AVR
         sendUSARTArgsAndByteBuffer(FUNCTION_BUTTON_CREATE, 10, tButtonNumber, aPositionX, aPositionY, aWidthX, aHeightY,
                 aButtonColor, aCaptionSize | (aFlags << 8), aValue, aOnTouchHandler,
                 (reinterpret_cast<uint32_t>(aOnTouchHandler) >> 16), strlen(aCaption), aCaption);
@@ -951,15 +980,8 @@ BDButtonHandle_t BlueDisplay::createButtonPGM(uint16_t aPositionX, uint16_t aPos
         }
         char StringBuffer[STRING_BUFFER_STACK_SIZE];
         strncpy_P(StringBuffer, aPGMCaption, tCaptionLength);
-#if (FLASHEND > 65535)
-        sendUSARTArgsAndByteBuffer(FUNCTION_BUTTON_CREATE, 10, tButtonNumber, aPositionX, aPositionY, aWidthX, aHeightY,
-                aButtonColor, aCaptionSize | (aFlags << 8), aValue, aOnTouchHandler,
-                (reinterpret_cast<uint32_t>(aOnTouchHandler) >> 16), tCaptionLength, StringBuffer);
-#else
         sendUSARTArgsAndByteBuffer(FUNCTION_BUTTON_CREATE, 9, tButtonNumber, aPositionX, aPositionY, aWidthX, aHeightY,
                 aButtonColor, aCaptionSize | (aFlags << 8), aValue, aOnTouchHandler, tCaptionLength, StringBuffer);
-#endif
-
     }
     return tButtonNumber;
 }
@@ -1007,8 +1029,8 @@ BDSliderHandle_t BlueDisplay::createSlider(uint16_t aPositionX, uint16_t aPositi
         void (*aOnChangeHandler)(BDSliderHandle_t *, int16_t)) {
     BDSliderHandle_t tSliderNumber = sLocalSliderIndex++;
 
-    if (USART_isBluetoothPaired()) {
-#if (FLASHEND > 65535 || AVR != 1)
+    if (USART_isBluetoothPaired()) {#ifndef AVR
+
         sendUSARTArgs(FUNCTION_SLIDER_CREATE, 12, tSliderNumber, aPositionX, aPositionY, aBarWidth, aBarLength, aThresholdValue,
                 aInitalValue, aSliderColor, aBarColor, aFlags, aOnChangeHandler,
                 (reinterpret_cast<uint32_t>(aOnChangeHandler) >> 16));
@@ -1381,7 +1403,7 @@ void BlueDisplay::generateColorSpectrum(void) {
     uint16_t tColorChangeAmount;
     uint16_t tYpos = mReferenceDisplaySize.YHeight;
     uint16_t tColorLine;
-    for (unsigned int line = 4; line < mReferenceDisplaySize.YHeight + 4; ++line) {
+    for (uint16_t line = 4; line < mReferenceDisplaySize.YHeight + 4; ++line) {
         tColorLine = line / 4;
         // colors for line 31 and 32 are identical
         if (tColorLine >= COLOR_RESOLUTION) {
@@ -1408,7 +1430,7 @@ void BlueDisplay::generateColorSpectrum(void) {
 //              }
 //          }
             tError = ((mReferenceDisplaySize.XWidth / COLOR_SPECTRUM_SEGMENTS) - 1) / 2;
-            for (unsigned int j = 0; j < (mReferenceDisplaySize.XWidth / COLOR_SPECTRUM_SEGMENTS) - 1; ++j) {
+            for (uint16_t j = 0; j < (mReferenceDisplaySize.XWidth / COLOR_SPECTRUM_SEGMENTS) - 1; ++j) {
                 drawPixel(tXPos++, tYpos, tColor);
                 tError += tColorChangeAmount;
                 if (tError > ((mReferenceDisplaySize.XWidth / COLOR_SPECTRUM_SEGMENTS) - 1)) {

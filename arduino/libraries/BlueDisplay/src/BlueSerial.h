@@ -31,6 +31,13 @@
 
 #include <stddef.h>
 
+#ifndef USE_STANDARD_SERIAL
+// Simple serial is a simple blocking serial version without receive buffer and other overhead.
+// Using it saves up to 1250 byte FLASH and 185 byte RAM since USART is used directly
+// Simple serial on the MEGA2560 uses USART1
+#define USE_SIMPLE_SERIAL
+#endif
+
 #define BAUD_STRING_4800 "4800"
 #define BAUD_STRING_9600 "9600"
 #define BAUD_STRING_19200 "19200"
@@ -60,19 +67,23 @@ void sendUSARTArgs(uint8_t aFunctionTag, int aNumberOfArgs, ...);
 void sendUSARTArgsAndByteBuffer(uint8_t aFunctionTag, int aNumberOfArgs, ...);
 void sendUSART5Args(uint8_t aFunctionTag, uint16_t aXStart, uint16_t aYStart, uint16_t aXEnd, uint16_t aYEnd, uint16_t aColor);
 void sendUSART5ArgsAndByteBuffer(uint8_t aFunctionTag, uint16_t aXStart, uint16_t aYStart, uint16_t aXEnd, uint16_t aYEnd,
-        uint16_t aColor, uint8_t * aBuffer, size_t aBufferLength);
+		uint16_t aColor, uint8_t * aBuffer, size_t aBufferLength);
 
 #define PAIRED_PIN 5
 
-#ifdef LOCAL_DISPLAY_EXISTS
+#if defined(LOCAL_DISPLAY_EXISTS) && defined(REMOTE_DISPLAY_SUPPORTED)
 bool USART_isBluetoothPaired(void);
 #else
+#if defined(LOCAL_DISPLAY_EXISTS)
+#define USART_isBluetoothPaired() (false)
+#else
 #define USART_isBluetoothPaired() (true)
+#endif
 #endif
 
 extern bool allowTouchInterrupts;
 void initSimpleSerial(uint32_t aBaudRate, bool aUsePairedPin);
-void USART3_send(char aChar);
+void USART_send(char aChar);
 
 void serialEvent();
 

@@ -27,9 +27,8 @@
  */
 
 #include "BDButton.h"
-#include "BlueDisplayProtocol.h"
 #include "BlueDisplay.h" // for BUTTONS_SET_BEEP_TONE
-#include "BlueSerial.h"
+
 
 #ifdef LOCAL_DISPLAY_EXISTS
 #include "TouchButtonAutorepeat.h"
@@ -88,7 +87,7 @@ void BDButton::init(uint16_t aPositionX, uint16_t aPositionY, uint16_t aWidthX, 
 
     BDButtonHandle_t tButtonNumber = sLocalButtonIndex++;
     if (USART_isBluetoothPaired()) {
-#if (FLASHEND > 65535 || AVR != 1)
+#ifndef AVR
         sendUSARTArgsAndByteBuffer(FUNCTION_BUTTON_CREATE, 11, tButtonNumber, aPositionX, aPositionY, aWidthX,
                 aHeightY, aButtonColor, aCaptionSize, aFlags, aValue, aOnTouchHandler,
                 (reinterpret_cast<uint32_t>(aOnTouchHandler) >> 16), strlen(aCaption), aCaption);

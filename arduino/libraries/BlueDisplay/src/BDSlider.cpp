@@ -64,7 +64,7 @@ void BDSlider::init(uint16_t aPositionX, uint16_t aPositionY, uint16_t aBarWidth
     BDSliderHandle_t tSliderNumber = sLocalSliderIndex++;
 
     if (USART_isBluetoothPaired()) {
-#if (FLASHEND > 65535 || AVR != 1)
+#ifndef AVR
         sendUSARTArgs(FUNCTION_SLIDER_CREATE, 12, tSliderNumber, aPositionX, aPositionY, aBarWidth, aBarLength,
                 aThresholdValue, aInitalValue, aSliderColor, aBarColor, aFlags, aOnChangeHandler,
                 (reinterpret_cast<uint32_t>(aOnChangeHandler) >> 16));

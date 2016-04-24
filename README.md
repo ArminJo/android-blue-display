@@ -19,17 +19,19 @@ No Android programming needed!
 - Local display of received and sent commands for debug purposes.
 - Hex und ASCII output of received Bluetooth data at log level verbose.
 - Debug messages as toasts.
-- C++ Libraries for Arduino and ARM (STM).
+- C++ Libraries for [Arduino](https://github.com/ArminJo/android-blue-display/tree/master/arduino/libraries/BlueDisplay/BlueDisplay.zip).
+ and [ARM (STM)](https://github.com/ArminJo/android-blue-display/tree/master/STM32/lib).
 
 ### Example for Hex + ASCII output:
 ```
-V BTSerial RawData=00 4C 13 A5 01 08 00 53 65 74 74 69 6E 67 73 A5 |  L      Settings 
-V BTSerial RawData=70 12 00 04 00 00 00 00 00 60 00 34 00 00 F8 0B | p             ` 
+V BTSerial RawData=00 4C 13 A5 01 08 00 53 65 74 74 69 6E 67 73 A5 |  L      Settings
+V BTSerial RawData=70 12 00 04 00 00 00 00 00 60 00 34 00 00 F8 0B | p             `
 V BTSerial RawData=03 00 00 30 21 A5 01 07 00 48 69 73 74 6F 72 79 |   0!     History
 ```
 
 ## Hint
 To enable programming of the Arduino while the HC-05 module is connected, use a diode to connect Arduino rx and HC-05 tx.
+On Arduino MEGA 2560 TX1 is used, so no diode is needed.
 ```
                  |\ |
    Arduino-rx ___| \|___ HC-05-tx
@@ -37,18 +39,19 @@ To enable programming of the Arduino while the HC-05 module is connected, use a 
                  |/ |
 ```
 
+
 Fritzing schematics
 ![Fritzing schematics](https://github.com/ArminJo/android-blue-display/blob/gh-pages/schematics/BlueDisplayBlink_Steckplatine.png)
 Breadboard picture
 ![Breadboard picture](https://github.com/ArminJo/android-blue-display/blob/gh-pages/pictures/Blink1.jpg)
+DSO with passive attenuator on breadboard
+![DSO with passive attenuator on breadboard](https://github.com/ArminJo/android-blue-display/blob/gh-pages/pictures/ArduinoDSO.jpg)
 DSO settings menu
 ![DSO settings menu](https://github.com/ArminJo/android-blue-display/blob/gh-pages/screenshots/DSOSettings.png)
 DSO frequency generator menu
 ![Frequency generator menu](https://github.com/ArminJo/android-blue-display/blob/gh-pages/screenshots/Frequency.png)
-DSO with passive attenuator on breadboard
-![DSO with passive attenuator on breadboard](https://github.com/ArminJo/android-blue-display/blob/gh-pages/pictures/ArduinoDSO.jpg)
 Hacked RC car
-![Hacked RC car](https://github.com/ArminJo/android-blue-display/blob/gh-pages/pictures/RCCarControl.jpg)
+![Hacked RC car](https://github.com/ArminJo/android-blue-display/blob/gh-pages/pictures/RCCar+Tablet.JPG)
 RC car control display
 ![RC car control display](https://github.com/ArminJo/android-blue-display/blob/gh-pages/screenshots/RCCarControl.png)
 

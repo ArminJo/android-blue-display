@@ -25,11 +25,6 @@
 
 #include "BlueDisplay.h"
 
-// Use simple blocking serial version without receive buffer and other overhead
-// Using it saves up to 1250 byte FLASH and 185 byte RAM since USART is used directly
-// Comment it out here AND in BlueSerial on line 35 if you want to use it instead of Arduino Serial....
-#define USE_SIMPLE_SERIAL
-
 // Change this if you have reprogrammed the hc05 module for higher baud rate
 //#define HC_05_BAUD_RATE BAUD_9600
 #define HC_05_BAUD_RATE BAUD_115200
@@ -54,7 +49,7 @@ volatile bool doBlink = true;
 volatile int sDelay = 600;
 
 // a string buffer for any purpose...
-char StringBuffer[128];
+char sDataBuffer[128];
 
 /*
  * The 3 buttons
@@ -98,7 +93,6 @@ void setup() {
 
     // to signal that boot has finished
     tone(TONE_PIN, 2000, 200);
-
 }
 
 void loop() {
@@ -110,6 +104,7 @@ void loop() {
         delay(tBlinkDuration / 2);
     } else {
         if (doBlink) {
+
             uint8_t i;
             /*
              * LED on
@@ -263,8 +258,8 @@ void doDelay(BDSlider * aTheTouchedSlider, uint16_t aSliderValue) {
 }
 
 void printDelayValue(void) {
-    snprintf(StringBuffer, sizeof StringBuffer, "%4ums", sDelay);
-    TouchSliderDelay.printValue(StringBuffer);
+    snprintf(sDataBuffer, sizeof sDataBuffer, "%4ums", sDelay);
+    TouchSliderDelay.printValue(sDataBuffer);
 }
 
 #define MILLIS_PER_CHANGE 20 // gives minimal 2 seconds
@@ -273,7 +268,7 @@ void printDemoString(void) {
     static float tInterpolationDelta = 0.01;
 
     static bool tFadingFactorDirectionFromBackground = true;
-    static long MillisSinceLastChange = millis();
+    static long MillisSinceLastChange;
 
     // Timing
     if (millis() - MillisSinceLastChange > MILLIS_PER_CHANGE) {

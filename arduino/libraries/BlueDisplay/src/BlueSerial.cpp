@@ -27,13 +27,7 @@
  */
 
 #include <Arduino.h>
-#include "BlueSerial.h"
 #include "BlueDisplay.h"
-#include "EventHandler.h"
-
-// Simple serial is a simple blocking serial version without receive buffer and other overhead.
-// Using it saves up to 1250 byte FLASH and 185 byte RAM since USART is used directly
-#define USE_SIMPLE_SERIAL
 
 // definitions from <wiring_private.h>
 #ifndef cbi
@@ -43,7 +37,9 @@
 #define sbi(sfr, bit) (_SFR_BYTE(sfr) |= _BV(bit))
 #endif
 
-#ifdef LOCAL_DISPLAY_EXISTS
+#undef USART_isBluetoothPaired
+
+#if defined(LOCAL_DISPLAY_EXISTS) && defined(REMOTE_DISPLAY_SUPPORTED)
 bool usePairedPin = false;
 
 void setUsePairedPin(bool aUsePairedPin) {
@@ -66,14 +62,14 @@ bool USART_isBluetoothPaired(void) {
 #ifdef USE_SIMPLE_SERIAL
 void initSimpleSerial(uint32_t aBaudRate, bool aUsePairedPin) {
 #ifdef LOCAL_DISPLAY_EXISTS
-    usePairedPin = aUsePairedPin;
     if (aUsePairedPin) {
         pinMode(PAIRED_PIN, INPUT);
     }
 #endif
     uint16_t baud_setting;
-
-    UCSR0A = 1 << U2X0; // Double Speed Mode
+#if defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__) || defined(__AVR_ATmega1284__) || defined(__AVR_ATmega1284P__) || defined(__AVR_ATmega644__) || defined(__AVR_ATmega644A__) || defined(__AVR_ATmega644P__) || defined(__AVR_ATmega644PA__) || defined(ARDUINO_AVR_LEONARDO) || defined(__AVR_ATmega16U4__) || defined(__AVR_ATmega32U4__)
+    // Use TX1 on MEGA and on Leonardo, which has no TX0
+    UCSR1A = 1 << U2X1; // Double Speed Mode
     // Exact value = 17,3611 (- 1) for 115200  2,1%
     // 8,68 (- 1) for 230400 8,5% for 8, 3.7% for 9
     // 4,34 (- 1) for 460800 8,5%
@@ -81,11 +77,26 @@ void initSimpleSerial(uint32_t aBaudRate, bool aUsePairedPin) {
     baud_setting = (((F_CPU / 4) / aBaudRate) - 1) / 2;    // /2 after -1 because of better rounding
 
     // assign the baud_setting, a.k.a. ubbr (USART Baud Rate Register)
+    UBRR1H = baud_setting >> 8;
+    UBRR1L = baud_setting;
+
+    // enable: TX, RX, RX Complete Interrupt
+    UCSR1B = (1 << RXEN1) | (1 << TXEN1) | (1 << RXCIE1);
+#else
+    UCSR0A = 1 << U2X0; // Double Speed Mode
+    // Exact value = 17,3611 (- 1) for 115200  2,1%
+    // 8,68 (- 1) for 230400 8,5% for 8, 3.7% for 9
+    // 4,34 (- 1) for 460800 8,5%
+    // HC-05 Specified Max Total Error (%) for 8 bit= +3.90/-4.00
+    baud_setting = (((F_CPU / 4) / aBaudRate) - 1) / 2;// /2 after -1 because of better rounding
+
+    // assign the baud_setting, a.k.a. ubbr (USART Baud Rate Register)
     UBRR0H = baud_setting >> 8;
     UBRR0L = baud_setting;
 
     // enable: TX, RX, RX Complete Interrupt
     UCSR0B = (1 << RXEN0) | (1 << TXEN0) | (1 << RXCIE0);
+#endif
     remoteEvent.EventType = EVENT_NO_EVENT;
     remoteTouchDownEvent.EventType = EVENT_NO_EVENT;
 }
@@ -93,16 +104,25 @@ void initSimpleSerial(uint32_t aBaudRate, bool aUsePairedPin) {
 /**
  * ultra simple blocking USART send routine - works 100%!
  */
-void USART3_send(char aChar) {
+void USART_send(char aChar) {
 // wait for buffer to become empty
+#if defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__) || defined(__AVR_ATmega1284__) || defined(__AVR_ATmega1284P__) || defined(__AVR_ATmega644__) || defined(__AVR_ATmega644A__) || defined(__AVR_ATmega644P__) || defined(__AVR_ATmega644PA__) || defined(ARDUINO_AVR_LEONARDO) || defined(__AVR_ATmega16U4__) || defined(__AVR_ATmega32U4__)
+// Use TX1 on MEGA and on Leonardo, which has no TX0
+    while (!((UCSR1A) & (1 << UDRE1))) {
+        ;
+    }
+    UDR1 = aChar;
+#else
     while (!((UCSR0A) & (1 << UDRE0))) {
         ;
     }
     UDR0 = aChar;
+#endif
 }
 #endif
 
 /**
+ * On Atmega328
  * TX of USART0 is port D1
  * RX is port D0
  */
@@ -123,21 +143,35 @@ void sendUSARTBufferNoSizeCheck(uint8_t * aParameterBufferPointer, int aParamete
 #ifdef USE_SIMPLE_SERIAL
     while (aParameterBufferLength > 0) {
         // wait for USART send buffer to become empty
+#if defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__) || defined(__AVR_ATmega1284__) || defined(__AVR_ATmega1284P__) || defined(__AVR_ATmega644__) || defined(__AVR_ATmega644A__) || defined(__AVR_ATmega644P__) || defined(__AVR_ATmega644PA__) || defined(ARDUINO_AVR_LEONARDO) || defined(__AVR_ATmega16U4__) || defined(__AVR_ATmega32U4__)
+        // Use TX1 on MEGA and on Leonardo, which has no TX0
+        while (!((UCSR1A) & (1 << UDRE1))) {
+            ;
+        }
+        UDR1 = *aParameterBufferPointer;
+#else
         while (!((UCSR0A) & (1 << UDRE0))) {
             ;
         }
-        //USART_SendData(USART3, *aBytePtr);
         UDR0 = *aParameterBufferPointer;
+#endif
         aParameterBufferPointer++;
         aParameterBufferLength--;
     }
     while (aDataBufferLength > 0) {
         // wait for USART send buffer to become empty
+#if defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__) || defined(__AVR_ATmega1284__) || defined(__AVR_ATmega1284P__) || defined(__AVR_ATmega644__) || defined(__AVR_ATmega644A__) || defined(__AVR_ATmega644P__) || defined(__AVR_ATmega644PA__) || defined(ARDUINO_AVR_LEONARDO) || defined(__AVR_ATmega16U4__) || defined(__AVR_ATmega32U4__)
+        // Use TX1 on MEGA and on Leonardo, which has no TX0
+        while (!((UCSR1A) & (1 << UDRE1))) {
+            ;
+        }
+        UDR1 = *aDataBufferPointer;
+#else
         while (!((UCSR0A) & (1 << UDRE0))) {
             ;
         }
-        //USART_SendData(USART3, *aBytePtr);
         UDR0 = *aDataBufferPointer;
+#endif
         aDataBufferPointer++;
         aDataBufferLength--;
     }
@@ -257,8 +291,14 @@ static uint8_t sReceivedDataSize;
 #ifdef USE_SIMPLE_SERIAL
 bool allowTouchInterrupts = false; // !!do not enable it, if event handling may take more time than receiving a byte (which then gives buffer overflow)!!!
 
-ISR(USART_RX_vect) {
-    uint8_t tByte = UDR0;
+#if defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__) || defined(__AVR_ATmega1284__) || defined(__AVR_ATmega1284P__) || defined(__AVR_ATmega644__) || defined(__AVR_ATmega644A__) || defined(__AVR_ATmega644P__) || defined(__AVR_ATmega644PA__) || defined(ARDUINO_AVR_LEONARDO) || defined(__AVR_ATmega16U4__) || defined(__AVR_ATmega32U4__)
+// Use TX1 on MEGA and on Leonardo, which has no TX0
+ISR(USART1_RX_vect) {
+    uint8_t tByte = UDR1;
+#else
+    ISR(USART_RX_vect) {
+        uint8_t tByte = UDR0;
+#endif
     if (sReceiveBufferOutOfSync) {
         // just wait for next sync token and reset buffer
         if (tByte == SYNC_TOKEN) {
@@ -350,7 +390,7 @@ void serialEvent(void) {
                  */
                 Serial.readBytes((char *) sReceiveBuffer, 2);
                 // First byte is raw length so subtract 3 for sync+eventType+length bytes
-                sReceivedDataSize = sReceiveBuffer[0]-3;
+                sReceivedDataSize = sReceiveBuffer[0] - 3;
                 if (sReceivedDataSize > RECEIVE_MAX_DATA_SIZE) {
                     // invalid length
                     sReceiveBufferOutOfSync = true;

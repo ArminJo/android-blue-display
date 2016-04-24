@@ -28,7 +28,7 @@ int sOffset = 0;
 
 BDSlider SliderShowDistance;
 
-char StringBuffer[100];
+char sDataBuffer[100];
 /*
  * Change doTone flag as well as color and caption of the button.
  */
@@ -79,8 +79,8 @@ void handleConnectAndReorientation(void) {
     // Position Caption at middle of screen
     sCaptionStartX = (sActualDisplayWidth - (getTextWidth(sCaptionTextSize) * strlen("Distance"))) / 2;
 
-    sprintf(StringBuffer, "sActualDisplayWidth=%d", sActualDisplayWidth);
-    BlueDisplay1.debugMessage(StringBuffer);
+    sprintf(sDataBuffer, "sActualDisplayWidth=%d", sActualDisplayWidth);
+    BlueDisplay1.debugMessage(sDataBuffer);
 
     if (sCaptionStartX < 0) {
         sCaptionStartX = 0;
@@ -100,7 +100,6 @@ void handleConnectAndReorientation(void) {
     TouchButtonOffset.init(BUTTON_WIDTH_3_DYN_POS_3, BUTTON_HEIGHT_5_DYN_LINE_5, BUTTON_WIDTH_3_DYN, BUTTON_HEIGHT_5_DYN, COLOR_RED,
             "Offset", sCaptionTextSize / 3, BUTTON_FLAG_DO_BEEP_ON_TOUCH, 0, &doGetOffset);
 }
-
 
 /*
  * Function used as callback handler for redraw event
@@ -123,7 +122,9 @@ void setup(void) {
     // Register callback handler and check for connection
     BlueDisplay1.initCommunication(&handleConnectAndReorientation, &drawGui);
 
-    // on double tone, we received max canvas size. Otherwise no connection is available.
+    /*
+     * on double tone, we received max canvas size. Otherwise no connection is available.
+     */
     if (BlueDisplay1.mConnectionEstablished) {
         tone(TONE_PIN, 3000, 50);
         delay(100);
@@ -149,10 +150,12 @@ void loop(void) {
      */
     unsigned long tPulseLength = pulseIn(ECHO, HIGH, 20000);
     if (tPulseLength == 0) {
-        // timeout (60 ms) happened
+        // timeout happened
         tone(TONE_PIN, 1000, 50);
-        delay(200);
+        delay(100);
         tone(TONE_PIN, 2000, 50);
+        delay((100 - MEASUREMENT_INTERVAL_MS) - 20);
+
     } else {
         if (doTone && tPulseLength < (58 * 40)) {
             /*
@@ -164,8 +167,8 @@ void loop(void) {
         sCentimeterNew = (tPulseLength / 58) + 1 - sOffset;
         if (sCentimeterNew != sCentimeterOld) {
             if (sActualDisplayHeight > 0) {
-                uint16_t tCmXPosition = BlueDisplay1.drawUnsignedByte(getTextWidth(sCaptionTextSize * 2), sValueStartY, sCentimeterNew,
-                        sCaptionTextSize * 2, COLOR_YELLOW,
+                uint16_t tCmXPosition = BlueDisplay1.drawUnsignedByte(getTextWidth(sCaptionTextSize * 2), sValueStartY,
+                        sCentimeterNew, sCaptionTextSize * 2, COLOR_YELLOW,
                         COLOR_BLUE);
                 BlueDisplay1.drawText(tCmXPosition, sValueStartY, "cm", sCaptionTextSize, COLOR_WHITE, COLOR_BLUE);
                 SliderShowDistance.setActualValueAndDrawBar(sCentimeterNew);

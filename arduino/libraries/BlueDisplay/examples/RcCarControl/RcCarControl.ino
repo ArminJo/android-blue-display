@@ -26,8 +26,6 @@
 #include "Servo.h"
 
 #include "BlueDisplay.h"
-#include "BlueSerial.h"
-#include "EventHandler.h"
 
 #include <stdlib.h> // for dtostrf
 
@@ -136,10 +134,18 @@ int sTextSize;
 int sTextSizeVCC;
 
 // a string buffer for any purpose...
-char StringBuffer[128];
+char sDataBuffer[128];
 
 void doSensorChange(uint8_t aSensorType, struct SensorCallback * aSensorCallbackInfo);
 void printVCCAndTemperature(void);
+
+#if defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__) || defined(__AVR_ATmega1284__) || defined(__AVR_ATmega1284P__) || defined(__AVR_ATmega644__) || defined(__AVR_ATmega644A__) || defined(__AVR_ATmega644P__) || defined(__AVR_ATmega644PA__)
+//#define INTERNAL1V1 2
+#undef INTERNAL
+#define INTERNAL 2
+#else
+#define INTERNAL 3
+#endif
 
 /*******************************************************************************************
  * Program code starts here
@@ -347,8 +353,8 @@ void loop() {
                             tSpeed = FOLLOWER_MAX_SPEED;
                         }
                         analogWrite(FORWARD_MOTOR_PWM_PIN, tSpeed);
-                        sprintf(StringBuffer, "%3d", tSpeed);
-                        SliderVelocityBackward.printValue(StringBuffer);
+                        sprintf(sDataBuffer, "%3d", tSpeed);
+                        SliderVelocityBackward.printValue(sDataBuffer);
                     }
 
                 } else if (tDeviationFromTargetDistance < -DISTANCE_HYSTERESE_CENTIMETER) {
@@ -362,8 +368,8 @@ void loop() {
                         tSpeed = FOLLOWER_MAX_SPEED;
                     }
                     analogWrite(BACKWARD_MOTOR_PWM_PIN, tSpeed);
-                    sprintf(StringBuffer, "%3d", tSpeed);
-                    SliderVelocityBackward.printValue(StringBuffer);
+                    sprintf(sDataBuffer, "%3d", tSpeed);
+                    SliderVelocityBackward.printValue(sDataBuffer);
                 } else {
                     sForwardStopByDistance = false;
                     analogWrite(FORWARD_MOTOR_PWM_PIN, 0);
@@ -497,8 +503,8 @@ void processVerticalSensorValue(float tSensorValue) {
         tInactiveSlider.setActualValueAndDrawBar(0);
         if (sLastMotorValue != tMotorValue) {
             sLastMotorValue = tMotorValue;
-            sprintf(StringBuffer, "%3d", tMotorValue);
-            SliderVelocityBackward.printValue(StringBuffer);
+            sprintf(sDataBuffer, "%3d", tMotorValue);
+            SliderVelocityBackward.printValue(sDataBuffer);
             analogWrite(tActiveMotorPin, tMotorValue);
         }
     }
@@ -564,13 +570,13 @@ void processHorizontalSensorValue(float tSensorValue) {
  * Not used yet
  */
 void printSensorInfo(struct SensorCallback* aSensorCallbackInfo) {
-    dtostrf(aSensorCallbackInfo->ValueX, 7, 4, &StringBuffer[50]);
-    dtostrf(aSensorCallbackInfo->ValueY, 7, 4, &StringBuffer[60]);
-    dtostrf(aSensorCallbackInfo->ValueZ, 7, 4, &StringBuffer[70]);
-    dtostrf(sYZeroValue, 7, 4, &StringBuffer[80]);
-    snprintf(StringBuffer, sizeof StringBuffer, "X=%s Y=%s Z=%s Zero=%s", &StringBuffer[50], &StringBuffer[60], &StringBuffer[70],
-            &StringBuffer[80]);
-    BlueDisplay1.drawText(0, sTextSize, StringBuffer, sTextSize, COLOR_BLACK, COLOR_GREEN);
+    dtostrf(aSensorCallbackInfo->ValueX, 7, 4, &sDataBuffer[50]);
+    dtostrf(aSensorCallbackInfo->ValueY, 7, 4, &sDataBuffer[60]);
+    dtostrf(aSensorCallbackInfo->ValueZ, 7, 4, &sDataBuffer[70]);
+    dtostrf(sYZeroValue, 7, 4, &sDataBuffer[80]);
+    snprintf(sDataBuffer, sizeof sDataBuffer, "X=%s Y=%s Z=%s Zero=%s", &sDataBuffer[50], &sDataBuffer[60], &sDataBuffer[70],
+            &sDataBuffer[80]);
+    BlueDisplay1.drawText(0, sTextSize, sDataBuffer, sTextSize, COLOR_BLACK, COLOR_GREEN);
 }
 
 /*
@@ -645,9 +651,9 @@ float getTemperature(void) {
  */
 void printVCCAndTemperature(void) {
     float tVCCVoltage = getVCCValue();
-    dtostrf(tVCCVoltage, 4, 2, &StringBuffer[30]);
+    dtostrf(tVCCVoltage, 4, 2, &sDataBuffer[30]);
     float tTemp = getTemperature();
-    dtostrf(tTemp, 4, 1, &StringBuffer[40]);
-    sprintf(StringBuffer, "%s Volt %s\xB0" "C", &StringBuffer[30], &StringBuffer[40]);
-    BlueDisplay1.drawText(sActualDisplayWidth / 4, sTextSize, StringBuffer, sTextSize, COLOR_BLACK, COLOR_WHITE);
+    dtostrf(tTemp, 4, 1, &sDataBuffer[40]);
+    sprintf(sDataBuffer, "%s Volt %s\xB0" "C", &sDataBuffer[30], &sDataBuffer[40]);
+    BlueDisplay1.drawText(sActualDisplayWidth / 4, sTextSize, sDataBuffer, sTextSize, COLOR_BLACK, COLOR_WHITE);
 }
