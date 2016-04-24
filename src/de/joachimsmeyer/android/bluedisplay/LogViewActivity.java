@@ -35,6 +35,7 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.graphics.Color;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -111,7 +112,9 @@ public class LogViewActivity extends ListActivity {
 
 		@Override
 		public int getCount() {
-			return MyLog.getCount();
+			int tCount = MyLog.getCount();
+//			Log.i("LW", "MyLog count=" + tCount);
+			return tCount;
 		}
 
 		@Override

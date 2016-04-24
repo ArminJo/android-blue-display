@@ -392,7 +392,7 @@ public class TouchSlider {
 			}
 			if (aTextLayoutInfo.mAbove) {
 				aTextLayoutInfo.mPositionY = mPositionY - aTextLayoutInfo.mMargin - aTextLayoutInfo.mSize
-						+ (int) ((0.76 * aTextLayoutInfo.mSize)+ 0.5);
+						+ (int) ((0.76 * aTextLayoutInfo.mSize) + 0.5);
 			} else {
 				aTextLayoutInfo.mPositionY = mPositionY + tSliderLongWidth + aTextLayoutInfo.mMargin
 						+ (int) ((0.76 * aTextLayoutInfo.mSize) + 0.5);
@@ -740,9 +740,14 @@ public class TouchSlider {
 
 			case FUNCTION_SLIDER_CREATE:
 				int tOnChangeHandlerCallbackAddress = aParameters[10] & 0x0000FFFF;
+				// Output real Arduino function address, since function pointer on Arduino are address_of_function >> 1
+				String tCallbackAddressStringAdjustedForClientDebugging = "";
 				if (aParamsLength == 12) {
 					// 32 bit callback address
 					tOnChangeHandlerCallbackAddress = tOnChangeHandlerCallbackAddress | (aParameters[11] << 16);
+				} else {
+					tCallbackAddressStringAdjustedForClientDebugging = "/0x"
+							+ Integer.toHexString(tOnChangeHandlerCallbackAddress << 1);
 				}
 
 				if (tSlider == null) {
@@ -771,7 +776,8 @@ public class TouchSlider {
 									+ RPCView.shortToColorString(aParameters[7]) + ", bar color= "
 									+ RPCView.shortToColorString(aParameters[8]) + ", options="
 									+ Integer.toHexString(aParameters[9]) + ", callback=0x"
-									+ Integer.toHexString(tOnChangeHandlerCallbackAddress) + ")");
+									+ Integer.toHexString(tOnChangeHandlerCallbackAddress)
+									+ tCallbackAddressStringAdjustedForClientDebugging + ")");
 				}
 
 				tSlider.initSlider(aRPCView, aParameters[1], aParameters[2], aParameters[3], aParameters[4], aParameters[5],

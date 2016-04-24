@@ -171,13 +171,6 @@ public class RPCView extends View {
 										// moves
 	boolean[] mSkipProcessingUntilTouchUpForButton; // true if touch down already sends an event (eg. a button down event)
 
-	// If used as background color for char or text, the background will not filled. Must sign extend constant to 32 bit, since
-	// parameter is also sign extended.
-	public static final int COLOR_NO_BACKGROUND = 0XFFFFFFFE;
-	// will not clear the rest of the line for multiline text
-	public static final int COLOR_NO_BACKGROUND_EXTEND = 0XFFFFFFFD;
-	public static final int COLOR_WHITE_PARAMETER = 0XFFFFFFFF;
-
 	/*
 	 * region description of tags
 	 */
@@ -219,6 +212,15 @@ public class RPCView extends View {
 	// 0x7F is NOP
 	public static final int INDEX_FIRST_FUNCTION_SLIDER_WITH_DATA = 0x78;
 	public static final int INDEX_LAST_FUNCTION_SLIDER_WITH_DATA = 0x7E;
+
+	/*
+	 * Constants used in Protocol
+	 */
+	// If used as background color for char or text, the background will not filled. Must sign extend constant to 32 bit, since
+	// parameter is also sign extended.
+	public static final int COLOR_NO_BACKGROUND = 0XFFFFFFFE;
+
+	public static final float NUMBER_INITIAL_VALUE_DO_NOT_SHOW = 1e-40f;
 
 	/*
 	 * Internal functions
@@ -1136,18 +1138,27 @@ public class RPCView extends View {
 					tDoNumber = false;
 				}
 				String tInitialInfo = "";
-				int tInitalValue = Integer.MIN_VALUE;
-				int HandlerStartIndex = 0;
-				if (aParamsLength == 3) {
-					tInitalValue = aParameters[0];
-					HandlerStartIndex = 1;
-					tInitialInfo = " initial value=" + Integer.toString(tInitalValue);
-				}
-				tCallbackAddress = aParameters[HandlerStartIndex] & 0x0000FFFF;
-				if (aParamsLength >= 2) {
-					HandlerStartIndex++;
+				// Integer.MIN_VALUE is used as flag not to show value
+				float tInitalValue = NUMBER_INITIAL_VALUE_DO_NOT_SHOW;
+				tCallbackAddress = aParameters[0] & 0x0000FFFF;
+				String tCallbackAddressStringAdjustedForClientDebugging = "";
+				if (aParamsLength == 2 || aParamsLength == 4) {
 					// 32 bit callback address
-					tCallbackAddress = tCallbackAddress | (aParameters[HandlerStartIndex] << 16);
+					tCallbackAddress = tCallbackAddress | (aParameters[1] << 16);
+				} else {
+					tCallbackAddressStringAdjustedForClientDebugging = "/0x" + Integer.toHexString(tCallbackAddress << 1);
+				}
+
+				if (aParamsLength > 2) {
+					int ValueStartIndex = 1;
+					if (aParamsLength == 4) {
+						// 32 bit callback address + initial value
+						ValueStartIndex = 2;
+					}
+					// With initial value
+					int tIntValue = (aParameters[ValueStartIndex] & 0x0000FFFF) | (aParameters[ValueStartIndex + 1] << 16);
+					tInitalValue = Float.intBitsToFloat(tIntValue);
+					tInitialInfo = " initial value=" + Float.toString(tInitalValue);
 				}
 
 				if (aDataLength > 0) {
@@ -1155,8 +1166,9 @@ public class RPCView extends View {
 					tStringParameter = new String(sCharsArray, 0, aDataLength);
 				}
 				if (MyLog.isINFO()) {
-					MyLog.i(LOG_TAG, "Get " + tFunctionName + " callback=0x" + Integer.toHexString(tCallbackAddress) + " prompt=\""
-							+ tStringParameter + "\"" + tInitialInfo);
+					MyLog.i(LOG_TAG, "Get " + tFunctionName + " callback=0x" + Integer.toHexString(tCallbackAddress)
+							+ tCallbackAddressStringAdjustedForClientDebugging + " prompt=\"" + tStringParameter + "\""
+							+ tInitialInfo);
 				}
 				// Send request for number input to the UI Activity
 
@@ -1164,7 +1176,7 @@ public class RPCView extends View {
 				Bundle bundle = new Bundle();
 				bundle.putInt(BlueDisplay.CALLBACK_ADDRESS, tCallbackAddress);
 				bundle.putString(BlueDisplay.DIALOG_PROMPT, tStringParameter);
-				bundle.putInt(BlueDisplay.NUMBER_INITIAL_VALUE, tInitalValue);
+				bundle.putFloat(BlueDisplay.NUMBER_INITIAL_VALUE, tInitalValue);
 				bundle.putBoolean(BlueDisplay.NUMBER_FLAG, tDoNumber);
 				msg.setData(bundle);
 				mHandler.sendMessage(msg);
@@ -1181,12 +1193,17 @@ public class RPCView extends View {
 				break;
 
 			case FUNCTION_GET_INFO:
+				// For future use
 				tSubcommand = aParameters[0];
 				tCallbackAddress = aParameters[1] & 0x0000FFFF;
+				tCallbackAddressStringAdjustedForClientDebugging = "";
 				if (aParamsLength == 3) {
 					// 32 bit callback address
 					tCallbackAddress = tCallbackAddress | (aParameters[2] << 16);
+				} else {
+					tCallbackAddressStringAdjustedForClientDebugging = "/0x" + Integer.toHexString(tCallbackAddress << 1);
 				}
+
 				switch (tSubcommand) {
 				case SUBFUNCTION_GET_INFO_:
 					// For future use
@@ -1764,7 +1781,6 @@ public class RPCView extends View {
 				if (aParameters[4] == COLOR_NO_BACKGROUND) {
 					tDrawBackground = false;
 					tDrawBackgroundExtend = false;
-					aParameters[4] = COLOR_WHITE_PARAMETER;
 				} else {
 					mTextBackgroundPaint.setColor(shortToLongColor(aParameters[4]));
 					tDrawBackground = true;

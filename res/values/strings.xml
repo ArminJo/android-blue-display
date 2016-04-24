@@ -8,7 +8,7 @@
 <resources>
 
     <string name="app_name">BlueDisplay</string>
-    <string name="app_version">3.3.1</string>
+    <string name="app_version">3.3.2</string>
 
     <!-- Alerts -->
     <string name="alert_dialog_no_bt">Bluetooth not available or activated. Stop application.</string>
@@ -31,11 +31,11 @@
 
     <!-- About menu -->
     <string name="logo">BlueDisplay Logo</string>
-    <string name="copyright">Copyright © 2014/2015  Armin Joachimsmeyer</string>
+    <string name="copyright">Copyright © 2014/2016  Armin Joachimsmeyer</string>
     <string name="license">GPL v3</string>
     <string name="code_www">https://github.com/ArminJo/android-blue-display</string>
 
-    <!-- DeviceListActivity -->
+    <!-- DeviceListActivity &#8230; is "..." -->
     <string name="scanning">scanning for devices&#8230;</string>
     <string name="select_device">select a device to connect</string>
     <string name="none_paired">No devices have been paired</string>

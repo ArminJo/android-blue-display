@@ -280,7 +280,7 @@ public class TouchButton {
 				// Multiline caption
 				for (int i = 0; i < mCaptionStrings.length; i++) {
 					// try to position the string in the middle of the box
-					int tLength = (int) ((0.6 * mCaptionSize * mCaptionStrings[i].length())+ 0.5);
+					int tLength = (int) ((0.6 * mCaptionSize * mCaptionStrings[i].length()) + 0.5);
 					int tCaptionPositionX;
 					if (tLength >= mWidth) {
 						// String too long here
@@ -699,15 +699,21 @@ public class TouchButton {
 			tButtonCaption = new String(RPCView.sCharsArray, 0, aDataLength);
 			tString = tButtonCaption.replaceAll("\n", " | ");
 			int tCallbackAddress;
+			// Output real Arduino function address, since function pointer on Arduino are address_of_function >> 1
+			String tCallbackAddressStringAdjustedForClientDebugging = "";
 			if (aParamsLength == 9) {
+				// 16 bit callback address
 				// pre 3.2.5 parameters
 				tCallbackAddress = aParameters[8] & 0x0000FFFF;
 			} else {
+				// 16 bit callback address
 				tCallbackAddress = aParameters[9] & 0x0000FFFF;
 			}
 			if (aParamsLength == 11) {
 				// 32 bit callback address
 				tCallbackAddress = tCallbackAddress | (aParameters[10] << 16);
+			} else {
+				tCallbackAddressStringAdjustedForClientDebugging = "/0x" + Integer.toHexString(tCallbackAddress << 1);
 			}
 
 			if (tButton == null) {
@@ -735,8 +741,8 @@ public class TouchButton {
 									+ aParameters[1] + ", y=" + aParameters[2] + ", width=" + aParameters[3] + ", height="
 									+ aParameters[4] + ", color=" + RPCView.shortToColorString(aParameters[5]) + ", flags="
 									+ Integer.toHexString((aParameters[6] >> 8)) + ", size=" + (aParameters[6] & 0xFF) + ", value="
-									+ aParameters[7] + ", callback=0x" + Integer.toHexString(tCallbackAddress) + ") ListSize="
-									+ sButtonList.size());
+									+ aParameters[7] + ", callback=0x" + Integer.toHexString(tCallbackAddress)
+									+ tCallbackAddressStringAdjustedForClientDebugging + ") ListSize=" + sButtonList.size());
 				}
 
 				tButton.initButton(aRPCView, aParameters[1], aParameters[2], aParameters[3], aParameters[4],
@@ -750,8 +756,8 @@ public class TouchButton {
 									+ aParameters[1] + ", y=" + aParameters[2] + ", width=" + aParameters[3] + ", height="
 									+ aParameters[4] + ", color=" + RPCView.shortToColorString(aParameters[5]) + ", size="
 									+ aParameters[6] + ", flags=" + Integer.toHexString(aParameters[7]) + ", value="
-									+ aParameters[8] + ", callback=0x" + Integer.toHexString(tCallbackAddress) + ") ListSize="
-									+ sButtonList.size());
+									+ aParameters[8] + ", callback=0x" + Integer.toHexString(tCallbackAddress)
+									+ tCallbackAddressStringAdjustedForClientDebugging + ") ListSize=" + sButtonList.size());
 				}
 
 				tButton.initButton(aRPCView, aParameters[1], aParameters[2], aParameters[3], aParameters[4],

@@ -203,7 +203,7 @@ public class BlueDisplay extends Activity {
 	@Override
 	public void onStart() {
 		super.onStart();
-		if (MyLog.isDEBUG()) {
+		if (MyLog.isINFO()) {
 			Log.i(LOG_TAG, "++ ON START ++");
 		}
 	}
@@ -212,7 +212,7 @@ public class BlueDisplay extends Activity {
 	@Override
 	public synchronized void onResume() {
 		super.onResume();
-		if (MyLog.isDEBUG()) {
+		if (MyLog.isINFO()) {
 			Log.i(LOG_TAG, "+ ON RESUME +");
 		}
 
@@ -253,7 +253,7 @@ public class BlueDisplay extends Activity {
 			Log.i(LOG_TAG, "- ON PAUSE -");
 		}
 		mSensorEventListener.deregisterAllActiveSensorListeners();
-		mRPCView.mToneGenerator.startTone(ToneGenerator.TONE_CDMA_SIGNAL_OFF);
+		mRPCView.mToneGenerator.stopTone();
 	}
 
 	@Override
@@ -456,8 +456,8 @@ public class BlueDisplay extends Activity {
 				// set window to always on and reset all structures and flags
 				getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
-				mMyToast = Toast.makeText(getApplicationContext(),
-						getString(R.string.toast_connected_to) + " " + mSerialService.mConnectedDeviceName, Toast.LENGTH_SHORT);
+				mMyToast = Toast.makeText(getApplicationContext(), getString(R.string.toast_connected_to) + " "
+						+ mSerialService.mConnectedDeviceName, Toast.LENGTH_SHORT);
 				mMyToast.show();
 				break;
 
@@ -477,9 +477,7 @@ public class BlueDisplay extends Activity {
 				setActualScreenOrientation(mPreferredScreenOrientation);
 				// set window to normal (not persistent) state
 				getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-				// stop tone - TONE_CDMA_SIGNAL_OFF does not work for lollipop
-				// mRPCView.mToneGenerator.startTone(ToneGenerator.TONE_CDMA_SIGNAL_OFF);
-				mRPCView.mToneGenerator.startTone(ToneGenerator.TONE_CDMA_CALL_SIGNAL_ISDN_PAT5);
+				mRPCView.mToneGenerator.stopTone();
 				mSensorEventListener.deregisterAllActiveSensorListeners();
 				break;
 
@@ -511,7 +509,7 @@ public class BlueDisplay extends Activity {
 					Log.v(LOG_TAG, "REQUEST_INPUT_DATA");
 				}
 				showInputDialog(msg.getData().getBoolean(NUMBER_FLAG), msg.getData().getInt(CALLBACK_ADDRESS), msg.getData()
-						.getString(BlueDisplay.DIALOG_PROMPT), msg.getData().getInt(NUMBER_INITIAL_VALUE));
+						.getString(BlueDisplay.DIALOG_PROMPT), msg.getData().getFloat(NUMBER_INITIAL_VALUE));
 				break;
 			}
 
@@ -599,7 +597,7 @@ public class BlueDisplay extends Activity {
 	}
 
 	@SuppressLint("InflateParams")
-	public void showInputDialog(boolean aDoNumber, final int aCallbackAddress, String tShortPrompt, int aInitialValue) {
+	public void showInputDialog(boolean aDoNumber, final int aCallbackAddress, String tShortPrompt, float aInitialValue) {
 		LayoutInflater tLayoutInflater = LayoutInflater.from(this);
 		View tInputView = tLayoutInflater.inflate(R.layout.input_data, null);
 
@@ -619,8 +617,8 @@ public class BlueDisplay extends Activity {
 			tUserInput.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL
 					| InputType.TYPE_NUMBER_FLAG_SIGNED);
 		}
-		if (aInitialValue != Integer.MIN_VALUE) {
-			tUserInput.setText(Integer.toString(aInitialValue));
+		if (aInitialValue != RPCView.NUMBER_INITIAL_VALUE_DO_NOT_SHOW) {
+			tUserInput.setText(Float.toString(aInitialValue).replaceAll("\\.?0*$", ""));
 		}
 		AlertDialog.Builder tBuilder = new AlertDialog.Builder(this);
 		tBuilder.setView(tInputView);
@@ -632,12 +630,11 @@ public class BlueDisplay extends Activity {
 					float tValue;
 					try {
 						tValue = Float.parseFloat(tNumber.toString());
-						mSerialService.writeNumberCallbackEvent(BluetoothSerialService.EVENT_NUMBER_CALLBACK, aCallbackAddress,
-								tValue);
 					} catch (NumberFormatException e) {
-						tValue = Float.NaN;
-						MyLog.w(LOG_TAG, "Entered data \"" + tNumber + "\" is no float");
+						tValue = RPCView.NUMBER_INITIAL_VALUE_DO_NOT_SHOW;
+						MyLog.d(LOG_TAG, "Entered data \"" + tNumber + "\" is no float");
 					}
+					mSerialService.writeNumberCallbackEvent(BluetoothSerialService.EVENT_NUMBER_CALLBACK, aCallbackAddress, tValue);
 				} else {
 					// getText function here - Not yet implemented
 				}
