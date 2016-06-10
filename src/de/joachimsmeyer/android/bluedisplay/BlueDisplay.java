@@ -56,7 +56,6 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.res.Configuration;
 import android.hardware.SensorManager;
-import android.media.ToneGenerator;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
@@ -318,7 +317,7 @@ public class BlueDisplay extends Activity {
 		} else if (mActualScreenOrientation == ActivityInfo.SCREEN_ORIENTATION_REVERSE_PORTRAIT) {
 			tOrientation = "reverse portrait";
 		} else {
-			Log.w(LOG_TAG, "Unknown orientation=" + aNewOrientation);
+			MyLog.w(LOG_TAG, "Unknown orientation=" + aNewOrientation);
 		}
 		mActualScreenOrientationRotationString = tOrientation + "=" + aNewOrientation + " | " + (90 * mActualRotation) + " degrees";
 		if (MyLog.isINFO()) {
@@ -364,12 +363,12 @@ public class BlueDisplay extends Activity {
 				Intent tDeviceListIntent = new Intent(this, DeviceListActivity.class);
 				startActivityForResult(tDeviceListIntent, REQUEST_CONNECT_DEVICE);
 			} else if (mSerialService.getState() == BluetoothSerialService.STATE_CONNECTED) {
-				// TODO ??? reset locked orientation in turn
-				// disconnect request here -> stop running service + reset locked orientation in turn
+				// Disconnect request here -> stop running service + reset locked orientation in turn
 				// send disconnect message
 				mSerialService.writeTwoIntegerEvent(BluetoothSerialService.EVENT_DISCONNECT, mRPCView.mActualViewWidth,
 						mRPCView.mActualViewHeight);
 				mSerialService.stop();
+				mSerialService.sLastFailOrDisconnectTimestampMillis = System.currentTimeMillis();
 			}
 			return true;
 
@@ -417,7 +416,7 @@ public class BlueDisplay extends Activity {
 			switch (msg.what) {
 			case MESSAGE_CHANGE_MENU_ITEM_FOR_CONNECTED_STATE:
 				/*
-				 * called by SerialService manages the menu item
+				 * called by SerialService -> manage the menu item
 				 */
 				if (MyLog.isVERBOSE()) {
 					Log.v(LOG_TAG, "MESSAGE_CHANGE_MENU_ITEM_FOR_CONNECTED_STATE: " + msg.arg1);
@@ -434,7 +433,6 @@ public class BlueDisplay extends Activity {
 				case BluetoothSerialService.STATE_CONNECTING:
 					break;
 
-				case BluetoothSerialService.STATE_LISTEN:
 				case BluetoothSerialService.STATE_NONE:
 					if (mMenuItemConnect != null) {
 						mMenuItemConnect.setIcon(android.R.drawable.ic_menu_search);
@@ -463,7 +461,7 @@ public class BlueDisplay extends Activity {
 
 			case MESSAGE_DISCONNECT:
 				/*
-				 * show toast, reset locked orientation, set window to normal (not persistent) state, stop tone, deregister sensor
+				 * show toast, reset locked orientation, set window to normal (not persistent) state, stop tone, unregister sensor
 				 * listener
 				 */
 				if (MyLog.isDEBUG()) {
@@ -596,6 +594,9 @@ public class BlueDisplay extends Activity {
 		mAboutDialog.show();
 	}
 
+	/*
+	 * Show input dialog requested by client
+	 */
 	@SuppressLint("InflateParams")
 	public void showInputDialog(boolean aDoNumber, final int aCallbackAddress, String tShortPrompt, float aInitialValue) {
 		LayoutInflater tLayoutInflater = LayoutInflater.from(this);

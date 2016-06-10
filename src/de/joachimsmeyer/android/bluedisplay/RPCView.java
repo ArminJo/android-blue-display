@@ -145,7 +145,7 @@ public class RPCView extends View {
 	protected boolean mShowTouchCoordinates = false;
 	protected int mShowTouchCoordinatesLastStringLength = 19;
 	private final float SWIPE_LIMIT = 10; // 10 pixel
-	private final float MICRO_MOVE_LIMIT = 5; // 5 pixel to avoid killing of long touch recognition
+	private final float MICRO_MOVE_LIMIT_FOR_LONG_TOUCH_DOWN = 5; // 5 pixel to avoid killing of long touch recognition
 
 	public static boolean mDeviceListActivityLaunched = false; // to prevent multiple launches of DeviceListActivity()
 	private ScaleGestureDetector mScaleDetector;
@@ -170,6 +170,10 @@ public class RPCView extends View {
 	int[] mTouchStartsOnSliderNumber; // number of slider if touch starts on a slider, used to distinguish between slider and swipe
 										// moves
 	boolean[] mSkipProcessingUntilTouchUpForButton; // true if touch down already sends an event (eg. a button down event)
+
+	// To avoid multiple sending of effectively zero moving
+	int[] mLastSentMoveXValue;
+	int[] mLastSentMoveYValue;
 
 	/*
 	 * region description of tags
@@ -431,6 +435,8 @@ public class RPCView extends View {
 		 */
 		mTouchStartsOnButtonNumber = new int[MAX_POINTER];
 		mTouchStartsOnSliderNumber = new int[MAX_POINTER];
+		mLastSentMoveXValue = new int[MAX_POINTER];
+		mLastSentMoveYValue = new int[MAX_POINTER];
 		mTouchIsActive = new boolean[MAX_POINTER];
 		mSkipProcessingUntilTouchUpForButton = new boolean[MAX_POINTER];
 		mTouchDownPositionX = new float[MAX_POINTER];
@@ -501,7 +507,7 @@ public class RPCView extends View {
 	 */
 	public boolean onTouchEvent(MotionEvent aEvent) {
 		float tDistanceFromTouchDown = 0;
-		boolean mayRemoveLongTouchDownMessage = true; // Flag for suppressing micro moves on long touch down
+		boolean tAllowedToRemoveLongTouchDownMessage = true; // Flag for suppressing micro moves on long touch down
 
 		int tMaskedAction = aEvent.getActionMasked();
 
@@ -528,6 +534,8 @@ public class RPCView extends View {
 		}
 		float tActualX = aEvent.getX(tActionIndex);
 		float tActualY = aEvent.getY(tActionIndex);
+		int tActualXScaled = (int) ((tActualX / mScaleFactor) + 0.5);
+		int tActualYScaled = (int) ((tActualY / mScaleFactor) + 0.5);
 
 		if (mTouchStartsOnButtonNumber[0] < 0 && mTouchStartsOnSliderNumber[0] < 0 && mTouchStartsOnButtonNumber[tActionIndex] < 0
 				&& mTouchStartsOnSliderNumber[tActionIndex] < 0) {
@@ -538,20 +546,19 @@ public class RPCView extends View {
 		if (mShowTouchCoordinates) {
 			int tXPos = (int) (tActualX + 0.5);
 			int tYPos = (int) (tActualY + 0.5);
-			int tXPosScaled = (int) (tActualX / mScaleFactor + 0.5);
-			int tYPosScaled = (int) (tActualY / mScaleFactor + 0.5);
+
 			mTextBackgroundPaint.setColor(Color.WHITE);
 			mCanvas.drawRect(0, 0, TEXT_WIDTH_INFO_PAINT * mShowTouchCoordinatesLastStringLength, TEXT_SIZE_INFO_PAINT + 2,
 					mTextBackgroundPaint);
-			String tInfoString = tActionIndex + "|" + tMaskedAction + "  " + tXPos + "/" + tYPos + "->" + tXPosScaled + "/"
-					+ tYPosScaled;
+			String tInfoString = tActionIndex + "|" + tMaskedAction + "  " + tXPos + "/" + tYPos + "->" + tActualXScaled + "/"
+					+ tActualYScaled;
 			mShowTouchCoordinatesLastStringLength = tInfoString.length();
 			mCanvas.drawText(tInfoString, 0, 20, mInfoPaint);
 			invalidate();
 		}
 
 		if (tActionIndex > 0) {
-			// convert pointer actions to plain actions for next evaluations
+			// convert pointer actions to plain actions for following evaluations
 			if (tMaskedAction == MotionEvent.ACTION_POINTER_DOWN) {
 				tMaskedAction = MotionEvent.ACTION_DOWN;
 			} else if (tMaskedAction == MotionEvent.ACTION_POINTER_UP) {
@@ -571,8 +578,8 @@ public class RPCView extends View {
 			tDistanceFromTouchDown = Math.max(Math.abs(mTouchDownPositionX[tActionIndex] - tActualX),
 					Math.abs(mTouchDownPositionY[tActionIndex] - tActualY));
 			// avoid to disable long touch down recognition on pseudo or micro moves
-			if (tDistanceFromTouchDown < MICRO_MOVE_LIMIT) {
-				mayRemoveLongTouchDownMessage = false;
+			if (tDistanceFromTouchDown < MICRO_MOVE_LIMIT_FOR_LONG_TOUCH_DOWN) {
+				tAllowedToRemoveLongTouchDownMessage = false;
 			}
 			if (mSkipProcessingUntilTouchUpForButton[tActionIndex]) {
 				// do not process ACTION_MOVE for buttons
@@ -594,7 +601,7 @@ public class RPCView extends View {
 		/*
 		 * Cancel long touch.
 		 */
-		if (mLongTouchMessageWasSent && mayRemoveLongTouchDownMessage && mLongTouchPointerIndex == tActionIndex) {
+		if (mLongTouchMessageWasSent && tAllowedToRemoveLongTouchDownMessage && mLongTouchPointerIndex == tActionIndex) {
 			// reset long touch recognition by clearing messages
 			mLongTouchDownHandler.removeMessages(LONG_TOUCH_DOWN);
 			mLongTouchMessageWasSent = false;
@@ -655,8 +662,7 @@ public class RPCView extends View {
 				 * Check SLIDERS if ACTION_DOWN
 				 */
 				if (tMaskedAction == MotionEvent.ACTION_DOWN) {
-					int tSliderNumber = TouchSlider.checkAllSliders((int) (tActualX / mScaleFactor + 0.5), (int) (tActualY
-							/ mScaleFactor + 0.5), false);
+					int tSliderNumber = TouchSlider.checkAllSliders(tActualXScaled, tActualYScaled, false);
 					if (tSliderNumber >= 0) {
 						mTouchStartsOnSliderNumber[tActionIndex] = tSliderNumber;
 						invalidate(); // show new slider bar value
@@ -666,8 +672,7 @@ public class RPCView extends View {
 					 * Check SLIDER if ACTION_MOVE
 					 */
 					if (tMaskedAction == MotionEvent.ACTION_MOVE && mTouchStartsOnSliderNumber[tActionIndex] >= 0) {
-						TouchSlider.checkIfTouchInSlider((int) (tActualX / mScaleFactor + 0.5),
-								(int) (tActualY / mScaleFactor + 0.5), mTouchStartsOnSliderNumber[tActionIndex]);
+						TouchSlider.checkIfTouchInSlider(tActualXScaled, tActualYScaled, mTouchStartsOnSliderNumber[tActionIndex]);
 						invalidate(); // show new slider bar value
 					}
 				}
@@ -680,16 +685,16 @@ public class RPCView extends View {
 				if (mTouchStartsOnSliderNumber[tActionIndex] < 0) {
 					if ((tMaskedAction == MotionEvent.ACTION_DOWN && !mUseUpEventForButtons)
 							|| (tMaskedAction == MotionEvent.ACTION_UP && mUseUpEventForButtons && !mDisableButtonUpOnce)) {
-						mTouchStartsOnButtonNumber[tActionIndex] = TouchButton.checkAllButtons(
-								(int) (tActualX / mScaleFactor + 0.5), (int) (tActualY / mScaleFactor + 0.5), false);
+						mTouchStartsOnButtonNumber[tActionIndex] = TouchButton.checkAllButtons(tActualXScaled, tActualYScaled,
+								false);
 						if (mTouchStartsOnButtonNumber[tActionIndex] >= 0 && tMaskedAction == MotionEvent.ACTION_DOWN) {
-							// signal that we send an event on touch down and to skip processing until touch up
+							// remember that we send an event on touch down and to skip processing until touch up
 							mSkipProcessingUntilTouchUpForButton[tActionIndex] = true;
 						}
 					} else if (tMaskedAction == MotionEvent.ACTION_DOWN) {
 						// Just check if down touch hits a button area
-						mTouchStartsOnButtonNumber[tActionIndex] = TouchButton.checkAllButtons(
-								(int) (tActualX / mScaleFactor + 0.5), (int) (tActualY / mScaleFactor + 0.5), true);
+						mTouchStartsOnButtonNumber[tActionIndex] = TouchButton
+								.checkAllButtons(tActualXScaled, tActualYScaled, true);
 					}
 				}
 				/*
@@ -713,9 +718,20 @@ public class RPCView extends View {
 				 */
 				if (mTouchStartsOnButtonNumber[tActionIndex] < 0 && mTouchStartsOnSliderNumber[tActionIndex] < 0
 						&& mTouchBasicEnable && (mTouchMoveEnable || tMaskedAction != MotionEvent.ACTION_MOVE)) {
-					// no button/slider touched and touch is enabled -> send touch event to client
-					mBlueDisplayContext.mSerialService.writeTwoIntegerAndAByteEvent(tMaskedAction,
-							(int) (tActualX / mScaleFactor + 0.5), (int) (tActualY / mScaleFactor + 0.5), tActionIndex);
+					// suppress sending of zero moves
+					if (tMaskedAction == MotionEvent.ACTION_MOVE) {
+						if (mLastSentMoveXValue[tActionIndex] != tActualXScaled
+								|| mLastSentMoveYValue[tActionIndex] != tActualYScaled) {
+							mLastSentMoveXValue[tActionIndex] = tActualXScaled;
+							mLastSentMoveYValue[tActionIndex] = tActualYScaled;
+							mBlueDisplayContext.mSerialService.writeTwoIntegerAndAByteEvent(tMaskedAction, tActualXScaled,
+									tActualYScaled, tActionIndex);
+						}
+					} else {
+						// no button/slider touched and touch is enabled -> send touch event to client
+						mBlueDisplayContext.mSerialService.writeTwoIntegerAndAByteEvent(tMaskedAction, tActualXScaled,
+								tActualYScaled, tActionIndex);
+					}
 				}
 
 				/*
@@ -748,12 +764,21 @@ public class RPCView extends View {
 			for (int i = 0; i < mTouchStartsOnSliderNumber.length; i++) {
 				mTouchStartsOnSliderNumber[i] = -1;
 			}
+
+			for (int i = 0; i < mLastSentMoveXValue.length; i++) {
+				mLastSentMoveXValue[aActionIndex] = -1;
+			}
+			for (int i = 0; i < mLastSentMoveYValue.length; i++) {
+				mLastSentMoveYValue[aActionIndex] = -1;
+			}
+
 			for (int i = 0; i < mTouchIsActive.length; i++) {
 				mTouchIsActive[i] = false;
 			}
 			for (int i = 0; i < mSkipProcessingUntilTouchUpForButton.length; i++) {
 				mSkipProcessingUntilTouchUpForButton[aActionIndex] = false;
 			}
+
 			mLongTouchEventWasSent = false;
 			mDisableButtonUpOnce = false;
 		}
@@ -1383,8 +1408,8 @@ public class RPCView extends View {
 
 			case FUNCTION_CLEAR_DISPLAY:
 				// clear screen
-				if (MyLog.isDEBUG()) {
-					MyLog.d(LOG_TAG, "Clear screen color= " + shortToColorString(aParameters[0]));
+				if (MyLog.isINFO()) {
+					MyLog.i(LOG_TAG, "Clear screen color= " + shortToColorString(aParameters[0]));
 				}
 				mCanvas.drawColor(shortToLongColor(aParameters[0]));
 				// reset screen buffer

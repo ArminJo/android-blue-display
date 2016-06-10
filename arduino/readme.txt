@@ -6,8 +6,7 @@ from https://github.com/ArminJo/android-blue-display/tree/master/arduino/librari
 Installation
 ------------
   Copy the folder libraries/BlueDisplay to your Arduino folder /arduino/libraries/
-  If there are existing folders from a previous installation,
-  delete them before copying.
+  If there are existing folders from a previous installation,  delete them before copying.
 
 Documentation
 -------------

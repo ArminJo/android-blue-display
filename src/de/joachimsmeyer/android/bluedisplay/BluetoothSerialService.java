@@ -45,8 +45,8 @@ import android.os.Message;
 import android.util.Log;
 
 /**
- * This class does all the work for setting up and managing Bluetooth connections with other devices. It has a thread that listens
- * for incoming connections, a thread for connecting with a device, and a thread for performing data transmissions when connected.
+ * This class does all the work for setting up and managing Bluetooth connections with other devices. It has a thread for connecting
+ * with a device, and a thread for performing data transmissions when connected.
  */
 public class BluetoothSerialService {
 	// Logging
@@ -77,7 +77,7 @@ public class BluetoothSerialService {
 	public long mStatisticNanoTimeForCommands;
 	public long mStatisticNanoTimeForChart;
 
-	public static long sLastFailTimestampMillis = 0;
+	public static long sLastFailOrDisconnectTimestampMillis = 0;
 
 	public final static int EVENT_CONNECTION_BUILD_UP = 0x10;
 	public final static int EVENT_REDRAW = 0x11;
@@ -115,12 +115,8 @@ public class BluetoothSerialService {
 
 	// Constants that indicate the current connection state
 	public static final int STATE_NONE = 0; // we're doing nothing
-	public static final int STATE_LISTEN = 1; // now listening for incoming
-												// connections
-	public static final int STATE_CONNECTING = 2; // now initiating an outgoing
-													// connection
-	public static final int STATE_CONNECTED = 3; // now connected to a remote
-													// device
+	public static final int STATE_CONNECTING = 1; // now initiating an outgoing connection
+	public static final int STATE_CONNECTED = 2; // now connected to a remote device
 
 	/**
 	 * Constructor. Prepares a new BluetoothChat session.
@@ -428,7 +424,7 @@ public class BluetoothSerialService {
 	 */
 	private void connectionFailed(String aName) {
 		setState(STATE_NONE);
-		sLastFailTimestampMillis = System.currentTimeMillis();
+		sLastFailOrDisconnectTimestampMillis = System.currentTimeMillis();
 
 		// Send a failure message back to the Activity
 		Message msg = mHandler.obtainMessage(BlueDisplay.MESSAGE_TOAST);
@@ -591,7 +587,7 @@ public class BluetoothSerialService {
 			mDebugBuffer[mDebugBufferactualIndex++] = tByte;
 			if (mDebugBufferactualIndex == SIZE_OF_DEBUG_BUFFER) {
 				mDebugBufferactualIndex = 0;
-				StringBuilder tDataRaw = new StringBuilder("RawData=");
+				StringBuilder tDataRaw = new StringBuilder();
 				StringBuilder tDataString = new StringBuilder();
 				int tValue;
 				for (int i = 0; i < SIZE_OF_DEBUG_BUFFER; i++) {
@@ -599,9 +595,15 @@ public class BluetoothSerialService {
 					tValue = mDebugBuffer[i];
 					appendByteAsHex(tDataRaw, (byte) tValue);
 					tDataRaw.append(" ");
-					tDataString.append((char) mDebugBuffer[i]);
+					byte tChar = mDebugBuffer[i];
+					if (tChar < 0x20) {
+						tChar = 0x20;
+					}
+					tDataString.append(" ");
+					tDataString.append((char) tChar);
+					tDataString.append(" ");
 				}
-				MyLog.v("BTSerial", tDataRaw.toString() + "| " + tDataString.toString());
+				MyLog.v("Hex=", tDataRaw.toString() + "\n  Asc= " + tDataString.toString());
 			}
 		}
 		// clear processed content
@@ -617,6 +619,7 @@ public class BluetoothSerialService {
 	/**
 	 * Search the input buffer for valid commands and call interpretCommand() as long as there is data available Returns true if it
 	 * must be called again.
+	 * 
 	 * @param aRPCView
 	 * @return true if view should be updated, false if no view update needed (e.g. in case of error)
 	 */
@@ -670,7 +673,7 @@ public class BluetoothSerialService {
 				tParamsLength = searchStateParamsLength;
 				searchStateMustBeLoaded = false;
 			} else {
-				
+
 				/*
 				 * check for SYNC Token
 				 */
@@ -1012,7 +1015,7 @@ public class BluetoothSerialService {
 					// end up here if cancel() / mmSocket.close() was called
 					// before
 					if (MyLog.isINFO()) {
-						Log.w(LOG_TAG, "Catched IOException - assume disconnected");
+						MyLog.i(LOG_TAG, "Catched IOException - assume disconnected");
 					}
 					connectionLost(); // show toast
 					break;

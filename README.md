@@ -22,6 +22,21 @@ No Android programming needed!
 - C++ Libraries for [Arduino](https://github.com/ArminJo/android-blue-display/tree/master/arduino/libraries/BlueDisplay/BlueDisplay.zip).
  and [ARM (STM)](https://github.com/ArminJo/android-blue-display/tree/master/STM32/lib).
 
+## Version Info:
+3.0 Android sensor accessible by Arduino.
+
+3.1 Local display of received and sent commands for debug purposes.
+
+3.2 Improved tone und fullscreen handling. Internal refactoring. Bugfixes and minor improvements.
+
+3.3 Fixed silent tone bug for Lollipop and other bugs.Multiline text /r /n handling.
+Android time accessible on Arduino. Debug messages as toasts. Changed create button.
+Slider values scalable. GUI multi touch.Hex and ASCII output of received Bluetooth data at log level verbose.
+
+3.4 Timeout for data messages. Get number initial value fixed.
+Bug autorepeat button in conjunction with UseUpEventForButtons fixed.
+
+
 ### Example for Hex + ASCII output:
 ```
 V BTSerial RawData=00 4C 13 A5 01 08 00 53 65 74 74 69 6E 67 73 A5 |  L      Settings

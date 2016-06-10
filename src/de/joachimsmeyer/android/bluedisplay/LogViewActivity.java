@@ -34,6 +34,7 @@ import android.app.ListActivity;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.graphics.Color;
+import android.graphics.Typeface;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.LayoutInflater;
@@ -48,6 +49,8 @@ import android.widget.TextView;
 
 public class LogViewActivity extends ListActivity {
 	LogViewActivity sInstance;
+	static final String LOG_TAG = "LogView";
+
 
 	@Override
 	public void onCreate(Bundle savedInstanceState) {
@@ -88,6 +91,10 @@ public class LogViewActivity extends ListActivity {
 	@Override
 	public synchronized void onResume() {
 		super.onResume();
+		if (MyLog.isINFO()) {
+			Log.i(LOG_TAG, "--- ON RESUME ---");
+		}
+		MyLog.mStopLoggingSinceLogIsDisplayed = true;
 		// set window to always on
 		getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 	}
@@ -95,11 +102,15 @@ public class LogViewActivity extends ListActivity {
 	@Override
 	public synchronized void onPause() {
 		super.onPause();
+		if (MyLog.isINFO()) {
+			Log.i(LOG_TAG, "--- ON PAUSE ---");
+		}
+		MyLog.mStopLoggingSinceLogIsDisplayed = false;
 		// set window to normal (not persistent) state
 		getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 	}
 
-	private class ColoredLogAdapter extends ArrayAdapter<String> {
+	public class ColoredLogAdapter extends ArrayAdapter<String> {
 
 		private final Context mContext;
 		private final int mTextViewResourceId;
@@ -128,6 +139,8 @@ public class LogViewActivity extends ListActivity {
 			}
 			TextView textView = (TextView) rowView;
 			String tLogMessage = MyLog.get(position);
+
+
 			if (tLogMessage != null) {
 				if (tLogMessage.charAt(0) == 'E') {
 					textView.setBackgroundColor(Color.RED);
@@ -138,12 +151,13 @@ public class LogViewActivity extends ListActivity {
 				} else if (tLogMessage.charAt(0) == 'D') {
 					textView.setBackgroundColor(Color.rgb(0x50, 0x50, 0x50));
 				} else if (tLogMessage.charAt(0) == 'V') {
+					// Monospace for BTSerial RawData
+					textView.setTypeface(Typeface.MONOSPACE);
 					textView.setBackgroundColor(Color.rgb(0x68, 0x68, 0x68));
 				}
 				textView.setText(tLogMessage);
 			}
 			return rowView;
 		}
-
 	}
 }

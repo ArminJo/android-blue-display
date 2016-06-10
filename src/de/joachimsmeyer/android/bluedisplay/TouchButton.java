@@ -285,7 +285,7 @@ public class TouchButton {
 					if (tLength >= mWidth) {
 						// String too long here
 						tCaptionPositionX = mPositionX;
-						Log.w(LOG_TAG, "sub caption\"" + mCaptionStrings[i] + "\" to long");
+						MyLog.w(LOG_TAG, "sub caption\"" + mCaptionStrings[i] + "\" to long");
 					} else {
 						tCaptionPositionX = mPositionX + ((mWidth - tLength) / 2);
 					}
@@ -315,14 +315,14 @@ public class TouchButton {
 	}
 
 	/**
-	 * Check if touch event is in button area if yes - call callback function and return true if no - return false
+	 * Check if touch event is in button area. If yes - call callback function and return true if no - return false
 	 * 
 	 * @param aJustCheck
 	 * @return true if any active button touched
 	 */
-	boolean checkIfTouchInButton(int aTouchPositionX, int aTouchPositionY, boolean aJustCheck) {
+	boolean checkIfTouchInButton(int aTouchPositionX, int aTouchPositionY, boolean aDoCallbackOnlyForAutorepeatButton) {
 		if (mIsActive && mCallbackAddress != 0 && checkIfTouchInButton(aTouchPositionX, aTouchPositionY)) {
-			if (!aJustCheck) {
+			if (!aDoCallbackOnlyForAutorepeatButton || mIsAutorepeatButton) {
 				/*
 				 * Touch position is in button - call callback function
 				 */
@@ -336,12 +336,10 @@ public class TouchButton {
 				 */
 				if (mIsAutorepeatButton) {
 					if (mMillisFirstAutorepeatDelay == 0) {
-						Log.w(LOG_TAG, "Autorepeat button " + mEscapedCaption + " without timing!");
+						MyLog.w(LOG_TAG, "Autorepeat button " + mEscapedCaption + " without timing!");
 					} else {
 						sAutorepeatState = BUTTON_AUTOREPEAT_FIRST_PERIOD;
 						sAutorepeatCount = mFirstAutorepeatCount;
-						// sMillisFirstAutorepeatRate = mMillisFirstAutorepeatRate;
-						// sMillisSecondAutorepeatRate = mMillisSecondAutorepeatRate;
 						mAutorepeatHandler.sendEmptyMessageDelayed(0, mMillisFirstAutorepeatDelay);
 					}
 				}
@@ -359,22 +357,15 @@ public class TouchButton {
 	 *            - do not call callback function of button
 	 * @return number of button if touched else -1
 	 */
-	static int checkAllButtons(int aTouchPositionX, int aTouchPositionY, boolean aJustCheck) {
+	static int checkAllButtons(int aTouchPositionX, int aTouchPositionY, boolean aDoCallbackOnlyForAutorepeatButton) {
 		// walk through list of active elements
 		for (TouchButton tButton : sButtonList) {
-			if (tButton.mIsActive && tButton.checkIfTouchInButton(aTouchPositionX, aTouchPositionY, aJustCheck)) {
+			if (tButton.mIsActive
+					&& tButton.checkIfTouchInButton(aTouchPositionX, aTouchPositionY, aDoCallbackOnlyForAutorepeatButton)) {
 				return tButton.mListIndex;
 			}
 		}
 		return -1;
-	}
-
-	static boolean checkIfTouchInButton(final int aTouchPositionX, final int aTouchPositionY, final int aButtonNumber) {
-		TouchButton tButton = sButtonList.get(aButtonNumber);
-		if (tButton.mIsActive) {
-			return tButton.checkIfTouchInButton(aTouchPositionX, aTouchPositionY, false);
-		}
-		return false;
 	}
 
 	/**
@@ -418,7 +409,7 @@ public class TouchButton {
 		@Override
 		public void handleMessage(Message msg) {
 			if (mRPCView.mTouchIsActive[0]) {
-				// send click
+				// beep and send button event
 				if (mDoBeep) {
 					sToneGenerator.startTone(sTouchBeepIndex, sActualToneDurationMillis);
 				}
@@ -507,6 +498,7 @@ public class TouchButton {
 				aRPCView.mUseUpEventForButtons = false;
 			}
 
+			String tInfoString = "";
 			if ((aParameters[0] & FLAG_BUTTON_GLOBAL_SET_BEEP_TONE) != 0) {
 				if (aParamsLength > 1) {
 					// set Tone
@@ -529,15 +521,18 @@ public class TouchButton {
 					if (aParameters[1] > 0 && aParameters[1] < ToneGenerator.TONE_CDMA_SIGNAL_OFF) {
 						sTouchBeepIndex = aParameters[1];
 					}
+					if (MyLog.isINFO()) {
+						tInfoString = " Touch tone volume=" + sActualToneVolume + ", index=" + sTouchBeepIndex;
+					}
 				}
 			}
 			if (MyLog.isINFO()) {
 				tString = "";
 				if (aRPCView.mUseUpEventForButtons) {
-					tString = " UseUpEventForButtons";
+					tString = " UseUpEventForButtons=";
 				}
 				MyLog.i(LOG_TAG, "Global settings. Flags=0x" + Integer.toHexString(aParameters[0]) + tString
-						+ ". Touch tone volume=" + sActualToneVolume + ", index=" + sTouchBeepIndex);
+						+ aRPCView.mUseUpEventForButtons + "." + tInfoString);
 			}
 			break;
 
@@ -676,8 +671,8 @@ public class TouchButton {
 			case SUBFUNCTION_BUTTON_SET_AUTOREPEAT_TIMING:
 				if (tButton.mIsAutorepeatButton) {
 					if (MyLog.isINFO()) {
-						MyLog.i(LOG_TAG, "Set autorepeat timing 1.delay" + aParameters[2] + ", 1.rate" + aParameters[3]
-								+ ", 1.count" + aParameters[4] + ", 2.rate" + aParameters[5] + ". " + tButtonCaption
+						MyLog.i(LOG_TAG, "Set autorepeat timing. 1.delay=" + aParameters[2] + ", 1.rate=" + aParameters[3]
+								+ ", 1.count=" + aParameters[4] + ", 2.rate=" + aParameters[5] + ". " + tButtonCaption
 								+ tButtonNumber);
 					}
 					tButton.mMillisFirstAutorepeatDelay = aParameters[2];
@@ -685,9 +680,9 @@ public class TouchButton {
 					tButton.mFirstAutorepeatCount = aParameters[4];
 					tButton.mMillisSecondAutorepeatRate = aParameters[5];
 				} else {
-					MyLog.w(LOG_TAG, "Set autorepeat timing for non autorepeat btton 1.delay" + aParameters[2] + ", 1.rate"
-							+ aParameters[3] + ", 1.count" + aParameters[4] + ", 2.rate" + aParameters[5] + ". " + tButtonCaption
-							+ tButtonNumber);
+					MyLog.w(LOG_TAG, "Refused to set autorepeat timing for non autorepeat button. 1.delay=" + aParameters[2]
+							+ ", 1.rate=" + aParameters[3] + ", 1.count=" + aParameters[4] + ", 2.rate=" + aParameters[5] + ". "
+							+ tButtonCaption + tButtonNumber);
 				}
 				break;
 

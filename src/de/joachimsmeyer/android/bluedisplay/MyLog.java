@@ -36,7 +36,9 @@ public class MyLog {
 	static final int SIZE_OF_LOG_HISTORY = 300;
 	static String[] Logmessages = new String[SIZE_OF_LOG_HISTORY];
 	static int mNextIndex = 0;
-	static int mLength = 0;
+	static int mLength = 0; // used to determine if wrap around has happened
+	// to prevent "The content of the adapter has changed but ListView did not receive a notification"
+	static boolean mStopLoggingSinceLogIsDisplayed = false;
 
 	// Debugging
 	static boolean isDevelopmentTesting = false;
@@ -86,55 +88,44 @@ public class MyLog {
 	}
 
 	public static int getCount() {
-		if (mLength < SIZE_OF_LOG_HISTORY) {
-			return mLength;
-		} else {
-			return SIZE_OF_LOG_HISTORY;
+		return mLength;
+	}
+
+	private static void InsertLog(String aLevel, String tag, String msg) {
+		if (!mStopLoggingSinceLogIsDisplayed) {
+			Logmessages[mNextIndex++] = aLevel + " " + tag + " " + msg;
+			if (mNextIndex >= SIZE_OF_LOG_HISTORY) {
+				mNextIndex = 0;
+			}
+			if (mLength < SIZE_OF_LOG_HISTORY) {
+				mLength++;
+			}
+
 		}
 	}
 
 	public static void v(String tag, String msg) {
-		Logmessages[mNextIndex++] = "V " + tag + " " + msg;
-		mLength++;
-		if (mNextIndex >= SIZE_OF_LOG_HISTORY) {
-			mNextIndex = 0;
-		}
+		InsertLog("V", tag, msg);
 		Log.v(tag, msg);
 	}
 
 	public static void d(String tag, String msg) {
-		Logmessages[mNextIndex++] = "D " + tag + " " + msg;
-		mLength++;
-		if (mNextIndex >= SIZE_OF_LOG_HISTORY) {
-			mNextIndex = 0;
-		}
+		InsertLog("D", tag, msg);
 		Log.d(tag, msg);
 	}
 
 	public static void i(String tag, String msg) {
-		Logmessages[mNextIndex++] = "I " + tag + " " + msg;
-		mLength++;
-		if (mNextIndex >= SIZE_OF_LOG_HISTORY) {
-			mNextIndex = 0;
-		}
+		InsertLog("I", tag, msg);
 		Log.i(tag, msg);
 	}
 
 	public static void w(String tag, String msg) {
-		Logmessages[mNextIndex++] = "W " + tag + " " + msg;
-		mLength++;
-		if (mNextIndex >= SIZE_OF_LOG_HISTORY) {
-			mNextIndex = 0;
-		}
+		InsertLog("W", tag, msg);
 		Log.w(tag, msg);
 	}
 
 	public static void e(String tag, String msg) {
-		Logmessages[mNextIndex++] = "E " + tag + " " + msg;
-		mLength++;
-		if (mNextIndex >= SIZE_OF_LOG_HISTORY) {
-			mNextIndex = 0;
-		}
+		InsertLog("E", tag, msg);
 		Log.e(tag, msg);
 	}
 

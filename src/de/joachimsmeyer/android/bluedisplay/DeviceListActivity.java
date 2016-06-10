@@ -105,9 +105,9 @@ public class DeviceListActivity extends Activity {
 		Set<BluetoothDevice> pairedDevices = mBtAdapter.getBondedDevices();
 
 		long tActualTimestampMillis = System.currentTimeMillis();
-		if (pairedDevices.size() == 1 && BluetoothSerialService.sLastFailTimestampMillis < (tActualTimestampMillis - 10000)) {
+		if (pairedDevices.size() == 1 && BluetoothSerialService.sLastFailOrDisconnectTimestampMillis < (tActualTimestampMillis - 10000)) {
 			/*
-			 * auto connect if only one device found but not within 10 seconds after last fail
+			 * auto connect if only one device found but not within 10 seconds after last fail or disconnect
 			 */
 			Iterator<BluetoothDevice> tIter = pairedDevices.iterator();
 			// Get the BLuetoothDevice object

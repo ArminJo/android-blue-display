@@ -8,7 +8,7 @@
 <resources>
 
     <string name="app_name">BlueDisplay</string>
-    <string name="app_version">3.3.2</string>
+    <string name="app_version">3.4</string>
 
     <!-- Alerts -->
     <string name="alert_dialog_no_bt">Bluetooth not available or activated. Stop application.</string>
@@ -77,7 +77,7 @@
 
     <!-- Log level dialog -->
     <string name="title_loglevel_preference">Log level</string>
-    <string name="summary_loglevel_preference">Choose the log level for generating ADB-LogCat output.</string>
+    <string name="summary_loglevel_preference">Choose the log level for log view and ADB-LogCat output.</string>
     <!-- Don't localize these default values 4 = INFO -->
     <string name="default_loglevel_preference">4</string>
     <string name="dialog_title_loglevel_preference">Log level</string>
