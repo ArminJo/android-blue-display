@@ -2,7 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="de.joachimsmeyer.android.bluedisplay"
     android:installLocation="auto"
-    android:versionCode="11"
+    android:versionCode="12"
     android:versionName="@string/app_version" >
 
     <!-- android:launchMode = "singleInstance" -->
@@ -17,7 +17,6 @@
     <uses-sdk android:minSdkVersion="10" />
     <!-- use 10 and omit entry android:targetSdkVersion="xx" because only this enables the menu button -->
     
-
     <application
         android:allowBackup="true"
         android:icon="@drawable/icon"

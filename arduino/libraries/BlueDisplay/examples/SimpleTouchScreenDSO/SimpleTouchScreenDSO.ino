@@ -29,22 +29,21 @@
  */
 
 /*
- * SIMPLE EXTERNAL ATTENUATOR CIRCUIT (configured by connecting pin 10 to ground)
+ * SIMPLE EXTERNAL ATTENUATOR CIRCUIT (configured by connecting pin 8 to ground)
  *
- * Safety circuit and AC/DC switch
- * 3 resistors   2 diodes   1 capacitor   1 switch
+ * Attenuator circuit and AC/DC switch
  *
- *                ADC INPUT_0  1.1 Volt         ADC INPUT_1 11 Volt        ADC INPUT_2 110 Volt
- *                      /\                         /\     ______              /\     ______
- *                      |                          +-----| 220k |----+        +-----| 10 k |----------+
- *                      |      ______              |      ______     |        |      ------           |
- *                      +-----| >4 M |----+        +-----| 220k |----+        |      _____            |
- *                      |      ------     |        |      ------     |        +-----| 5 M |-+ 2*5 M or|
- *                      _                 |        _                 |        _      -----  _ 3*3.3 M |
- *                     | |                |       | |                |       | |           | |        |
- *                     | | 10 k           |       | | 1 M            |       | | 1 M       | | 5 M    |
- *                     | |                |       | |                |       | |           | |        |
- *                      -                 |        -                 |        -             -         |
+ *          D2    ADC INPUT_0  1.1 Volt         ADC INPUT_1 11 Volt        ADC INPUT_2 110 Volt
+ *          /\          /\                         /\     ______              /\     ______
+ *          |           |                          +-----| 220k |----+        +-----| 10 k |----------+
+ *          _           |      ______              |      ______     |        |      ------           |
+ *         | |          +-----| >4 M |----+        +-----| 220k |----+        |      _____            |
+ *         | | 100 k    |      ------     |        |      ------     |        +-----| 5 M |-+ 2*5 M or|
+ *         | |          _                 |        _                 |        _      -----  _ 3*3.3 M |
+ *          -          | |                |       | |                |       | |           | |        |
+ *          |          | | 10 k           |       | | 1 M            |       | | 1 M       | | 5 M    |
+ *          O          | |                |       | |                |       | |           | |        |
+ *   External_Trigger   -                 |        -                 |        -             -         |
  *                      |                 |        |                 |        |             |         |
  *                      +----+            |        +----+            |        +----+        +----+    |
  *                      |    |            |        |    |            |        |    |        |    |    |
@@ -52,18 +51,18 @@
  *                      |    |            |        |    |            |        |    |        |    |    |
  *                      O    O            |        O    O            |        O    O        O    O    |
  *                     DC   AC            |       DC   AC            |       DC   AC       DC   AC    |
- *                                        |                          |                     1000 V Range for mains
- *                       +----------------+--------------------------+--------------------------------+
- *                       |
- *                       O
- *           AC/DC      /
- *           Switch    /
- *                   O/    O----------+
- *                AC |     DC         |
- *         ______    |       ______   |
- *   VREF-| 100k |---+------| 100k |--+
- *         ------    |       ------   |
- *                   +--------||------+-GND
+ *          D3                            |                          |                     1000 V Range
+ *          /\           +----------------+--------------------------+--------------------------------+
+ *          |            |
+ *          O            O
+ *         / _________  /   AC/DC            D8/Mode       D10/Frequency generator
+ *        /            /    Switch             /\             \/
+ * GND--O/    O      O/    O----------+        |              |
+ *     AC     DC  AC |     DC         |        |              |
+ *         ______    |       ______   |        |              |
+ *   VREF-| 100k |---+------| 100k |--+        |              \/
+ *         ------    |       ------   |        |
+ *                   +--------||------+-GND----+
  *                          33 uF
  *
  */
@@ -77,11 +76,11 @@
 /*
  * PIN
  * 2    External trigger input
- * 3    AC / DC (for attenuator)
- * 4    Attenuator range control
- * 5    Attenuator range control
- * 6    AC / DC relais
- * 7    AC / DC relais
+ * 3    AC (low)/ DC (for attenuator)
+ * 4    Attenuator range control (for active attenuator)
+ * 5    Attenuator range control (for active attenuator)
+ * 6    AC / DC relais (for active attenuator)
+ * 7    AC / DC relais (for active attenuator)
  * 8    Attenuator detect input with internal pullup - bit 0
  * 9    Attenuator detect input with internal pullup - bit 1  11-> no attenuator attached, 10-> simple (channel 0-2) attenuator attached, 0x-> active (channel 0-1) attenuator attached
  * 10   Timer1 16 bit - Frequency generator output
@@ -315,8 +314,8 @@ union Myword {
  *   Loop control
  ***********************/
 // last sample of millis() in loop as reference for loop duration
-uint32_t MillisLastLoop = 0;
-uint32_t MillisSinceLastInfoOutput = 0;
+uint32_t sMillisLastLoop = 0;
+uint16_t sMillisSinceLastInfoOutput = 0;
 #define MILLIS_BETWEEN_INFO_OUTPUT 1000
 
 bool sShowWelcomeOnce;
@@ -624,11 +623,11 @@ void __attribute__((noreturn)) loop(void) {
     for (;;) {
         if (BlueDisplay1.mConnectionEstablished) {
             tMillis = millis();
-            tMillisOfLoop = tMillis - MillisLastLoop;
-            MillisLastLoop = tMillis;
-            MillisSinceLastInfoOutput += tMillisOfLoop;
-            if (MillisSinceLastInfoOutput > MILLIS_BETWEEN_INFO_OUTPUT) {
-                MillisSinceLastInfoOutput = 0;
+            tMillisOfLoop = tMillis - sMillisLastLoop;
+            sMillisLastLoop = tMillis;
+            sMillisSinceLastInfoOutput += tMillisOfLoop;
+            if (sMillisSinceLastInfoOutput > MILLIS_BETWEEN_INFO_OUTPUT) {
+                sMillisSinceLastInfoOutput = 0;
                 tOutputInfo = true;
             }
 
@@ -885,7 +884,7 @@ void acquireDataFast(void) {
     /**********************************
      * wait for triggering condition
      **********************************/
-    Myword tUValue;
+    uint16_t tUValue;
     uint8_t tTriggerStatus = TRIGGER_STATUS_START;
     uint16_t i;
     uint16_t tValueOffset = MeasurementControl.OffsetValue;
@@ -918,8 +917,8 @@ void acquireDataFast(void) {
                 ;
             }
             // Get value
-            tUValue.byte.LowByte = ADCL;
-            tUValue.byte.HighByte = ADCH;
+            tUValue  = ADCL;
+            tUValue |= ADCH << 8;
             // without "| (1 << ADSC)" it does not work - undocumented feature???
             ADCSRA |= (1 << ADIF) | (1 << ADSC); // clear bit to recognize next conversion has finished
 
@@ -929,24 +928,24 @@ void acquireDataFast(void) {
             if (MeasurementControl.TriggerSlopeRising) {
                 if (tTriggerStatus == TRIGGER_STATUS_START) {
                     // rising slope - wait for value below 1. threshold
-                    if (tUValue.Word < MeasurementControl.TriggerLevelLower) {
+                    if (tUValue < MeasurementControl.TriggerLevelLower) {
                         tTriggerStatus = TRIGGER_STATUS_BEFORE_THRESHOLD;
                     }
                 } else {
                     // rising slope - wait for value to rise above 2. threshold
-                    if (tUValue.Word > MeasurementControl.TriggerLevelUpper) {
+                    if (tUValue > MeasurementControl.TriggerLevelUpper) {
                         break;
                     }
                 }
             } else {
                 if (tTriggerStatus == TRIGGER_STATUS_START) {
                     // falling slope - wait for value above 1. threshold
-                    if (tUValue.Word > MeasurementControl.TriggerLevelUpper) {
+                    if (tUValue > MeasurementControl.TriggerLevelUpper) {
                         tTriggerStatus = TRIGGER_STATUS_BEFORE_THRESHOLD;
                     }
                 } else {
                     // falling slope - wait for value to go below 2. threshold
-                    if (tUValue.Word < MeasurementControl.TriggerLevelLower) {
+                    if (tUValue < MeasurementControl.TriggerLevelLower) {
                         break;
                     }
                 }
@@ -966,8 +965,8 @@ void acquireDataFast(void) {
     while (bit_is_clear(ADCSRA, ADIF)) {
         ;
     }
-    tUValue.byte.LowByte = ADCL;
-    tUValue.byte.HighByte = ADCH;
+    tUValue  = ADCL;
+    tUValue |= ADCH << 8;
     // without "| (1 << ADSC)" it does not work - undocumented feature???
     ADCSRA |= (1 << ADIF) | (1 << ADSC); // clear bit to recognize next conversion has finished
 
@@ -977,8 +976,8 @@ void acquireDataFast(void) {
      * read a buffer of data here
      ********************************/
     // setup for min, max, average
-    uint16_t tValueMax = tUValue.Word;
-    uint16_t tValueMin = tUValue.Word;
+    uint16_t tValueMax = tUValue;
+    uint16_t tValueMin = tUValue;
     uint8_t tIndex = MeasurementControl.TimebaseIndex;
     uint16_t tLoopCount = DataBufferControl.AcquisitionSize;
     uint8_t *DataPointer = &DataBufferControl.DataBuffer[0];
@@ -1014,8 +1013,8 @@ void acquireDataFast(void) {
     for (i = tLoopCount; i != 0; --i) {
         if (tIndex <= TIMEBASE_INDEX_ULTRAFAST_MODES) {
             // get values from ultrafast buffer
-            tUValue.byte.LowByte = *DataPointerFast++;
-            tUValue.byte.HighByte = *DataPointerFast++;
+            tUValue = *DataPointerFast++;
+            tUValue|=  *DataPointerFast++ << 8;
         } else {
             // get values from adc
             // wait for free running conversion to finish
@@ -1025,8 +1024,8 @@ void acquireDataFast(void) {
             }
             // ADCSRA here is F5
             // duration: get Value included min 1,2 micros
-            tUValue.byte.LowByte = ADCL;
-            tUValue.byte.HighByte = ADCH;
+            tUValue  = ADCL;
+            tUValue |= ADCH << 8;
             // without "| (1 << ADSC)" it does not work - undocumented feature???
             ADCSRA |= (1 << ADIF) | (1 << ADSC);            // clear bit to recognize next conversion has finished
             //ADCSRA here is E5
@@ -1035,29 +1034,29 @@ void acquireDataFast(void) {
          * process value
          */
 
-        tIntegrateValue += tUValue.Word;
+        tIntegrateValue += tUValue;
         // get max and min for display and automatic triggering - needs 0,4 microseconds
-        if (tUValue.Word > tValueMax) {
-            tValueMax = tUValue.Word;
-        } else if (tUValue.Word < tValueMin) {
-            tValueMin = tUValue.Word;
+        if (tUValue > tValueMax) {
+            tValueMax = tUValue;
+        } else if (tUValue < tValueMin) {
+            tValueMin = tUValue;
         }
 
         /***************************************************
          * transform 10 bit value in order to fit on screen
          ***************************************************/
-        if (tUValue.Word < tValueOffset) {
-            tUValue.Word = 0;
+        if (tUValue < tValueOffset) {
+            tUValue = 0;
         } else {
-            tUValue.Word -= tValueOffset;
+            tUValue -= tValueOffset;
         }
-        tUValue.Word = tUValue.Word >> MeasurementControl.ShiftValue;
+        tUValue = tUValue >> MeasurementControl.ShiftValue;
         // Byte overflow? This can happen if autorange is disabled.
-        if (tUValue.byte.HighByte > 0) {
-            tUValue.byte.LowByte = 0xFF;
+        if (tUValue  >= 0X100) {
+            tUValue = 0xFF;
         }
         // now value is a byte and fits to screen
-        *DataPointer++ = DISPLAY_VALUE_FOR_ZERO - tUValue.byte.LowByte;
+        *DataPointer++ = DISPLAY_VALUE_FOR_ZERO - tUValue;
     }
     // enable interrupt
     sei();
@@ -2145,7 +2144,7 @@ void doTriggerSingleshot(BDButton * aTheTouchedButton, int16_t aValue) {
     COLOR_BLACK, COLOR_INFO_BACKGROUND);
 
 // prepare info output - at least 1 sec later
-    MillisSinceLastInfoOutput = 0;
+    sMillisSinceLastInfoOutput = 0;
     MeasurementControl.RawValueMax = 0;
     MeasurementControl.RawValueMin = 0;
 
@@ -3121,43 +3120,10 @@ float getFloatFromDisplayValue(uint8_t aDisplayValue) {
 /************************************************************************
  * Hardware support section
  ************************************************************************/
-/*
- * take 64 samples with prescaler 128 from channel
- * This takes 13 ms (+ 10 ms optional delay)
- */
-uint16_t getADCValue(uint8_t aChannel, uint8_t aReference) {
-    uint8_t tOldADMUX = ADMUX;
-    ADMUX = aChannel | (aReference << REFS0);
-// Temperature channel also seem to need an initial delay
-    delay(10);
-    Myword tUValue;
-    uint16_t tSum = 0; // uint16_t is sufficient for 64 samples
-    uint8_t tOldADCSRA = ADCSRA;
-    ADCSRA = (1 << ADEN) | (1 << ADSC) | (1 << ADATE) | (1 << ADIF) | (0 << ADIE) | PRESCALE128;
-    for (int i = 0; i < 64; ++i) {
-        // wait for free running conversion to finish
-        while (bit_is_clear(ADCSRA, ADIF)) {
-            ;
-        }
-        tUValue.byte.LowByte = ADCL;
-        tUValue.byte.HighByte = ADCH;
-        tSum += tUValue.Word;
-    }
-    ADCSRA = tOldADCSRA;
-    ADMUX = tOldADMUX;
-
-    tSum = (tSum + 32) >> 6;
-    return tSum;
-}
 
 void setVCCValue(void) {
     float tVCC = getADCValue(ADC_1_1_VOLT_CHANNEL, DEFAULT);
     MeasurementControl.VCC = (1024 * 1.1) / tVCC;
-}
-
-float getTemperature(void) {
-    float tTemp = (getADCValue(ADC_TEMPERATURE_CHANNEL, INTERNAL) - 317);
-    return (tTemp / 1.22);
 }
 
 /*
@@ -3267,6 +3233,9 @@ void setReference(uint8_t aReference) {
     ADMUX = (ADMUX & ~0xC0) | (aReference << REFS0);
 }
 
+/*
+ * Square wave for VEE (-5V) generation
+ */
 void initTimer2(void) {
 
 // initialization with 0 is essential otherwise timer will not work correctly!!!

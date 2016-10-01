@@ -55,18 +55,24 @@ On Arduino MEGA 2560 TX1 is used, so no diode is needed.
 ```
 
 
-Fritzing schematics
-![Fritzing schematics](https://github.com/ArminJo/android-blue-display/blob/gh-pages/schematics/BlueDisplayBlink_Steckplatine.png)
-Breadboard picture
+BlueDisplay example breadboard picture
 ![Breadboard picture](https://github.com/ArminJo/android-blue-display/blob/gh-pages/pictures/Blink1.jpg)
+Fritzing schematic for BlueDisplay example
+![Fritzing schematics](https://github.com/ArminJo/android-blue-display/blob/gh-pages/schematics/BlueDisplayBlink_Steckplatine.png)
 DSO with passive attenuator on breadboard
 ![DSO with passive attenuator on breadboard](https://github.com/ArminJo/android-blue-display/blob/gh-pages/pictures/ArduinoDSO.jpg)
+At work
+![DSO at work](https://github.com/ArminJo/android-blue-display/blob/gh-pages/pictures/DSO+Tablet.jpg)
+Fritzing
+![DSO Fritzing](https://github.com/ArminJo/android-blue-display/tree/master/arduino/libraries/BlueDisplay/examples/SimpleTouchScreenDSO/Arduino_Nano_DSO_Steckplatine.png)
+Schematic
+![DSO Schematic](https://github.com/ArminJo/android-blue-display/tree/master/arduino/libraries/BlueDisplay/examples/SimpleTouchScreenDSO/Arduino_Nano_DSO_Schaltplan.png)
 DSO settings menu
 ![DSO settings menu](https://github.com/ArminJo/android-blue-display/blob/gh-pages/screenshots/DSOSettings.png)
 DSO frequency generator menu
 ![Frequency generator menu](https://github.com/ArminJo/android-blue-display/blob/gh-pages/screenshots/Frequency.png)
 Hacked RC car
-![Hacked RC car](https://github.com/ArminJo/android-blue-display/blob/gh-pages/pictures/RCCar+Tablet.JPG)
+![Hacked RC car](https://github.com/ArminJo/android-blue-display/blob/gh-pages/pictures/RCCar+Tablet.jpg)
 RC car control display
 ![RC car control display](https://github.com/ArminJo/android-blue-display/blob/gh-pages/screenshots/RCCarControl.png)
 

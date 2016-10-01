@@ -1,10 +1,11 @@
 = BlueDisplay Library for Arduino =
 
-This library allows an Arduino board with Bluetooth module like HC-05USB
+This library allows an Arduino board with Bluetooth module like HC-05
 to connect to the BlueDisplay app on your smartphone.
 
 For more information and actual sources see:
 https://github.com/ArminJo/android-blue-display
+https://play.google.com/store/apps/details?id=de.joachimsmeyer.android.bluedisplay
 
 == License ==
 

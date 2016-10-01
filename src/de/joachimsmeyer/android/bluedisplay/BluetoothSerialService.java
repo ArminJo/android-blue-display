@@ -33,7 +33,9 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.reflect.Method;
 import java.text.DateFormat;
+import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.Locale;
 import java.util.UUID;
 
 import android.bluetooth.BluetoothAdapter;
@@ -43,6 +45,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
 import android.util.Log;
+import android.util.TimeFormatException;
 
 /**
  * This class does all the work for setting up and managing Bluetooth connections with other devices. It has a thread for connecting
@@ -1127,7 +1130,9 @@ public class BluetoothSerialService {
 				tTouchData[tIndex++] = SYNC_TOKEN;
 				if (MyLog.isINFO()) {
 					String tType = RPCView.sActionMappings.get(tEventType);
-					DateFormat tDateFormat = DateFormat.getDateTimeInstance();
+					// this does not respect the 24 hour setting of android :-(
+					// DateFormat tDateFormat = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.MEDIUM, Locale.GERMAN);
+					DateFormat tDateFormat = new SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.getDefault());
 					Date tDate = new Date(tTimestamp);
 					MyLog.i(LOG_TAG, "Send Type=0x" + Integer.toHexString(tEventType) + "|" + tType + " X=" + aX + " Y=" + aY
 							+ " Date=" + tDateFormat.format(tDate));

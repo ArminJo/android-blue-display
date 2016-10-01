@@ -52,7 +52,7 @@ volatile int sDelay = 600;
 char sDataBuffer[128];
 
 /*
- * The 3 buttons
+ * The buttons
  */
 BDButton TouchButtonStartStop;
 BDButton TouchButtonPlus;
@@ -70,7 +70,6 @@ void doGetDelay(BDButton * aTheTouchedButton, int16_t aValue);
 BDSlider TouchSliderDelay;
 // handler for value change
 void doDelay(BDSlider * aTheTochedSlider, uint16_t aSliderValue);
-void printDelayValue(void);
 
 // Callback handler for (re)connect and resize
 void drawGui(void);
@@ -83,7 +82,7 @@ void setup() {
     pinMode(LED_PIN, OUTPUT);
     pinMode(TONE_PIN, OUTPUT);
     pinMode(ANALOG_INPUT_PIN, INPUT);
-#ifdef USE_SIMPLE_SERIAL  // see line 50 in BlueSerial.h
+#ifdef USE_SIMPLE_SERIAL  // see line 38 in BlueSerial.h - use global #define USE_STANDARD_SERIAL to disable it
     initSimpleSerial(HC_05_BAUD_RATE, false);
 #else
     Serial.begin(HC_05_BAUD_RATE);
@@ -173,10 +172,13 @@ void initDisplay(void) {
     TouchButtonValueDirect.initPGM(210, 150, 90, 55, COLOR_YELLOW, PSTR("..."), 44, BUTTON_FLAG_DO_BEEP_ON_TOUCH, 0, &doGetDelay);
 
     TouchSliderDelay.init(SLIDER_X_POSITION, 40, 12, 150, 100, DELAY_START_VALUE / 10, COLOR_YELLOW, COLOR_GREEN,
-            FLAG_SLIDER_SHOW_BORDER | FLAG_SLIDER_IS_HORIZONTAL, &doDelay);
+            FLAG_SLIDER_SHOW_BORDER | FLAG_SLIDER_SHOW_VALUE | FLAG_SLIDER_IS_HORIZONTAL, &doDelay);
     TouchSliderDelay.setCaptionProperties(TEXT_SIZE_22, FLAG_SLIDER_CAPTION_ALIGN_RIGHT, 4, COLOR_RED,
     COLOR_DEMO_BACKGROUND);
     TouchSliderDelay.setCaption("Delay");
+    TouchSliderDelay.setScaleFactor(10); // Slider is virtually 10 times larger
+    TouchSliderDelay.setValueUnitString("ms");
+
     TouchSliderDelay.setPrintValueProperties(TEXT_SIZE_22, FLAG_SLIDER_CAPTION_ALIGN_LEFT, 4, COLOR_WHITE,
     COLOR_DEMO_BACKGROUND);
 }
@@ -188,7 +190,6 @@ void drawGui(void) {
     TouchButtonMinus.drawButton();
     TouchButtonValueDirect.drawButton();
     TouchSliderDelay.drawSlider();
-    printDelayValue();
 }
 
 /*
@@ -222,8 +223,7 @@ void doPlusMinus(BDButton * aTheTouchedButton, int16_t aValue) {
         doStartStop(&TouchButtonStartStop, false);
     }
     // set slider bar accordingly
-    TouchSliderDelay.setActualValueAndDrawBar(sDelay / 10);
-    printDelayValue();
+    TouchSliderDelay.setActualValueAndDrawBar(sDelay);
 }
 
 /*
@@ -238,8 +238,7 @@ void doSetDelay(float aValue) {
     }
     sDelay = aValue;
     // set slider bar accordingly
-    TouchSliderDelay.setActualValueAndDrawBar(sDelay / 10);
-    printDelayValue();
+    TouchSliderDelay.setActualValueAndDrawBar(sDelay);
 }
 
 /*
@@ -253,13 +252,7 @@ void doGetDelay(BDButton * aTheTouchedButton, int16_t aValue) {
  * Is called by touch or move on slider and sets the new delay according to the passed slider value
  */
 void doDelay(BDSlider * aTheTouchedSlider, uint16_t aSliderValue) {
-    sDelay = 10 * aSliderValue;
-    printDelayValue();
-}
-
-void printDelayValue(void) {
-    snprintf(sDataBuffer, sizeof sDataBuffer, "%4ums", sDelay);
-    TouchSliderDelay.printValue(sDataBuffer);
+    sDelay = aSliderValue;
 }
 
 #define MILLIS_PER_CHANGE 20 // gives minimal 2 seconds
@@ -268,11 +261,12 @@ void printDemoString(void) {
     static float tInterpolationDelta = 0.01;
 
     static bool tFadingFactorDirectionFromBackground = true;
-    static long MillisSinceLastChange;
+    static unsigned long MillisOfNextChange;
 
     // Timing
-    if (millis() - MillisSinceLastChange > MILLIS_PER_CHANGE) {
-        MillisSinceLastChange = millis();
+    unsigned long tMillis = millis();
+    if (tMillis >= MillisOfNextChange) {
+        MillisOfNextChange = tMillis + MILLIS_PER_CHANGE;
 
         // slow fade near background color
         if (tFadingFactor <= 0.1) {
