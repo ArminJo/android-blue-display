@@ -37,5 +37,11 @@
     <string name="summary_loglevel_preference">Log Level für erzeugten ADB-LogCat Output setzen.</string>
     <string name="title_screenorientation_preference">Bildschirm Ausrichtung</string>
     <string name="summary_screenorientation_preference">Bildschirm Ausrichtung wählen</string>
+    
+    <!-- Direct connect dialog -->
+    <string name="title_autoconnect_preference">Automatische Verbindung beim Starten</string>
+    <string name="summary_autoconnect_preference">Beim Starten direkt mit letztem BT Device verbinden</string>
+    <string name="button_text_connect_last_device">Mit letztem Gerät verbinden</string>
+    
 
 </resources>

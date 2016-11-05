@@ -55,7 +55,7 @@ void setup() {
     initSimpleSerial(HC_05_BAUD_RATE, false);
 
     // Register callback handler and check for connection
-    BlueDisplay1.initCommunication(&initDisplay, NULL, &drawGui);
+    BlueDisplay1.initCommunication(&initDisplay, &drawGui);
 }
 
 void loop() {
@@ -86,7 +86,8 @@ void initDisplay(void) {
     DISPLAY_HEIGHT);
     // Initialize button position, size, colors etc.
     TouchButtonStartStop.init((DISPLAY_WIDTH - BUTTON_WIDTH_2) / 2, BUTTON_HEIGHT_4_256_LINE_4, BUTTON_WIDTH_2, BUTTON_HEIGHT_4_256,
-    COLOR_BLUE, "Stop", 44, BUTTON_FLAG_DO_BEEP_ON_TOUCH | BUTTON_FLAG_TYPE_AUTO_RED_GREEN, doBlink, &doStartStop);
+    COLOR_BLUE, "Start", 44, BUTTON_FLAG_DO_BEEP_ON_TOUCH | BUTTON_FLAG_TYPE_TOGGLE_RED_GREEN, doBlink, &doStartStop);
+    TouchButtonStartStop.setCaptionForValueTrue("Stop");
 }
 
 /*
@@ -101,13 +102,5 @@ void drawGui(void) {
  * Change doBlink flag as well as color and caption of the button.
  */
 void doStartStop(BDButton * aTheTouchedButton, int16_t aValue) {
-    doBlink = !doBlink;
-    if (doBlink) {
-        // green stop button
-        aTheTouchedButton->setCaption("Stop");
-    } else {
-        // red start button
-        aTheTouchedButton->setCaption("Start");
-    }
-    aTheTouchedButton->setValueAndDraw(doBlink);
+    doBlink = aValue;
 }

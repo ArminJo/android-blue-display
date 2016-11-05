@@ -81,6 +81,7 @@ public:
 
     void drawSlider(void);
     void drawBorder(void);
+    void setActualValue(int16_t aActualValue);
     void setActualValueAndDrawBar(int16_t aActualValue);
     void setBarColor(Color_t aBarColor);
     void setBarThresholdColor(Color_t aBarThresholdColor);

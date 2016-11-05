@@ -56,14 +56,18 @@ public class TouchButton {
 
 	int mCaptionSize;
 	int mCaptionColor;
-	String mEscapedCaption; // contains the caption for Logging e.g. with \n replaced by " | "
-	String[] mCaptionStrings; // contains the array of caption strings for multiline Captions
+	String mRawCaption; // contains the caption as sent
+	String mEscapedCaption; // contains the caption for Logging e.g. with \n replaced by "|"
+	String[] mCaptionStrings; // contains the array of caption strings to implement multiline Captions
 
 	int mValue;
 	int mListIndex; // index in sButtonList
 	int mCallbackAddress;
 	boolean mDoBeep;
-	boolean mIsRedGreen;
+	boolean mIsManualRefresh; // default = false, true = no automatic refresh (currently only for red/green buttons)
+	boolean mIsRedGreen; // Red = false, true = green
+	String mRawCaptionForValueFalse; // contains the string for RedGreen button value == false
+	String mRawCaptionForValueTrue; // contains the string for RedGreen button value == true
 
 	/*
 	 * Autorepeat stuff
@@ -113,9 +117,11 @@ public class TouchButton {
 	// Flags for button settings contained in flags parameter
 	private static final int FLAG_BUTTON_DO_BEEP_ON_TOUCH = 0x01;
 	// Red if value == 0 else green
-	private static final int FLAG_BUTTON_TYPE_AUTO_RED_GREEN = 0x02;
+	private static final int FLAG_BUTTON_TYPE_TOGGLE_RED_GREEN = 0x02;
 	private static final int FLAG_BUTTON_TYPE_AUTOREPEAT = 0x04;
+	private static final int BUTTON_FLAG_MANUAL_REFRESH = 0x08;
 
+	private static final int FUNCTION_BUTTON_SET_CAPTION_FOR_VALUE_TRUE = 0x71;
 	private static final int FUNCTION_BUTTON_SET_CAPTION = 0x72;
 	private static final int FUNCTION_BUTTON_SET_CAPTION_AND_DRAW_BUTTON = 0x73;
 
@@ -130,9 +136,12 @@ public class TouchButton {
 	private static final int SUBFUNCTION_BUTTON_SET_COLOR_AND_VALUE_AND_DRAW = 0x07;
 	private static final int SUBFUNCTION_BUTTON_SET_POSITION = 0x08;
 	private static final int SUBFUNCTION_BUTTON_SET_POSITION_AND_DRAW = 0x09;
+
 	private static final int SUBFUNCTION_BUTTON_SET_ACTIVE = 0x10;
 	private static final int SUBFUNCTION_BUTTON_RESET_ACTIVE = 0x11;
 	private static final int SUBFUNCTION_BUTTON_SET_AUTOREPEAT_TIMING = 0x12;
+
+	private static final int SUBFUNCTION_BUTTON_SET_CALLBACK = 0x20;
 
 	TouchButton() {
 		// empty button
@@ -152,19 +161,16 @@ public class TouchButton {
 	 * Old pre 3.2.5 version
 	 */
 	void initButton(final RPCView aRPCView, final int aPositionX, final int aPositionY, final int aWidthX, final int aHeightY,
-			final int aButtonColor, final String aCaptionForLogging, final String[] aCaptionArray, final int aCaptionSizeAndFlags,
-			final int aValue, final int aCallbackAddress) {
-		initButton(aRPCView, aPositionX, aPositionY, aWidthX, aHeightY, aButtonColor, aCaptionForLogging, aCaptionArray,
-				aCaptionSizeAndFlags & 0xFF, aCaptionSizeAndFlags >> 8, aValue, aCallbackAddress);
+			final int aButtonColor, final String aCaption, final int aCaptionSizeAndFlags, final int aValue,
+			final int aCallbackAddress) {
+		initButton(aRPCView, aPositionX, aPositionY, aWidthX, aHeightY, aButtonColor, aCaption, aCaptionSizeAndFlags & 0xFF,
+				aCaptionSizeAndFlags >> 8, aValue, aCallbackAddress);
 	}
 
 	void initButton(final RPCView aRPCView, final int aPositionX, final int aPositionY, final int aWidthX, final int aHeightY,
-			final int aButtonColor, final String aCaptionForLogging, final String[] aCaptionArray, final int aCaptionSize,
-			final int aFlags, final int aValue, final int aCallbackAddress) {
+			final int aButtonColor, final String aCaption, final int aCaptionSize, final int aFlags, final int aValue,
+			final int aCallbackAddress) {
 		mRPCView = aRPCView;
-
-		mEscapedCaption = aCaptionForLogging; // for logging purposes do it here
-		mCaptionStrings = aCaptionArray;
 
 		mWidth = aWidthX;
 		mHeight = aHeightY;
@@ -174,10 +180,13 @@ public class TouchButton {
 		mButtonColor = aButtonColor;
 		mValue = aValue;
 		mCallbackAddress = aCallbackAddress;
-		mCaptionColor = sDefaultCaptionColor;
 
+		/*
+		 * Caption
+		 */
+		mCaptionColor = sDefaultCaptionColor;
 		mCaptionSize = aCaptionSize;
-		positionCaption();
+		handleCaption(aCaption);
 
 		if (aButtonColor == 0) {
 			mButtonColor = sDefaultButtonColor;
@@ -189,6 +198,7 @@ public class TouchButton {
 		int tFlags = aFlags;
 		mDoBeep = false;
 		mIsRedGreen = false;
+		mIsManualRefresh = false;
 		mIsAutorepeatButton = false;
 		mMillisFirstAutorepeatDelay = 0;
 
@@ -198,7 +208,8 @@ public class TouchButton {
 			}
 			mDoBeep = true;
 		}
-		if ((tFlags & FLAG_BUTTON_TYPE_AUTO_RED_GREEN) != 0) {
+		if ((tFlags & FLAG_BUTTON_TYPE_TOGGLE_RED_GREEN) != 0) {
+			mRawCaptionForValueFalse = aCaption;
 			mIsRedGreen = true;
 			if (mValue != 0) {
 				mValue = 1;
@@ -207,6 +218,10 @@ public class TouchButton {
 				mButtonColor = Color.RED;
 			}
 		}
+		if ((tFlags & BUTTON_FLAG_MANUAL_REFRESH) != 0) {
+			mIsManualRefresh = true;
+		}
+
 		if ((tFlags & FLAG_BUTTON_TYPE_AUTOREPEAT) != 0) {
 			mIsAutorepeatButton = true;
 		}
@@ -226,6 +241,31 @@ public class TouchButton {
 		// Clear rect
 		mRPCView.fillRectRel(mPositionX, mPositionY, mWidth, mHeight, tBackgroundColor);
 		mIsActive = false;
+	}
+
+	private void handleValueForRedGreenButton(int aValue) {
+		if (mValue != 0) {
+			// TRUE
+			mValue = 1;
+			mButtonColor = Color.GREEN;
+			if (mRawCaptionForValueTrue != null) {
+				handleCaption(mRawCaptionForValueTrue);
+			}
+		} else {
+			// FALSE
+			mButtonColor = Color.RED;
+			if (mRawCaptionForValueTrue != null) {
+				// not needed if only one caption for both values
+				handleCaption(mRawCaptionForValueFalse);
+			}
+		}
+	}
+
+	private void handleCaption(String aCaption) {
+		mRawCaption = aCaption;
+		mEscapedCaption = aCaption.replaceAll("\n", "|");
+		mCaptionStrings = aCaption.split("\n");
+		positionCaption();
 	}
 
 	private void positionCaption() {
@@ -273,8 +313,8 @@ public class TouchButton {
 		mIsActive = true;
 		if (mCaptionSize > 0) { // don't render anything if caption size == 0
 			if (mCaptionStrings.length == 1) {
-				mRPCView.drawTextWithBackground(mCaptionPositionX, mCaptionPositionY, mEscapedCaption, mCaptionSize, mCaptionColor,
-						mButtonColor);
+				mRPCView.drawTextWithBackground(mCaptionPositionX, mCaptionPositionY, mCaptionStrings[0], mCaptionSize,
+						mCaptionColor, mButtonColor);
 			} else {
 				int TPosY = mCaptionPositionY;
 				// Multiline caption
@@ -329,8 +369,34 @@ public class TouchButton {
 				if (mDoBeep) {
 					sToneGenerator.startTone(sTouchBeepIndex, sActualToneDurationMillis);
 				}
+				/*
+				 * Handle Toggle red/green button
+				 */
+				if (mIsRedGreen) {
+					/*
+					 * Toggle value
+					 */
+					if (mValue == 0) {
+						// TRUE
+						mValue = 1;
+					} else {
+						// FALSE
+						mValue = 0;
+					}
+					handleValueForRedGreenButton(mValue);
+					if (MyLog.isDEBUG()) {
+						MyLog.d(LOG_TAG, "Set value=" + mValue + " for" + " \"" + mEscapedCaption + "\". ButtonNr=" + mListIndex);
+					}
+					if (!mIsManualRefresh) {
+						drawButton();
+						// Trigger next frame in order to show changed button
+						mRPCView.invalidate();
+					}
+				}
+
 				mRPCView.mBlueDisplayContext.mSerialService.writeGuiCallbackEvent(BluetoothSerialService.EVENT_BUTTON_CALLBACK,
 						mListIndex, mCallbackAddress, mValue);
+
 				/*
 				 * Handle autorepeat
 				 */
@@ -563,14 +629,27 @@ public class TouchButton {
 		case FUNCTION_BUTTON_SET_CAPTION_AND_DRAW_BUTTON:
 			aRPCView.myConvertChars(aDataBytes, RPCView.sCharsArray, aDataLength);
 			tString = new String(RPCView.sCharsArray, 0, aDataLength);
-			tButton.mEscapedCaption = tString.replaceAll("\n", " | ");
+			tButton.handleCaption(tString);
+
 			if (MyLog.isINFO()) {
 				MyLog.i(LOG_TAG, "Set caption=\"" + tButton.mEscapedCaption + "\" for" + tButtonCaption + tButtonNumber);
 			}
-			tButton.mCaptionStrings = tString.split("\n");
-			tButton.positionCaption();
 			if (aCommand == FUNCTION_BUTTON_SET_CAPTION_AND_DRAW_BUTTON) {
 				tButton.drawButton();
+			}
+			break;
+
+		case FUNCTION_BUTTON_SET_CAPTION_FOR_VALUE_TRUE:
+			aRPCView.myConvertChars(aDataBytes, RPCView.sCharsArray, aDataLength);
+			tString = new String(RPCView.sCharsArray, 0, aDataLength);
+			tButton.mRawCaptionForValueTrue = tString;
+			String tEscapedCaption = tString.replaceAll("\n", "|");
+			if (tButton.mValue != 0) {
+				// set right caption position etc. if value is already true
+				tButton.handleCaption(tString);
+			}
+			if (MyLog.isINFO()) {
+				MyLog.i(LOG_TAG, "Set caption=\"" + tEscapedCaption + "\" for value true for" + tButtonCaption + tButtonNumber);
 			}
 			break;
 
@@ -613,12 +692,7 @@ public class TouchButton {
 					tButton.mValue = tButton.mValue | (aParameters[3] << 16);
 				}
 				if (tButton.mIsRedGreen) {
-					if (tButton.mValue != 0) {
-						tButton.mValue = 1;
-						tButton.mButtonColor = Color.GREEN;
-					} else {
-						tButton.mButtonColor = Color.RED;
-					}
+					tButton.handleValueForRedGreenButton(tButton.mValue);
 				}
 				if (MyLog.isINFO()) {
 					MyLog.i(LOG_TAG, "Set value=" + aParameters[2] + " for" + tButtonCaption + tButtonNumber);
@@ -686,13 +760,37 @@ public class TouchButton {
 				}
 				break;
 
+			case SUBFUNCTION_BUTTON_SET_CALLBACK:
+				// Output real Arduino function address, since function pointer on Arduino are address_of_function >> 1
+				String tCallbackAddressStringAdjustedForClientDebugging = "";
+				String tOldCallbackAddressStringAdjustedForClientDebugging = "";
+
+				int tCallbackAddress = aParameters[2] & 0x0000FFFF;
+				if (aParamsLength == 4) {
+					// 32 bit callback address
+					tCallbackAddress = tCallbackAddress | (aParameters[3] << 16);
+				} else {
+					// 16 bit Arduino / AVR address
+					tCallbackAddressStringAdjustedForClientDebugging = "/0x" + Integer.toHexString(tCallbackAddress << 1);
+				}
+				tOldCallbackAddressStringAdjustedForClientDebugging = "/0x" + Integer.toHexString(tButton.mCallbackAddress << 1);
+
+				if (MyLog.isINFO()) {
+					MyLog.i(LOG_TAG,
+							"Set callback from 0x" + Integer.toHexString(tButton.mCallbackAddress)
+									+ tOldCallbackAddressStringAdjustedForClientDebugging + " to 0x"
+									+ Integer.toHexString(tCallbackAddress) + tCallbackAddressStringAdjustedForClientDebugging
+									+ ". " + tButtonCaption + tButtonNumber);
+				}
+				tButton.mCallbackAddress = tCallbackAddress;
+				break;
+
 			}
 			break;
 
 		case FUNCTION_BUTTON_CREATE:
 			aRPCView.myConvertChars(aDataBytes, RPCView.sCharsArray, aDataLength);
 			tButtonCaption = new String(RPCView.sCharsArray, 0, aDataLength);
-			tString = tButtonCaption.replaceAll("\n", " | ");
 			int tCallbackAddress;
 			// Output real Arduino function address, since function pointer on Arduino are address_of_function >> 1
 			String tCallbackAddressStringAdjustedForClientDebugging = "";
@@ -708,6 +806,7 @@ public class TouchButton {
 				// 32 bit callback address
 				tCallbackAddress = tCallbackAddress | (aParameters[10] << 16);
 			} else {
+				// 16 bit Arduino / AVR address
 				tCallbackAddressStringAdjustedForClientDebugging = "/0x" + Integer.toHexString(tCallbackAddress << 1);
 			}
 
@@ -730,35 +829,32 @@ public class TouchButton {
 			}
 			if (aParamsLength == 9) {
 				// pre 3.2.5 parameters
+				tButton.initButton(aRPCView, aParameters[1], aParameters[2], aParameters[3], aParameters[4],
+						RPCView.shortToLongColor(aParameters[5]), tButtonCaption, aParameters[6], aParameters[7], tCallbackAddress);
 				if (MyLog.isINFO()) {
 					MyLog.i(LOG_TAG,
-							"Create button. ButtonNr=" + tButtonNumber + ", new TouchButton(\"" + tString + "\", x="
-									+ aParameters[1] + ", y=" + aParameters[2] + ", width=" + aParameters[3] + ", height="
-									+ aParameters[4] + ", color=" + RPCView.shortToColorString(aParameters[5]) + ", flags="
-									+ Integer.toHexString((aParameters[6] >> 8)) + ", size=" + (aParameters[6] & 0xFF) + ", value="
-									+ aParameters[7] + ", callback=0x" + Integer.toHexString(tCallbackAddress)
+							"Create button. ButtonNr=" + tButtonNumber + ", new TouchButton(\"" + tButton.mEscapedCaption
+									+ "\", x=" + aParameters[1] + ", y=" + aParameters[2] + ", width=" + aParameters[3]
+									+ ", height=" + aParameters[4] + ", color=" + RPCView.shortToColorString(aParameters[5])
+									+ ", flags=" + Integer.toHexString((aParameters[6] >> 8)) + ", size=" + (aParameters[6] & 0xFF)
+									+ ", value=" + aParameters[7] + ", callback=0x" + Integer.toHexString(tCallbackAddress)
 									+ tCallbackAddressStringAdjustedForClientDebugging + ") ListSize=" + sButtonList.size());
 				}
-
-				tButton.initButton(aRPCView, aParameters[1], aParameters[2], aParameters[3], aParameters[4],
-						RPCView.shortToLongColor(aParameters[5]), tString, tButtonCaption.split("\n"), aParameters[6],
-						aParameters[7], tCallbackAddress);
 			} else {
 				// new Parameter set since version 3.2.5
-				if (MyLog.isINFO()) {
-					MyLog.i(LOG_TAG,
-							"Create button. ButtonNr=" + tButtonNumber + ", new TouchButton(\"" + tString + "\", x="
-									+ aParameters[1] + ", y=" + aParameters[2] + ", width=" + aParameters[3] + ", height="
-									+ aParameters[4] + ", color=" + RPCView.shortToColorString(aParameters[5]) + ", size="
-									+ aParameters[6] + ", flags=" + Integer.toHexString(aParameters[7]) + ", value="
-									+ aParameters[8] + ", callback=0x" + Integer.toHexString(tCallbackAddress)
-									+ tCallbackAddressStringAdjustedForClientDebugging + ") ListSize=" + sButtonList.size());
-				}
 
 				tButton.initButton(aRPCView, aParameters[1], aParameters[2], aParameters[3], aParameters[4],
-						RPCView.shortToLongColor(aParameters[5]), tString, tButtonCaption.split("\n"), aParameters[6],
-						aParameters[7], aParameters[8], tCallbackAddress);
+						RPCView.shortToLongColor(aParameters[5]), tButtonCaption, aParameters[6], aParameters[7], aParameters[8],
+						tCallbackAddress);
 
+				if (MyLog.isINFO()) {
+					MyLog.i(LOG_TAG, "Create button. ButtonNr=" + tButtonNumber + ", new TouchButton(\"" + tButton.mEscapedCaption
+							+ "\", x=" + aParameters[1] + ", y=" + aParameters[2] + ", width=" + aParameters[3] + ", height="
+							+ aParameters[4] + ", color=" + RPCView.shortToColorString(aParameters[5]) + ", size=" + aParameters[6]
+							+ ", flags=" + Integer.toHexString(aParameters[7]) + ", value=" + aParameters[8] + ", callback=0x"
+							+ Integer.toHexString(tCallbackAddress) + tCallbackAddressStringAdjustedForClientDebugging
+							+ ") ListSize=" + sButtonList.size());
+				}
 			}
 			break;
 

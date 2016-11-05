@@ -36,6 +36,10 @@ Slider values scalable. GUI multi touch.Hex and ASCII output of received Bluetoo
 3.4 Timeout for data messages. Get number initial value fixed.
 Bug autorepeat button in conjunction with UseUpEventForButtons fixed.
 
+3.5 Slider scaling changed and unit value added.
+
+3.6 connect, reconnect and autoconnect improved/added. Improved debug() command. Simplified Red/Green button handling.
+
 
 ### Example for Hex + ASCII output:
 ```
@@ -64,15 +68,16 @@ DSO with passive attenuator on breadboard
 At work
 ![DSO at work](https://github.com/ArminJo/android-blue-display/blob/gh-pages/pictures/DSO+Tablet.jpg)
 Fritzing
-![DSO Fritzing](https://github.com/ArminJo/android-blue-display/tree/master/arduino/libraries/BlueDisplay/examples/SimpleTouchScreenDSO/Arduino_Nano_DSO_Steckplatine.png)
+![DSO Fritzing](https://github.com/ArminJo/Arduino-Simple-DSO/blob/master/fritzing/Arduino_Nano_DSO_Steckplatine.png)
 Schematic
-![DSO Schematic](https://github.com/ArminJo/android-blue-display/tree/master/arduino/libraries/BlueDisplay/examples/SimpleTouchScreenDSO/Arduino_Nano_DSO_Schaltplan.png)
+![DSO Schematic](https://github.com/ArminJo/Arduino-Simple-DSO/blob/master/fritzing/Arduino_Nano_DSO_Schaltplan.png)
 DSO settings menu
 ![DSO settings menu](https://github.com/ArminJo/android-blue-display/blob/gh-pages/screenshots/DSOSettings.png)
 DSO frequency generator menu
 ![Frequency generator menu](https://github.com/ArminJo/android-blue-display/blob/gh-pages/screenshots/Frequency.png)
 Hacked RC car
 ![Hacked RC car](https://github.com/ArminJo/android-blue-display/blob/gh-pages/pictures/RCCar+Tablet.jpg)
+
 RC car control display
 ![RC car control display](https://github.com/ArminJo/android-blue-display/blob/gh-pages/screenshots/RCCarControl.png)
 

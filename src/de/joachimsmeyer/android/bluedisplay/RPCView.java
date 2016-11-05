@@ -31,10 +31,10 @@ package de.joachimsmeyer.android.bluedisplay;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.charset.Charset;
+import java.util.TimeZone;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
-import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
@@ -260,7 +260,8 @@ public class RPCView extends View {
 	private final static int FUNCTION_GET_TEXT = 0x0D;
 	private final static int FUNCTION_GET_INFO = 0x0E;
 	// Sub functions for FUNCTION_GET_INFO
-	private final static int SUBFUNCTION_GET_INFO_ = 0x00;
+	private final static int SUBFUNCTION_GET_INFO_LOCAL_TIME = 0x00;
+	private final static int SUBFUNCTION_GET_INFO_UTC_TIME = 0x01;
 
 	private final static int FUNCTION_PLAY_TONE = 0x0F;
 
@@ -288,13 +289,18 @@ public class RPCView extends View {
 	private final static int FUNCTION_DRAW_CIRCLE = 0x28;
 	private final static int FUNCTION_FILL_CIRCLE = 0x29;
 
+	private final static int FUNCTION_DRAW_VECTOR_DEGREE = 0x2C;
+	private final static int FUNCTION_DRAW_VECTOR_RADIAN = 0x2D;
+
 	private final static int FUNCTION_WRITE_SETTINGS = 0x34;
 	// Flags for WRITE_SETTINGS
 	private final static int FLAG_WRITE_SETTINGS_SET_SIZE_AND_COLORS_AND_FLAGS = 0x00;
 	private final static int FLAG_WRITE_SETTINGS_SET_POSITION = 0x01;
 	private final static int FLAG_WRITE_SETTINGS_SET_LINE_COLUMN = 0x02;
 
-	// Variable parameter length
+	/*
+	 * Functions with variable parameter length
+	 */
 	private final static int FUNCTION_DRAW_STRING = 0x60;
 	private final static int FUNCTION_DEBUG_STRING = 0x61;
 	private final static int FUNCTION_WRITE_STRING = 0x62;
@@ -621,8 +627,7 @@ public class RPCView extends View {
 				/*
 				 * Launch the DeviceListActivity to choose device if state is "not connected"
 				 */
-				Intent serverIntent = new Intent(mBlueDisplayContext, DeviceListActivity.class);
-				mBlueDisplayContext.startActivityForResult(serverIntent, BlueDisplay.REQUEST_CONNECT_DEVICE);
+				mBlueDisplayContext.launchDeviceListActivity();
 				mDeviceListActivityLaunched = true;
 			}
 			if (mBlueDisplayContext.mSerialService.getState() == BluetoothSerialService.STATE_CONNECTED) {
@@ -1218,6 +1223,7 @@ public class RPCView extends View {
 				break;
 
 			case FUNCTION_GET_INFO:
+				// get timestamps
 				// For future use
 				tSubcommand = aParameters[0];
 				tCallbackAddress = aParameters[1] & 0x0000FFFF;
@@ -1230,8 +1236,34 @@ public class RPCView extends View {
 				}
 
 				switch (tSubcommand) {
-				case SUBFUNCTION_GET_INFO_:
-					// For future use
+				case SUBFUNCTION_GET_INFO_LOCAL_TIME:
+				case SUBFUNCTION_GET_INFO_UTC_TIME:
+					/*
+					 * send useDaylightTime flag, distance to UTC and requested timestamp
+					 */
+					tFunctionName = "UTC time";
+					if (tSubcommand == SUBFUNCTION_GET_INFO_LOCAL_TIME) {
+						tFunctionName = "local time";
+					}
+					if (mBlueDisplayContext.mSerialService != null) {
+						int tUseDaylightTime = 0;
+						if (TimeZone.getDefault().useDaylightTime()) {
+							tUseDaylightTime = 1;
+						}
+						int tGmtOffset = TimeZone.getDefault().getRawOffset() + TimeZone.getDefault().getDSTSavings();
+						long tTimestamp = System.currentTimeMillis();
+						if (tSubcommand == SUBFUNCTION_GET_INFO_LOCAL_TIME) {
+							tTimestamp += tGmtOffset;
+						}
+						long tTimestampSeconds = tTimestamp / 1000L;
+						if (MyLog.isINFO()) {
+							MyLog.i(LOG_TAG, "Get " + tFunctionName + " callback=0x" + Integer.toHexString(tCallbackAddress)
+									+ tCallbackAddressStringAdjustedForClientDebugging);
+						}
+						mBlueDisplayContext.mSerialService.writeInfoCallbackEvent(BluetoothSerialService.EVENT_INFO_CALLBACK,
+								tSubcommand, tUseDaylightTime, tGmtOffset, tCallbackAddress, tTimestampSeconds);
+					}
+					break;
 				}
 				break;
 
@@ -1272,12 +1304,15 @@ public class RPCView extends View {
 
 				case SUBFUNCTION_GLOBAL_SET_CHARACTER_CODE_MAPPING:
 					tIndex = aParameters[1] - 0x80;
-					if (MyLog.isINFO()) {
-						MyLog.i(LOG_TAG, "Set character mapping=" + mCharMappingArray[tIndex] + "->" + (char) aParameters[2]
-								+ " / 0x" + Integer.toHexString(aParameters[1]) + "-> 0x" + Integer.toHexString(aParameters[2]));
-					}
 					if (tIndex >= 0 && tIndex < mCharMappingArray.length) {
+						if (MyLog.isINFO()) {
+							MyLog.i(LOG_TAG, "Set character mapping=" + mCharMappingArray[tIndex] + "->" + (char) aParameters[2]
+									+ " / 0x" + Integer.toHexString(aParameters[1]) + "-> 0x" + Integer.toHexString(aParameters[2]));
+						}
 						mCharMappingArray[tIndex] = (char) aParameters[2];
+					} else {
+						MyLog.e(LOG_TAG, "Character mapping index=0x" + Integer.toHexString(aParameters[1])
+								+ "+ must be between 0x80 and 0xFF");
 					}
 					break;
 
@@ -1427,10 +1462,18 @@ public class RPCView extends View {
 
 			case FUNCTION_DRAW_LINE_REL:
 			case FUNCTION_DRAW_LINE:
+			case FUNCTION_DRAW_VECTOR_DEGREE:
 				if (aCommand == FUNCTION_DRAW_LINE_REL) {
 					tFunctionName = "drawLineRel";
 					tXEnd = tXStart + aParameters[2] * mScaleFactor;
 					tYEnd = tYStart + aParameters[3] * mScaleFactor;
+				} else if (aCommand == FUNCTION_DRAW_VECTOR_DEGREE) {
+					tFunctionName = "drawVectorDegree";
+					float tLength = aParameters[2];
+					float tDegree = aParameters[3];
+					double tRadianOfDegree = tDegree * (Math.PI / 180);
+					tXEnd = (float) (tXStart + ((Math.cos(tRadianOfDegree) * tLength) + 0.5) * mScaleFactor);
+					tYEnd = (float) (tYStart - ((Math.sin(tRadianOfDegree) * tLength) + 0.5) * mScaleFactor);
 				} else {
 					tFunctionName = "drawLine";
 					tXEnd = aParameters[2] * mScaleFactor;
@@ -1444,7 +1487,7 @@ public class RPCView extends View {
 					mGraphPaintStrokeSettable.setStrokeWidth(aParameters[5] * mScaleFactor);
 					tResultingPaint = mGraphPaintStrokeSettable;
 					if (MyLog.isDEBUG()) {
-						tAdditionalInfo = " strokeWidth=" + aParameters[5] * mScaleFactor;
+						tAdditionalInfo = " strokeWidth=" + aParameters[5];
 					}
 				} else {
 					tResultingPaint = mGraphPaintStrokeScaleFactor;
@@ -1459,6 +1502,39 @@ public class RPCView extends View {
 				if (MyLog.isDEBUG()) {
 					MyLog.d(LOG_TAG, tFunctionName + "(" + aParameters[0] + ", " + aParameters[1] + ", " + aParameters[2] + ", "
 							+ aParameters[3] + ") color= " + shortToColorString(aParameters[4]) + tAdditionalInfo);
+				}
+				break;
+
+			case FUNCTION_DRAW_VECTOR_RADIAN:
+				tFunctionName = "drawVectorRadian";
+				float tLength = aParameters[2];
+				int tIntValue = (aParameters[3] & 0x0000FFFF) | (aParameters[4] << 16);
+				float tRadian = Float.intBitsToFloat(tIntValue);
+				tXEnd = (float) (tXStart + ((Math.cos(tRadian) * tLength) + 0.5) * mScaleFactor);
+				tYEnd = (float) (tYStart - ((Math.sin(tRadian) * tLength) + 0.5) * mScaleFactor);
+
+				tColor = shortToLongColor(aParameters[5]);
+
+				if (aParamsLength > 6) {
+					// Stroke parameter
+					mGraphPaintStrokeSettable.setStrokeWidth(aParameters[6] * mScaleFactor);
+					tResultingPaint = mGraphPaintStrokeSettable;
+					if (MyLog.isDEBUG()) {
+						tAdditionalInfo = " strokeWidth=" + aParameters[6];
+					}
+				} else {
+					tResultingPaint = mGraphPaintStrokeScaleFactor;
+				}
+
+				tResultingPaint.setColor(tColor);
+				if (tXStart == tXEnd && tYStart == tYEnd) {
+					mCanvas.drawPoint(tXStart, tYStart, tResultingPaint);
+				} else {
+					mCanvas.drawLine(tXStart, tYStart, tXEnd, tYEnd, tResultingPaint);
+				}
+				if (MyLog.isDEBUG()) {
+					MyLog.d(LOG_TAG, tFunctionName + "(" + aParameters[0] + ", " + aParameters[1] + ", " + aParameters[2] + ", "
+							+ aParameters[3] + ") color= " + shortToColorString(aParameters[5]) + tAdditionalInfo);
 				}
 				break;
 
@@ -1536,7 +1612,7 @@ public class RPCView extends View {
 					mGraphPaintStrokeSettable.setStrokeWidth(aParameters[1] * mScaleFactor);
 					tResultingPaint = mGraphPaintStrokeSettable;
 					if (MyLog.isDEBUG()) {
-						tAdditionalInfo = " strokeWidth=" + aParameters[1] * mScaleFactor;
+						tAdditionalInfo = " strokeWidth=" + aParameters[1];
 					}
 				} else {
 					tFunctionName = "fillPath";
@@ -1603,7 +1679,7 @@ public class RPCView extends View {
 					mGraphPaintStrokeSettable.setStrokeWidth(aParameters[5] * mScaleFactor);
 					tResultingPaint = mGraphPaintStrokeSettable;
 					if (MyLog.isDEBUG()) {
-						tAdditionalInfo = " strokeWidth=" + aParameters[5] * mScaleFactor;
+						tAdditionalInfo = " strokeWidth=" + aParameters[5];
 					}
 				} else {
 					if (aCommand == FUNCTION_FILL_RECT_REL) {
@@ -1632,7 +1708,7 @@ public class RPCView extends View {
 					mGraphPaintStrokeSettable.setStrokeWidth(aParameters[4] * mScaleFactor);
 					tResultingPaint = mGraphPaintStrokeSettable;
 					if (MyLog.isDEBUG()) {
-						tAdditionalInfo = " strokeWidth=" + aParameters[4] * mScaleFactor;
+						tAdditionalInfo = " strokeWidth=" + aParameters[4];
 					}
 				} else {
 					tFunctionName = "fillCircle";
@@ -1660,8 +1736,8 @@ public class RPCView extends View {
 					mBlueDisplayContext.mMyToast.show();
 				}
 
-				// intentionally without enclosing if MyLog.isINFO()
-				MyLog.i(LOG_TAG, "DebugString=" + tStringParameter);
+				// Output as warning in order to enable easier finding and filtering the message in log
+				MyLog.w(LOG_TAG, "DebugString=" + tStringParameter);
 				break;
 
 			/*
@@ -1957,14 +2033,14 @@ public class RPCView extends View {
 		String tResetAllString = "";
 		if ((aFlags & BD_FLAG_FIRST_RESET_ALL) != 0) {
 			resetAll();
-			tResetAllString = "Reset all before, ";
+			tResetAllString = "After reset of all ";
 		}
 
 		mTouchBasicEnable = ((aFlags & BD_FLAG_TOUCH_BASIC_DISABLE) == 0);
 		mTouchMoveEnable = ((aFlags & BD_FLAG_TOUCH_MOVE_DISABLE) == 0);
 		mIsLongTouchEnabled = ((aFlags & BD_FLAG_LONG_TOUCH_ENABLE) != 0);
 
-		mScaleFactor = 0.9f; // force resize in setScaleFactor()
+		mScaleFactor = 0.4711f; // force resize in setScaleFactor()
 		if ((aFlags & BD_FLAG_USE_MAX_SIZE) != 0) {
 			mUseMaxSize = true;
 			// resize canvas
@@ -1975,8 +2051,8 @@ public class RPCView extends View {
 		}
 
 		if (MyLog.isINFO()) {
-			MyLog.i(LOG_TAG, "SetFlags: " + tResetAllString + "TouchMoveEnable=" + mTouchMoveEnable + ", LongTouchEnabled="
-					+ mIsLongTouchEnabled + ", UseMaxSize=" + mUseMaxSize);
+			MyLog.i(LOG_TAG, "SetFlags state now: " + tResetAllString + "TouchMoveEnable=" + mTouchMoveEnable
+					+ ", LongTouchEnabled=" + mIsLongTouchEnabled + ", UseMaxSize=" + mUseMaxSize);
 		}
 	}
 

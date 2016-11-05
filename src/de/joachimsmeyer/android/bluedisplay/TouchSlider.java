@@ -127,6 +127,10 @@ public class TouchSlider {
 	private static final int SUBFUNCTION_SLIDER_SET_CAPTION_PROPERTIES = 0x08;
 	private static final int SUBFUNCTION_SLIDER_SET_PRINT_VALUE_PROPERTIES = 0x09;
 
+	private static final int SUBFUNCTION_SLIDER_SET_VALUE = 0x0C;
+
+	private static final int SUBFUNCTION_SLIDER_SET_CALLBACK = 0x20;
+
 	// static functions
 	private static final int FUNCTION_SLIDER_ACTIVATE_ALL = 0x58;
 	private static final int FUNCTION_SLIDER_DEACTIVATE_ALL = 0x59;
@@ -699,14 +703,19 @@ public class TouchSlider {
 					break;
 
 				case SUBFUNCTION_SLIDER_SET_VALUE_AND_DRAW_BAR:
-					// Log on Info level!
-					if (MyLog.isDEBUG()) {
-						MyLog.d(LOG_TAG, "Set value=" + aParameters[2] + " for SliderNr=" + tSliderNumber);
-					}
+				case SUBFUNCTION_SLIDER_SET_VALUE:
+					String tFunction = "";
 					tSlider.mActualValue = aParameters[2];
-					tSlider.drawBar();
-					if ((tSlider.mOptions & FLAG_SLIDER_SHOW_VALUE) != 0) {
-						tSlider.printActualValue();
+					if (tSubcommand == SUBFUNCTION_SLIDER_SET_VALUE_AND_DRAW_BAR) {
+						tSlider.drawBar();
+						tFunction = " and draw bar";
+						if ((tSlider.mOptions & FLAG_SLIDER_SHOW_VALUE) != 0) {
+							tSlider.printActualValue();
+						}
+					}
+					// Log on debug level, because it may be called very often
+					if (MyLog.isDEBUG()) {
+						MyLog.d(LOG_TAG, "Set value=" + aParameters[2] + tFunction + " for SliderNr=" + tSliderNumber);
 					}
 					break;
 
@@ -735,7 +744,6 @@ public class TouchSlider {
 
 				case SUBFUNCTION_SLIDER_SET_CAPTION_PROPERTIES:
 				case SUBFUNCTION_SLIDER_SET_PRINT_VALUE_PROPERTIES:
-					String tFunction;
 					TextLayoutInfo tLayoutInfo = tSlider.new TextLayoutInfo();
 
 					tLayoutInfo.mSize = aParameters[2];
@@ -791,6 +799,33 @@ public class TouchSlider {
 						tSlider.mScaleFactor = tNewScaleFactor;
 						tSlider.mActualValue *= tNewScaleFactor;
 					}
+					break;
+
+				case SUBFUNCTION_SLIDER_SET_CALLBACK:
+					// Output real Arduino function address, since function pointer on Arduino are address_of_function >> 1
+					String tCallbackAddressStringAdjustedForClientDebugging = "";
+					String tOldCallbackAddressStringAdjustedForClientDebugging = "";
+
+					int tCallbackAddress = aParameters[2] & 0x0000FFFF;
+					if (aParamsLength == 4) {
+						// 32 bit callback address
+						tCallbackAddress = tCallbackAddress | (aParameters[3] << 16);
+					} else {
+						// 16 bit Arduino / AVR address
+						tCallbackAddressStringAdjustedForClientDebugging = "/0x" + Integer.toHexString(tCallbackAddress << 1);
+						tOldCallbackAddressStringAdjustedForClientDebugging = "/0x"
+								+ Integer.toHexString(tSlider.mOnChangeHandlerCallbackAddress << 1);
+					}
+
+					if (MyLog.isINFO()) {
+						MyLog.i(LOG_TAG,
+								"Set callback from 0x" + Integer.toHexString(tSlider.mOnChangeHandlerCallbackAddress)
+										+ tOldCallbackAddressStringAdjustedForClientDebugging + " to 0x"
+										+ Integer.toHexString(tCallbackAddress) + tCallbackAddressStringAdjustedForClientDebugging
+										+ " for SliderNr=" + tSliderNumber);
+					}
+					tSlider.mOnChangeHandlerCallbackAddress = tCallbackAddress;
+
 					break;
 				}
 				break;

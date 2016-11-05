@@ -68,7 +68,7 @@ void doFollowerOnOff(BDButton * aTheTouchedButton, int16_t aValue);
 BDButton TouchButtonStartStop;
 void doStartStop(BDButton * aTheTochedButton, int16_t aValue);
 void stopOutputs(void);
-bool doRun = true;
+bool sStarted = true;
 
 /*
  * Laser
@@ -136,7 +136,7 @@ int sTextSize;
 int sTextSizeVCC;
 
 // a string buffer for any purpose...
-char sDataBuffer[128];
+char sStringBuffer[128];
 
 void doSensorChange(uint8_t aSensorType, struct SensorCallback * aSensorCallbackInfo);
 
@@ -249,23 +249,20 @@ void initDisplay(void) {
     /*
      * Buttons
      */
-    const char* tCaptionPtr = "Start";
-    if (doRun) {
-        tCaptionPtr = "Stop";
-    }
-    TouchButtonStartStop.init(0, BUTTON_HEIGHT_4_DYN_LINE_4, BUTTON_WIDTH_3_DYN, BUTTON_HEIGHT_4_DYN,
-    COLOR_BLUE, tCaptionPtr, sTextSizeVCC, BUTTON_FLAG_DO_BEEP_ON_TOUCH | BUTTON_FLAG_TYPE_AUTO_RED_GREEN, doRun, &doStartStop);
+    TouchButtonStartStop.initPGM(0, BUTTON_HEIGHT_4_DYN_LINE_4, BUTTON_WIDTH_3_DYN, BUTTON_HEIGHT_4_DYN,
+    COLOR_BLUE, PSTR("Start"), sTextSizeVCC, BUTTON_FLAG_DO_BEEP_ON_TOUCH | BUTTON_FLAG_TYPE_TOGGLE_RED_GREEN, sStarted, &doStartStop);
+    TouchButtonStartStop.setCaptionPGMForValueTrue(PSTR("Stop"));
 
-    TouchButtonFollowerOnOff.init(BUTTON_WIDTH_4_DYN_POS_4, BUTTON_HEIGHT_4_DYN_LINE_2,
-    BUTTON_WIDTH_4_DYN, BUTTON_HEIGHT_4_DYN, COLOR_RED, "Follow", sTextSizeVCC,
-            BUTTON_FLAG_DO_BEEP_ON_TOUCH | BUTTON_FLAG_TYPE_AUTO_RED_GREEN, sFollowerMode, &doFollowerOnOff);
+    TouchButtonFollowerOnOff.initPGM(BUTTON_WIDTH_4_DYN_POS_4, BUTTON_HEIGHT_4_DYN_LINE_2,
+    BUTTON_WIDTH_4_DYN, BUTTON_HEIGHT_4_DYN, COLOR_RED, PSTR("Follow"), sTextSizeVCC,
+            BUTTON_FLAG_DO_BEEP_ON_TOUCH | BUTTON_FLAG_TYPE_TOGGLE_RED_GREEN, sFollowerMode, &doFollowerOnOff);
 
-    TouchButtonLaserOnOff.init(BUTTON_WIDTH_4_DYN_POS_4, BUTTON_HEIGHT_4_DYN_LINE_3, BUTTON_WIDTH_4_DYN,
-    BUTTON_HEIGHT_4_DYN, COLOR_RED, "Laser", sTextSizeVCC, BUTTON_FLAG_DO_BEEP_ON_TOUCH | BUTTON_FLAG_TYPE_AUTO_RED_GREEN, LaserOn,
+    TouchButtonLaserOnOff.initPGM(BUTTON_WIDTH_4_DYN_POS_4, BUTTON_HEIGHT_4_DYN_LINE_3, BUTTON_WIDTH_4_DYN,
+    BUTTON_HEIGHT_4_DYN, COLOR_RED, PSTR("Laser"), sTextSizeVCC, BUTTON_FLAG_DO_BEEP_ON_TOUCH | BUTTON_FLAG_TYPE_TOGGLE_RED_GREEN, LaserOn,
             &doLaserOnOff);
 
-    TouchButtonSetZero.init(BUTTON_WIDTH_3_DYN_POS_3, BUTTON_HEIGHT_4_DYN_LINE_4, BUTTON_WIDTH_3_DYN,
-    BUTTON_HEIGHT_4_DYN, COLOR_RED, "Zero", sTextSizeVCC, BUTTON_FLAG_DO_BEEP_ON_TOUCH, 0, &doSetZero);
+    TouchButtonSetZero.initPGM(BUTTON_WIDTH_3_DYN_POS_3, BUTTON_HEIGHT_4_DYN_LINE_4, BUTTON_WIDTH_3_DYN,
+    BUTTON_HEIGHT_4_DYN, COLOR_RED, PSTR("Zero"), sTextSizeVCC, BUTTON_FLAG_DO_BEEP_ON_TOUCH, 0, &doSetZero);
 }
 
 void driveForward(uint8_t aDirection, int aMillis) {
@@ -315,7 +312,7 @@ void BDloop() {
      */
     checkAndHandleEvents();
 
-    if (doRun) {
+    if (sStarted) {
         /*
          * Measure distance
          */
@@ -356,8 +353,8 @@ void BDloop() {
                             tSpeed = FOLLOWER_MAX_SPEED;
                         }
                         analogWrite(FORWARD_MOTOR_PWM_PIN, tSpeed);
-                        sprintf(sDataBuffer, "%3d", tSpeed);
-                        SliderVelocityBackward.printValue(sDataBuffer);
+                        sprintf(sStringBuffer, "%3d", tSpeed);
+                        SliderVelocityBackward.printValue(sStringBuffer);
                     }
 
                 } else if (tDeviationFromTargetDistance < -DISTANCE_HYSTERESE_CENTIMETER) {
@@ -371,8 +368,8 @@ void BDloop() {
                         tSpeed = FOLLOWER_MAX_SPEED;
                     }
                     analogWrite(BACKWARD_MOTOR_PWM_PIN, tSpeed);
-                    sprintf(sDataBuffer, "%3d", tSpeed);
-                    SliderVelocityBackward.printValue(sDataBuffer);
+                    sprintf(sStringBuffer, "%3d", tSpeed);
+                    SliderVelocityBackward.printValue(sStringBuffer);
                 } else {
                     sForwardStopByDistance = false;
                     analogWrite(FORWARD_MOTOR_PWM_PIN, 0);
@@ -393,20 +390,18 @@ void BDloop() {
  * Handle follower mode
  */
 void doFollowerOnOff(BDButton * aTheTouchedButton, int16_t aValue) {
-    sFollowerMode = !sFollowerMode;
+    sFollowerMode = aValue;
     if (sFollowerMode) {
         sFollowerModeJustStarted = true;
     }
-    aTheTouchedButton->setValueAndDraw(sFollowerMode);
 }
 
 /*
  * Handle Laser
  */
 void doLaserOnOff(BDButton * aTheTouchedButton, int16_t aValue) {
-    LaserOn = !LaserOn;
+    LaserOn = aValue;
     digitalWrite(LASER_POWER_PIN, LaserOn);
-    aTheTouchedButton->setValueAndDraw(LaserOn);
 }
 
 /*
@@ -421,18 +416,13 @@ void doLaserPosition(BDSlider * aTheTouchedSlider, uint16_t aValue) {
  * Handle Start/Stop
  */
 void doStartStop(BDButton * aTheTouchedButton, int16_t aValue) {
-    doRun = !doRun;
-    if (doRun) {
+    sStarted = aValue;
+    if (sStarted) {
         registerSensorChangeCallback(FLAG_SENSOR_TYPE_ACCELEROMETER, FLAG_SENSOR_DELAY_UI, FLAG_SENSOR_NO_FILTER, &doSensorChange);
-        // green stop button
-        aTheTouchedButton->setCaption("Stop");
     } else {
         registerSensorChangeCallback(FLAG_SENSOR_TYPE_ACCELEROMETER, FLAG_SENSOR_DELAY_UI, FLAG_SENSOR_NO_FILTER, NULL);
-        // red start button
-        aTheTouchedButton->setCaption("Start");
         stopOutputs();
     }
-    aTheTouchedButton->setValueAndDraw(doRun);
 }
 
 /*
@@ -506,8 +496,8 @@ void processVerticalSensorValue(float tSensorValue) {
         tInactiveSlider.setActualValueAndDrawBar(0);
         if (sLastMotorValue != tMotorValue) {
             sLastMotorValue = tMotorValue;
-            sprintf(sDataBuffer, "%3d", tMotorValue);
-            SliderVelocityBackward.printValue(sDataBuffer);
+            sprintf(sStringBuffer, "%3d", tMotorValue);
+            SliderVelocityBackward.printValue(sStringBuffer);
             analogWrite(tActiveMotorPin, tMotorValue);
         }
     }
@@ -573,13 +563,13 @@ void processHorizontalSensorValue(float tSensorValue) {
  * Not used yet
  */
 void printSensorInfo(struct SensorCallback* aSensorCallbackInfo) {
-    dtostrf(aSensorCallbackInfo->ValueX, 7, 4, &sDataBuffer[50]);
-    dtostrf(aSensorCallbackInfo->ValueY, 7, 4, &sDataBuffer[60]);
-    dtostrf(aSensorCallbackInfo->ValueZ, 7, 4, &sDataBuffer[70]);
-    dtostrf(sYZeroValue, 7, 4, &sDataBuffer[80]);
-    snprintf(sDataBuffer, sizeof sDataBuffer, "X=%s Y=%s Z=%s Zero=%s", &sDataBuffer[50], &sDataBuffer[60], &sDataBuffer[70],
-            &sDataBuffer[80]);
-    BlueDisplay1.drawText(0, sTextSize, sDataBuffer, sTextSize, COLOR_BLACK, COLOR_GREEN);
+    dtostrf(aSensorCallbackInfo->ValueX, 7, 4, &sStringBuffer[50]);
+    dtostrf(aSensorCallbackInfo->ValueY, 7, 4, &sStringBuffer[60]);
+    dtostrf(aSensorCallbackInfo->ValueZ, 7, 4, &sStringBuffer[70]);
+    dtostrf(sYZeroValue, 7, 4, &sStringBuffer[80]);
+    snprintf(sStringBuffer, sizeof sStringBuffer, "X=%s Y=%s Z=%s Zero=%s", &sStringBuffer[50], &sStringBuffer[60], &sStringBuffer[70],
+            &sStringBuffer[80]);
+    BlueDisplay1.drawText(0, sTextSize, sStringBuffer, sTextSize, COLOR_BLACK, COLOR_GREEN);
 }
 
 /*
@@ -595,7 +585,7 @@ void doSensorChange(uint8_t aSensorType, struct SensorCallback * aSensorCallback
     } else {
         tSensorChangeCallCount = CALLS_FOR_ZERO_ADJUSTMENT + 1; // to prevent overflow
 //        printSensorInfo(aSensorCallbackInfo);
-        if (doRun && !sFollowerMode) {
+        if (sStarted && !sFollowerMode) {
             processVerticalSensorValue(aSensorCallbackInfo->ValueY);
             processHorizontalSensorValue(aSensorCallbackInfo->ValueX);
         }

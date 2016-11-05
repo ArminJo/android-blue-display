@@ -2,8 +2,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="de.joachimsmeyer.android.bluedisplay"
     android:installLocation="auto"
-    android:versionCode="12"
+    android:versionCode="14"
     android:versionName="@string/app_version" >
+    <!-- versionCode="12" => Version 3.5 -->
+    <!-- versionCode="13" => Version 3.6 -->
+    <!-- versionCode="14" => Version 3.7 -->
 
     <!-- android:launchMode = "singleInstance" -->
 
@@ -16,7 +19,7 @@
 
     <uses-sdk android:minSdkVersion="10" />
     <!-- use 10 and omit entry android:targetSdkVersion="xx" because only this enables the menu button -->
-    
+
     <application
         android:allowBackup="true"
         android:icon="@drawable/icon"
@@ -34,7 +37,7 @@
         </activity>
         <activity
             android:name="de.joachimsmeyer.android.bluedisplay.DeviceListActivity"
-            android:label="@string/select_device"
+            android:label="@string/label_select_device"
             android:theme="@android:style/Theme.Dialog" />
         <activity android:name="de.joachimsmeyer.android.bluedisplay.BlueDisplayPreferences" />
         <activity android:name="de.joachimsmeyer.android.bluedisplay.LogViewActivity" />

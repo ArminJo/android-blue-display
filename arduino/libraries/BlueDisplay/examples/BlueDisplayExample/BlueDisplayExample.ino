@@ -24,6 +24,7 @@
 #include <Arduino.h>
 
 #include "BlueDisplay.h"
+#include "utility/Time/Time.h"
 
 // Change this if you have reprogrammed the hc05 module for higher baud rate
 //#define HC_05_BAUD_RATE BAUD_9600
@@ -45,11 +46,11 @@ const int TONE_PIN = 2;
 const int ANALOG_INPUT_PIN = A0;
 
 bool sConnected = false;
-volatile bool doBlink = true;
+bool doBlink = true;
 volatile int sDelay = 600;
 
 // a string buffer for any purpose...
-char sDataBuffer[128];
+char sStringBuffer[128];
 
 /*
  * The buttons
@@ -71,11 +72,19 @@ BDSlider TouchSliderDelay;
 // handler for value change
 void doDelay(BDSlider * aTheTochedSlider, uint16_t aSliderValue);
 
-// Callback handler for (re)connect and resize
-void drawGui(void);
+/*
+ * Time functions
+ */
+void printTime();
+void infoEventCallback(uint8_t aSubcommand, uint8_t aByteInfo, uint16_t aShortInfo, ByteShortLongFloatUnion aLongInfo);
+time_t requestTimeSync();
+
 void printDemoString(void);
 
+// Callback handler for (re)connect and reorientation
 void initDisplay(void);
+// Callback handler for redraw
+void drawGui(void);
 
 void setup() {
     // initialize the digital pin as an output.
@@ -90,11 +99,15 @@ void setup() {
     // Register callback handler and check for connection
     BlueDisplay1.initCommunication(&initDisplay, &drawGui);
 
+    //set function to call when time sync required (default: after 300 seconds)
+    setSyncProvider(requestTimeSync);
+
     // to signal that boot has finished
     tone(TONE_PIN, 2000, 200);
 }
 
 void loop() {
+    static unsigned long sLastMilisOfTimePrinted;
     if (!BlueDisplay1.mConnectionEstablished) {
         int tBlinkDuration = analogRead(ANALOG_INPUT_PIN);
         digitalWrite(LED_PIN, HIGH);
@@ -139,6 +152,14 @@ void loop() {
             }
             printDemoString();
         }
+        /*
+         * print time every second
+         */
+        unsigned long tMillis = millis();
+        if (tMillis - sLastMilisOfTimePrinted > 1000) {
+            sLastMilisOfTimePrinted = tMillis;
+            printTime();
+        }
     }
 
 #ifdef USE_SIMPLE_SERIAL
@@ -152,10 +173,6 @@ void loop() {
 void initDisplay(void) {
     BlueDisplay1.setFlagsAndSize(BD_FLAG_FIRST_RESET_ALL | BD_FLAG_USE_MAX_SIZE | BD_FLAG_TOUCH_BASIC_DISABLE, DISPLAY_WIDTH,
     DISPLAY_HEIGHT);
-    const char * tStartStopString = "Start";
-    if (doBlink == true) {
-        tStartStopString = "Stop";
-    }
 
     TouchButtonPlus.init(270, 80, 40, 40, COLOR_YELLOW, "+", 33, BUTTON_FLAG_DO_BEEP_ON_TOUCH | BUTTON_FLAG_TYPE_AUTOREPEAT,
     DELAY_CHANGE_VALUE, &doPlusMinus);
@@ -165,8 +182,9 @@ void initDisplay(void) {
             -DELAY_CHANGE_VALUE, &doPlusMinus);
     TouchButtonMinus.setButtonAutorepeatTiming(600, 100, 10, 30);
 
-    TouchButtonStartStop.init(30, 150, 140, 55, COLOR_DEMO_BACKGROUND, tStartStopString, 44,
-            BUTTON_FLAG_DO_BEEP_ON_TOUCH | BUTTON_FLAG_TYPE_AUTO_RED_GREEN, doBlink, &doStartStop);
+    TouchButtonStartStop.init(30, 150, 140, 55, COLOR_DEMO_BACKGROUND, "Start", 44,
+            BUTTON_FLAG_DO_BEEP_ON_TOUCH | BUTTON_FLAG_TYPE_TOGGLE_RED_GREEN, doBlink, &doStartStop);
+    TouchButtonStartStop.setCaptionForValueTrue("Stop");
 
     // PSTR("...") and initPGM saves RAM since string "..." is stored in flash
     TouchButtonValueDirect.initPGM(210, 150, 90, 55, COLOR_YELLOW, PSTR("..."), 44, BUTTON_FLAG_DO_BEEP_ON_TOUCH, 0, &doGetDelay);
@@ -181,6 +199,9 @@ void initDisplay(void) {
 
     TouchSliderDelay.setPrintValueProperties(TEXT_SIZE_22, FLAG_SLIDER_CAPTION_ALIGN_LEFT, 4, COLOR_WHITE,
     COLOR_DEMO_BACKGROUND);
+
+    // here we have received a new local timestamp
+    setTime(BlueDisplay1.mHostUnixTimestamp);
 }
 
 void drawGui(void) {
@@ -193,20 +214,24 @@ void drawGui(void) {
 }
 
 /*
- * Change doBlink flag as well as color and caption of the button.
- * Value sent by button is used for demonstration purposes in this case
- * you could also use doBlink flag for distinguish the two states
+ * Change doBlink flag
  */
 void doStartStop(BDButton * aTheTouchedButton, int16_t aValue) {
-    doBlink = !aValue;
-    if (doBlink) {
-        // green stop button
-        aTheTouchedButton->setCaption("Stop");
-    } else {
-        // red start button
-        aTheTouchedButton->setCaption("Start");
+    doBlink = aValue;
+}
+
+
+time_t requestTimeSync() {
+    BlueDisplay1.getInfo(SUBFUNCTION_GET_INFO_LOCAL_TIME, &infoEventCallback);
+    return 0; // the time will be sent later in response to getInfo
+}
+
+void infoEventCallback(uint8_t aSubcommand, uint8_t aByteInfo, uint16_t aShortInfo, ByteShortLongFloatUnion aLongInfo) {
+    if (aSubcommand == SUBFUNCTION_GET_INFO_LOCAL_TIME) {
+        setTime(aLongInfo.Int32Value);
+        // is called every 5 minutes by default
+        // tone(TONE_PIN, 1000, 200);
     }
-    aTheTouchedButton->setValueAndDraw(doBlink);
 }
 
 /*
@@ -220,7 +245,8 @@ void doPlusMinus(BDButton * aTheTouchedButton, int16_t aValue) {
     }
     if (!doBlink) {
         // enable blinking
-        doStartStop(&TouchButtonStartStop, false);
+        doBlink = true;
+        TouchButtonStartStop.setValueAndDraw(doBlink);
     }
     // set slider bar accordingly
     TouchSliderDelay.setActualValueAndDrawBar(sDelay);
@@ -253,6 +279,13 @@ void doGetDelay(BDButton * aTheTouchedButton, int16_t aValue) {
  */
 void doDelay(BDSlider * aTheTouchedSlider, uint16_t aSliderValue) {
     sDelay = aSliderValue;
+}
+
+void printTime() {
+    // 1600 byte code size for time handling plus print
+    sprintf_P(sStringBuffer, PSTR("%02d.%02d.%4d %02d:%02d:%02d"), day(), month(), year(), hour(), minute(), second());
+    BlueDisplay1.drawText(DISPLAY_WIDTH - 20 * TEXT_SIZE_11_WIDTH, DISPLAY_HEIGHT - TEXT_SIZE_11_HEIGHT, sStringBuffer, 11,
+    COLOR_BLACK, COLOR_DEMO_BACKGROUND);
 }
 
 #define MILLIS_PER_CHANGE 20 // gives minimal 2 seconds

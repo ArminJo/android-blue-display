@@ -101,7 +101,6 @@ public class BlueDisplay extends Activity {
 	public static final String NUMBER_FLAG = "doNumber";
 
 	// Key names received from the BluetoothSerialService Handler
-	public static final String DEVICE_NAME = "device_name";
 	public static final String TOAST = "toast";
 
 	public static final String STATE_SCALE_FACTOR = "scale_factor";
@@ -125,11 +124,24 @@ public class BlueDisplay extends Activity {
 	 */
 	public Sensors mSensorEventListener;
 
-	private boolean mInEnableBT; // We try to enable Bluetooth
+	private boolean mInTryToEnableEnableBT; // We try to enable Bluetooth
+	private boolean mAutoConnectBT = false; // Auto connect at startup
+	private String mAutoConnectMacAddressFromPreferences; // MAC address for auto connect at startup
+	// to be displayed in preferences dialog
+	private String mAutoConnectDeviceNameFromPreferences; // Device name for auto connect at startup
+	private String mMacAddressToConnect; // MAC address for which an connect is tried
+	private String mDeviceNameToConnect; // Device name for which an connect is tried
+	private String mMacAddressConnected; // MAC address of the actual connected device
+	// to be displayed in DeviceListActivity
+	private String mDeviceNameConnected; // Device name of the actual connected device
+	static final String BT_DEVICE_NAME = "bt_device_name";
 
 	// State variable is declared in BluetoothSerialService
 	private static final String SHOW_TOUCH_COORDINATES_KEY = "show_touch_mode";
 	private static final String ALLOW_INSECURE_CONNECTIONS_KEY = "allowinsecureconnections";
+	private static final String AUTO_CONNECT_KEY = "do_autoconnect";
+	public static final String AUTO_CONNECT_MAC_ADDRESS_KEY = "autoconnect_mac_address";
+	public static final String AUTO_CONNECT_DEVICE_NAME_KEY = "autoconnect_device_name";
 
 	private static final String VERSION_KEY = "version";
 	private static final String SCREENORIENTATION_KEY = "screenorientation";
@@ -165,6 +177,11 @@ public class BlueDisplay extends Activity {
 		mRPCView.setFocusableInTouchMode(true);
 		mRPCView.requestFocus();
 
+		// Set default values only once after installation
+		PreferenceManager.setDefaultValues(this, R.xml.preferences, false);
+		// read preferences, needed for auto Bluetooth connection
+		readPreferences();
+
 		/*
 		 * Bluetooth
 		 */
@@ -173,21 +190,29 @@ public class BlueDisplay extends Activity {
 			if (!MyLog.isVERBOSE()) {
 				// finishDialogNoBluetooth();
 			}
+
 		} else {
 			mSerialService = new BluetoothSerialService(this, mHandlerBluetooth);
 			if (mSerialService.getState() == BluetoothSerialService.STATE_NONE && mBluetoothAdapter.isEnabled()) {
-				// Launch the DeviceListActivity to choose device
-				Intent serverIntent = new Intent(this, DeviceListActivity.class);
-				startActivityForResult(serverIntent, REQUEST_CONNECT_DEVICE);
+				if (mAutoConnectBT) {
+					if (mAutoConnectMacAddressFromPreferences != null && mAutoConnectMacAddressFromPreferences.length() > 10) {
+						mMacAddressToConnect = mAutoConnectMacAddressFromPreferences;
+						// Get the BluetoothDevice object
+						BluetoothDevice device = mBluetoothAdapter.getRemoteDevice(mMacAddressToConnect);
+						// Attempt to connect to the device
+						mSerialService.connect(device);
+						mDeviceNameToConnect = device.getName();
+					}
+				} else {
+					launchDeviceListActivity();
+				}
 			} else if (mSerialService.getState() == BluetoothSerialService.STATE_CONNECTED) {
 				// stop running service
 				mSerialService.stop();
 			}
 		}
-		// Set default values only once (after installation)
-		PreferenceManager.setDefaultValues(this, R.xml.preferences, false);
 
-		mInEnableBT = false;
+		mInTryToEnableEnableBT = false;
 		// mRPCView.showTestpage();
 
 		/*
@@ -215,14 +240,15 @@ public class BlueDisplay extends Activity {
 			Log.i(LOG_TAG, "+ ON RESUME +");
 		}
 
-		if (!mInEnableBT) {
+		if (!mInTryToEnableEnableBT) {
 			if ((mBluetoothAdapter != null) && (!mBluetoothAdapter.isEnabled())) {
 				Log.i(LOG_TAG, "Activate bluetooth");
 				Intent enableIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
 				startActivityForResult(enableIntent, REQUEST_ENABLE_BT);
-				mInEnableBT = true;
+				mInTryToEnableEnableBT = true;
 			}
 		}
+		boolean tOldAutoConnectBTValue = mAutoConnectBT;
 		if (mOrientationisLockedByClient) {
 			int tOldPreferredScreenOrientation = mPreferredScreenOrientation;
 			readPreferences();
@@ -231,6 +257,14 @@ public class BlueDisplay extends Activity {
 			readPreferences();
 			setActualScreenOrientation(mPreferredScreenOrientation);
 		}
+		if (mAutoConnectBT && !tOldAutoConnectBTValue && mSerialService != null
+				&& mSerialService.getState() == BluetoothSerialService.STATE_CONNECTED) {
+			writeStringPreference(AUTO_CONNECT_MAC_ADDRESS_KEY, mMacAddressToConnect);
+			writeStringPreference(AUTO_CONNECT_DEVICE_NAME_KEY, mDeviceNameToConnect);
+			mAutoConnectDeviceNameFromPreferences = mDeviceNameToConnect;
+		}
+		mMacAddressConnected = mMacAddressToConnect;
+		mDeviceNameConnected = mDeviceNameToConnect;
 
 		mActualRotation = getWindowManager().getDefaultDisplay().getRotation();
 		mSensorEventListener.registerAllActiveSensorListeners();
@@ -359,26 +393,25 @@ public class BlueDisplay extends Activity {
 		case R.id.menu_connect:
 			if (mSerialService.getState() == BluetoothSerialService.STATE_NONE) {
 				// connect request here
-				// Launch the DeviceListActivity to see devices and do scan
-				Intent tDeviceListIntent = new Intent(this, DeviceListActivity.class);
-				startActivityForResult(tDeviceListIntent, REQUEST_CONNECT_DEVICE);
+				launchDeviceListActivity();
 			} else if (mSerialService.getState() == BluetoothSerialService.STATE_CONNECTED) {
 				// Disconnect request here -> stop running service + reset locked orientation in turn
 				// send disconnect message
 				mSerialService.writeTwoIntegerEvent(BluetoothSerialService.EVENT_DISCONNECT, mRPCView.mActualViewWidth,
 						mRPCView.mActualViewHeight);
 				mSerialService.stop();
-				mSerialService.sLastFailOrDisconnectTimestampMillis = System.currentTimeMillis();
+				BluetoothSerialService.sLastFailOrDisconnectTimestampMillis = System.currentTimeMillis();
 			}
 			return true;
 
 		case R.id.menu_show_log:
-			Intent tLogViewIntent = new Intent(this, LogViewActivity.class);
-			startActivity(tLogViewIntent);
+			startActivity(new Intent(this, LogViewActivity.class));
 			return true;
 
 		case R.id.menu_preferences:
-			startActivity(new Intent(this, BlueDisplayPreferences.class));
+			Intent tPreferencesIntent = new Intent(this, BlueDisplayPreferences.class);
+			tPreferencesIntent.putExtra(BT_DEVICE_NAME, mAutoConnectDeviceNameFromPreferences);
+			startActivity(tPreferencesIntent);
 			return true;
 
 			// case R.id.menu_show_graph_testpage:
@@ -448,15 +481,22 @@ public class BlueDisplay extends Activity {
 				 * and slider and show toast
 				 */
 				if (MyLog.isDEBUG()) {
-					Log.d(LOG_TAG, "MESSAGE_AFTER_CONNECT: " + mSerialService.mConnectedDeviceName);
+					Log.d(LOG_TAG, "MESSAGE_AFTER_CONNECT: " + mDeviceNameConnected);
 				}
 
 				// set window to always on and reset all structures and flags
 				getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
 				mMyToast = Toast.makeText(getApplicationContext(), getString(R.string.toast_connected_to) + " "
-						+ mSerialService.mConnectedDeviceName, Toast.LENGTH_SHORT);
+						+ mDeviceNameConnected, Toast.LENGTH_SHORT);
 				mMyToast.show();
+				if (mAutoConnectBT) {
+					writeStringPreference(AUTO_CONNECT_MAC_ADDRESS_KEY, mMacAddressToConnect);
+					writeStringPreference(AUTO_CONNECT_DEVICE_NAME_KEY, mDeviceNameToConnect);
+					mAutoConnectDeviceNameFromPreferences = mDeviceNameToConnect;
+				}
+				mMacAddressConnected = mMacAddressToConnect;
+				mDeviceNameConnected = mDeviceNameToConnect;
 				break;
 
 			case MESSAGE_DISCONNECT:
@@ -465,11 +505,10 @@ public class BlueDisplay extends Activity {
 				 * listener
 				 */
 				if (MyLog.isDEBUG()) {
-					Log.d(LOG_TAG, "MESSAGE_DISCONNECT: " + mSerialService.mConnectedDeviceName);
+					Log.d(LOG_TAG, "MESSAGE_DISCONNECT: " + mDeviceNameConnected);
 				}
-				Toast.makeText(getApplicationContext(),
-						getString(R.string.toast_connection_lost) + " " + mSerialService.mConnectedDeviceName, Toast.LENGTH_SHORT)
-						.show();
+				Toast.makeText(getApplicationContext(), getString(R.string.toast_connection_lost) + " " + mDeviceNameConnected,
+						Toast.LENGTH_SHORT).show();
 				// reset eventually locked orientation
 				mOrientationisLockedByClient = false;
 				setActualScreenOrientation(mPreferredScreenOrientation);
@@ -530,11 +569,26 @@ public class BlueDisplay extends Activity {
 			 */
 			if (resultCode == Activity.RESULT_OK) {
 				// Get the device MAC address
-				String address = data.getExtras().getString(DeviceListActivity.EXTRA_DEVICE_ADDRESS);
-				// Get the BLuetoothDevice object
-				BluetoothDevice device = mBluetoothAdapter.getRemoteDevice(address);
+				String tMacAddress = data.getExtras().getString(DeviceListActivity.EXTRA_DEVICE_ADDRESS);
+				if (tMacAddress.length() < 10) {
+					// MAC Address not specified (no last device) chose a reasonable one
+					if (mMacAddressConnected != null && mMacAddressConnected.length() > 10) {
+						tMacAddress = mMacAddressConnected;
+					} else if (mAutoConnectMacAddressFromPreferences != null && mAutoConnectMacAddressFromPreferences.length() > 10) {
+						tMacAddress = mAutoConnectMacAddressFromPreferences;
+					} else {
+						mMyToast = Toast.makeText(getApplicationContext(), getString(R.string.toast_unable_to_connect)
+								+ "  \"no device\"", Toast.LENGTH_SHORT);
+						mMyToast.show();
+						break;
+					}
+				}
+				// Get the BluetoothDevice object
+				BluetoothDevice device = mBluetoothAdapter.getRemoteDevice(tMacAddress);
 				// Attempt to connect to the device
 				mSerialService.connect(device);
+				mMacAddressToConnect = tMacAddress;
+				mDeviceNameToConnect = device.getName();
 			}
 			break;
 
@@ -548,13 +602,22 @@ public class BlueDisplay extends Activity {
 				}
 				finishDialogNoBluetooth();
 			} else {
-				// Launch the DeviceListActivity to choose device
-				Intent serverIntent = new Intent(this, DeviceListActivity.class);
-				startActivityForResult(serverIntent, REQUEST_CONNECT_DEVICE);
+				launchDeviceListActivity();
 			}
 			break;
 
 		}
+	}
+
+	void launchDeviceListActivity() {
+		// Launch the DeviceListActivity to see devices
+		Intent tDeviceListIntent = new Intent(this, DeviceListActivity.class);
+		if (mDeviceNameConnected != null && mDeviceNameConnected.length() > 1) {
+			tDeviceListIntent.putExtra(BT_DEVICE_NAME, mDeviceNameConnected);
+		} else {
+			tDeviceListIntent.putExtra(BT_DEVICE_NAME, mAutoConnectDeviceNameFromPreferences);
+		}
+		startActivityForResult(tDeviceListIntent, REQUEST_CONNECT_DEVICE);
 	}
 
 	/***********************
@@ -689,7 +752,7 @@ public class BlueDisplay extends Activity {
 		 * Get Version and compare it with actual
 		 */
 		PackageInfo tPackageInfo;
-		int tActualVersion = 9;
+		int tActualVersion = 0;
 		try {
 			tPackageInfo = getPackageManager().getPackageInfo(getPackageName(), 0);
 			tActualVersion = tPackageInfo.versionCode;
@@ -716,6 +779,17 @@ public class BlueDisplay extends Activity {
 			tEdit.putString(SCREENORIENTATION_KEY, Integer.toString(mPreferredScreenOrientation));
 			tEdit.putString(VERSION_KEY, Integer.toString(tActualVersion));
 			tEdit.commit();
+		} else if (tOldVersion <= 12) {
+			/*
+			 * Introduction auto connect -> now save the actual version in preferences Adding the new strings is not really needed,
+			 * but why not doing it here.
+			 */
+			SharedPreferences.Editor tEdit = tSharedPreferences.edit();
+			tEdit.putBoolean(AUTO_CONNECT_KEY, false);
+			tEdit.putString(AUTO_CONNECT_MAC_ADDRESS_KEY, "");
+			tEdit.putString(AUTO_CONNECT_DEVICE_NAME_KEY, "");
+			tEdit.putString(VERSION_KEY, Integer.toString(tActualVersion));
+			tEdit.commit();
 		}
 
 		MyLog.setLoglevel(Integer.parseInt(tSharedPreferences.getString(MyLog.LOGLEVEL_KEY, Log.INFO + "")));
@@ -724,10 +798,26 @@ public class BlueDisplay extends Activity {
 			mSerialService.setAllowInsecureConnections(tSharedPreferences.getBoolean(ALLOW_INSECURE_CONNECTIONS_KEY,
 					mSerialService.getAllowInsecureConnections()));
 		}
+
 		if (mRPCView != null) {
 			// don't use setter methods since they modify the preference too
 			// mRPCView.mTouchMoveEnable = tSharedPreferences.getBoolean(TOUCH_MOVE_KEY, mRPCView.isTouchMoveEnable());
 			mRPCView.mShowTouchCoordinates = tSharedPreferences.getBoolean(SHOW_TOUCH_COORDINATES_KEY, false);
+		}
+
+		mAutoConnectBT = tSharedPreferences.getBoolean(AUTO_CONNECT_KEY, mAutoConnectBT);
+		mAutoConnectMacAddressFromPreferences = tSharedPreferences.getString(AUTO_CONNECT_MAC_ADDRESS_KEY, "");
+		mAutoConnectDeviceNameFromPreferences = tSharedPreferences.getString(AUTO_CONNECT_DEVICE_NAME_KEY, "");
+	}
+
+	private void writeStringPreference(String aKey, String aValue) {
+		SharedPreferences tSharedPreferences = PreferenceManager.getDefaultSharedPreferences(this);
+		String tOldValue = tSharedPreferences.getString(aKey, "");
+		if (!tOldValue.equalsIgnoreCase(aValue)) {
+			MyLog.i(LOG_TAG, "Write new preference value=\"" + aValue + "\" for key=" + aKey);
+			SharedPreferences.Editor tEdit = tSharedPreferences.edit();
+			tEdit.putString(aKey, aValue);
+			tEdit.commit();
 		}
 	}
 

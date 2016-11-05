@@ -1,3 +1,29 @@
+/*
+ *  US_Distance.cpp
+ *  Demo of using the BlueDisplay library for HC-05 on Arduino
+ *  Shows the distances measured by a HC-SR04 ultrasonic sensor
+ *  Can be used as a parking assistance.
+ *  This is an example for using a fullscreen GUI.
+
+ *  Copyright (C) 2015, 2016  Armin Joachimsmeyer
+ *  armin.joachimsmeyer@gmail.com
+ *
+ *  This file is part of BlueDisplay.
+ *  BlueDisplay is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, either version 3 of the License, or
+ *  (at your option) any later version.
+
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program.  If not, see <http://www.gnu.org/licenses/gpl.html>.
+ *
+ */
+
 #include <Arduino.h>
 
 #include "BlueDisplay.h"
@@ -29,20 +55,12 @@ int sOffset = 0;
 
 BDSlider SliderShowDistance;
 
-char sDataBuffer[100];
+char sStringBuffer[100];
 /*
  * Change doTone flag as well as color and caption of the button.
  */
 void doStartStop(BDButton * aTheTouchedButton, int16_t aValue) {
-    doTone = !doTone;
-    if (doTone) {
-        // green stop button
-        aTheTouchedButton->setCaption("Stop tone");
-    } else {
-        // red start button
-        aTheTouchedButton->setCaption("Start tone");
-    }
-    aTheTouchedButton->setValueAndDraw(doTone);
+    doTone = aValue;
 }
 
 /*
@@ -80,8 +98,8 @@ void handleConnectAndReorientation(void) {
     // Position Caption at middle of screen
     sCaptionStartX = (sActualDisplayWidth - (getTextWidth(sCaptionTextSize) * strlen("Distance"))) / 2;
 
-    sprintf(sDataBuffer, "sActualDisplayWidth=%d", sActualDisplayWidth);
-    BlueDisplay1.debugMessage(sDataBuffer);
+    sprintf(sStringBuffer, "sActualDisplayWidth=%d", sActualDisplayWidth);
+    BlueDisplay1.debugMessage(sStringBuffer);
 
     if (sCaptionStartX < 0) {
         sCaptionStartX = 0;
@@ -95,8 +113,9 @@ void handleConnectAndReorientation(void) {
     SliderShowDistance.setScaleFactor(200.0 / sActualDisplayWidth);
 
     // Initialize button position, size, colors etc.
-    TouchButtonStartStop.init(0, BUTTON_HEIGHT_5_DYN_LINE_5, BUTTON_WIDTH_3_DYN, BUTTON_HEIGHT_5_DYN, COLOR_BLUE, "Stop Tone",
-            sCaptionTextSize / 3, BUTTON_FLAG_DO_BEEP_ON_TOUCH | BUTTON_FLAG_TYPE_AUTO_RED_GREEN, doTone, &doStartStop);
+    TouchButtonStartStop.init(0, BUTTON_HEIGHT_5_DYN_LINE_5, BUTTON_WIDTH_3_DYN, BUTTON_HEIGHT_5_DYN, COLOR_BLUE, "Start Tone",
+            sCaptionTextSize / 3, BUTTON_FLAG_DO_BEEP_ON_TOUCH | BUTTON_FLAG_TYPE_TOGGLE_RED_GREEN, doTone, &doStartStop);
+    TouchButtonStartStop.setCaptionForValueTrue("Stop Tone");
 
     TouchButtonOffset.init(BUTTON_WIDTH_3_DYN_POS_3, BUTTON_HEIGHT_5_DYN_LINE_5, BUTTON_WIDTH_3_DYN, BUTTON_HEIGHT_5_DYN, COLOR_RED,
             "Offset", sCaptionTextSize / 3, BUTTON_FLAG_DO_BEEP_ON_TOUCH, 0, &doGetOffset);
@@ -134,13 +153,14 @@ void setup(void) {
     delay(100);
 }
 
-int sCentimeterNew = 0;
+unsigned int sCentimeterNew = 0;
 int sCentimeterOld = 50;
 bool sToneIsOff = true;
 
 void loop(void) {
-    sCentimeterNew = getUSDistanceAsCentiMeter();
-    if (sCentimeterNew < 0) {
+    // Timeout of 20000L is 3.4 meter
+    sCentimeterNew = getUSDistanceAsCentiMeter(20000L);
+    if (sCentimeterNew >= 20000L) {
         // timeout happened
         tone(TONE_PIN, 1000, 50);
         delay(100);

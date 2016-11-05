@@ -37,6 +37,12 @@
             android:key="allowinsecureconnections"
             android:summary="@string/summary_allowinsecureconnections_preference"
             android:title="@string/title_allowinsecureconnections_preference" />
+        <!-- AUTO STARTUP CONNECTION -->
+        <CheckBoxPreference
+            android:defaultValue="@string/default_value_autoconnect_preference"
+            android:key="do_autoconnect"
+            android:summary="@string/summary_autoconnect_preference"
+            android:title="@string/title_autoconnect_preference" />
     </PreferenceCategory>
 
 </PreferenceScreen>

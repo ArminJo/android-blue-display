@@ -8,7 +8,7 @@
 <resources>
 
     <string name="app_name">BlueDisplay</string>
-    <string name="app_version">3.5</string>
+    <string name="app_version">3.6</string>
 
     <!-- Alerts -->
     <string name="alert_dialog_no_bt">Bluetooth not available or activated. Stop application.</string>
@@ -31,18 +31,16 @@
 
     <!-- About menu -->
     <string name="logo">BlueDisplay Logo</string>
-    <string name="copyright">Copyright © 2014/2016  Armin Joachimsmeyer</string>
+    <string name="copyright">Copyright © 2014/2017 Armin Joachimsmeyer</string>
     <string name="license">GPL v3</string>
     <string name="code_www">https://github.com/ArminJo/android-blue-display</string>
 
     <!-- DeviceListActivity &#8230; is "..." -->
-    <string name="scanning">scanning for devices&#8230;</string>
-    <string name="select_device">select a device to connect</string>
+    <string name="button_text_connect_last_device">Connect to last device</string>
+    <string name="label_select_device">select a device to connect</string>
     <string name="none_paired">No devices have been paired</string>
     <string name="none_found">No devices found</string>
     <string name="title_paired_devices">Paired Devices</string>
-    <string name="title_other_devices">Other Available Devices</string>
-    <string name="button_scan">Scan for devices</string>
 
     <!-- LogView -->
     <string name="message_clear">Clear all entries now?</string>
@@ -82,4 +80,9 @@
     <string name="default_loglevel_preference">4</string>
     <string name="dialog_title_loglevel_preference">Log level</string>
 
+    <!-- Direct connect dialog -->
+    <string name="title_autoconnect_preference">Auto connect at startup</string>
+    <string name="summary_autoconnect_preference">Connect to last BT Device at startup</string>
+        <!-- Don't localize this default value -->
+    <string name="default_value_autoconnect_preference">false</string>
 </resources>

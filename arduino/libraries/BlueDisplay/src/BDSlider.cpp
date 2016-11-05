@@ -49,7 +49,7 @@ BDSlider::BDSlider(BDSliderHandle_t aSliderHandle, TouchSlider * aLocalSliderPoi
  * @brief initialization with all parameters (except BarBackgroundColor)
  * @param aPositionX - Determines upper left corner
  * @param aPositionY - Determines upper left corner
- * Only ext 2 values are physical values in pixel
+ * Only next 2 values are physical values in pixel
  * @param aBarWidth - Width of bar (and border) in pixel - no scaling!
  * @param aBarLength - Size of slider bar in pixel = maximum slider value - no scaling!
  * @param aThresholdValue - Scaling! If selected or sent value is bigger, then color of bar changes from BarColor to BarBackgroundColor
@@ -111,6 +111,16 @@ void BDSlider::drawBorder(void) {
         sendUSARTArgs(FUNCTION_SLIDER_DRAW_BORDER, 1, mSliderHandle);
     }
 }
+
+void BDSlider::setActualValue(int16_t aActualValue) {
+#ifdef LOCAL_DISPLAY_EXISTS
+    mLocalSliderPointer->setActualValueAndDrawBar(aActualValue);
+#endif
+    if (USART_isBluetoothPaired()) {
+        sendUSARTArgs(FUNCTION_SLIDER_SETTINGS, 3, mSliderHandle, SUBFUNCTION_SLIDER_SET_VALUE, aActualValue);
+    }
+}
+
 
 void BDSlider::setActualValueAndDrawBar(int16_t aActualValue) {
 #ifdef LOCAL_DISPLAY_EXISTS

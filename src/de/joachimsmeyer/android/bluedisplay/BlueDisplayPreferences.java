@@ -19,6 +19,7 @@ package de.joachimsmeyer.android.bluedisplay;
 import android.content.SharedPreferences;
 import android.content.SharedPreferences.OnSharedPreferenceChangeListener;
 import android.os.Bundle;
+import android.preference.CheckBoxPreference;
 import android.preference.ListPreference;
 import android.preference.Preference;
 import android.preference.PreferenceActivity;
@@ -29,18 +30,33 @@ public class BlueDisplayPreferences extends PreferenceActivity implements OnShar
 
 	// Debugging
 	private static final String LOG_TAG = "BlueDisplayPreferences";
-	private static final String tValueSeparator = "  - ";
+	public static final String VALUE_SEPARATOR = "  - ";
 
 	private void addValueToPreferenceTitle(ListPreference aPreference) {
 		String tTitle = (String) aPreference.getTitle();
-		int tIndex = tTitle.indexOf(tValueSeparator);
+		int tIndex = tTitle.indexOf(VALUE_SEPARATOR);
 		if (tIndex >= 0) {
 			tTitle = (String) tTitle.subSequence(0, tIndex);
 		}
-		tTitle += tValueSeparator + aPreference.getEntry();
+		tTitle += VALUE_SEPARATOR + aPreference.getEntry();
 		aPreference.setTitle(tTitle);
 		if (MyLog.isVERBOSE()) {
-			Log.v(LOG_TAG, "Changing title to " + tTitle);
+			Log.v(LOG_TAG, "Changing title of " + aPreference.getKey() + " to " + tTitle);
+		}
+	}
+
+	private void addStringToPreferenceTitle(Preference aPreference, String aValueString) {
+		if (aValueString != null && aValueString.length() > 1) {
+			String tTitle = (String) aPreference.getTitle();
+			int tIndex = tTitle.indexOf(VALUE_SEPARATOR);
+			if (tIndex >= 0) {
+				tTitle = (String) tTitle.subSequence(0, tIndex);
+			}
+			tTitle += VALUE_SEPARATOR + aValueString;
+			aPreference.setTitle(tTitle);
+			if (MyLog.isVERBOSE()) {
+				Log.v(LOG_TAG, "Changing title of " + aPreference.getKey() + " to " + tTitle);
+			}
 		}
 	}
 
@@ -56,6 +72,9 @@ public class BlueDisplayPreferences extends PreferenceActivity implements OnShar
 		addValueToPreferenceTitle(tPref);
 		tPref = (ListPreference) findPreference("screenorientation");
 		addValueToPreferenceTitle(tPref);
+		CheckBoxPreference tCBPref = (CheckBoxPreference) findPreference("do_autoconnect");
+		String tDeviceName = this.getIntent().getStringExtra(BlueDisplay.BT_DEVICE_NAME);
+		addStringToPreferenceTitle(tCBPref, tDeviceName);
 	}
 
 	@Override
