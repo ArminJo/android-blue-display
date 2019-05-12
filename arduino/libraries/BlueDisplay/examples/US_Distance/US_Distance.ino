@@ -25,9 +25,11 @@
  */
 
 #include <Arduino.h>
+#include "HCSR04.h"
 
 #include "BlueDisplay.h"
-#include "ArminsUtils.h"
+
+#define VERSION_EXAMPLE "1.1"
 
 // Change this if you have reprogrammed the hc05 module for higher baud rate
 //#define HC_05_BAUD_RATE BAUD_9600
@@ -37,6 +39,8 @@ int ECHO_IN_PIN = 2;
 int TRIGGER_OUT_PIN = 3;
 #define TONE_PIN 4
 #define MEASUREMENT_INTERVAL_MS 50
+
+#define DISTANCE_TIMEOUT_CM 350  // cm timeout for US reading
 
 int sActualDisplayWidth;
 int sActualDisplayHeight;
@@ -59,8 +63,12 @@ char sStringBuffer[100];
 /*
  * Change doTone flag as well as color and caption of the button.
  */
-void doStartStop(BDButton * aTheTouchedButton, int16_t aValue) {
+void doStartStop(__attribute__((unused))  BDButton * aTheTouchedButton, int16_t aValue) {
     doTone = aValue;
+    if (!aValue) {
+        // Stop tone
+        BlueDisplay1.playTone(TONE_SILENCE);
+    }
 }
 
 /*
@@ -78,7 +86,7 @@ void doSetOffset(float aValue) {
 /*
  * Request delay value as number
  */
-void doGetOffset(BDButton * aTheTouchedButton, int16_t aValue) {
+void doGetOffset(__attribute__((unused))  BDButton * aTheTouchedButton, __attribute__((unused))  int16_t aValue) {
     BlueDisplay1.getNumberWithShortPrompt(&doSetOffset, "Offset distance [cm]");
 }
 
@@ -114,11 +122,11 @@ void handleConnectAndReorientation(void) {
 
     // Initialize button position, size, colors etc.
     TouchButtonStartStop.init(0, BUTTON_HEIGHT_5_DYN_LINE_5, BUTTON_WIDTH_3_DYN, BUTTON_HEIGHT_5_DYN, COLOR_BLUE, "Start Tone",
-            sCaptionTextSize / 3, BUTTON_FLAG_DO_BEEP_ON_TOUCH | BUTTON_FLAG_TYPE_TOGGLE_RED_GREEN, doTone, &doStartStop);
+            sCaptionTextSize / 3, FLAG_BUTTON_DO_BEEP_ON_TOUCH | FLAG_BUTTON_TYPE_TOGGLE_RED_GREEN, doTone, &doStartStop);
     TouchButtonStartStop.setCaptionForValueTrue("Stop Tone");
 
     TouchButtonOffset.init(BUTTON_WIDTH_3_DYN_POS_3, BUTTON_HEIGHT_5_DYN_LINE_5, BUTTON_WIDTH_3_DYN, BUTTON_HEIGHT_5_DYN, COLOR_RED,
-            "Offset", sCaptionTextSize / 3, BUTTON_FLAG_DO_BEEP_ON_TOUCH, 0, &doGetOffset);
+            "Offset", sCaptionTextSize / 3, FLAG_BUTTON_DO_BEEP_ON_TOUCH, 0, &doGetOffset);
 }
 
 /*
@@ -134,10 +142,18 @@ void drawGui(void) {
 
 void setup(void) {
     pinMode(TRIGGER_OUT_PIN, OUTPUT);
-    pinMode(TONE_PIN, OUTPUT);
-    pinMode(ECHO_IN_PIN, INPUT);
+    initUSDistancePins(TRIGGER_OUT_PIN, ECHO_IN_PIN);
 
-    initSimpleSerial(HC_05_BAUD_RATE, false);
+#ifndef USE_STANDARD_SERIAL
+    /*
+     * If you want to see serial output if not connected with BlueDisplay "USE_STANDARD_SERIAL" must be defined globally.
+     * e.g. with -DUSE_STANDARD_SERIAL as compiler parameter for c++ in order to force the BlueDisplay library to use the Arduino Serial object
+     * and release its own interrupt handler '__vector_18'
+     */
+    initSimpleSerial(HC_05_BAUD_RATE);
+#else
+    Serial.begin(HC_05_BAUD_RATE);
+#endif
 
     // Register callback handler and check for connection
     BlueDisplay1.initCommunication(&handleConnectAndReorientation, &drawGui);
@@ -148,19 +164,43 @@ void setup(void) {
     if (BlueDisplay1.mConnectionEstablished) {
         tone(TONE_PIN, 3000, 50);
         delay(100);
+    } else {
+#ifdef USE_STANDARD_SERIAL
+        while (!Serial)
+            ; //delay for Leonardo
+        // Just to know which program is running on my Arduino
+        Serial.println(F("START " __FILE__ "\r\nVersion " VERSION_EXAMPLE " from  " __DATE__));
+#endif
     }
     tone(TONE_PIN, 3000, 50);
     delay(100);
 }
 
-unsigned int sCentimeterNew = 0;
-int sCentimeterOld = 50;
+static unsigned int sCentimeterOld = 50;
 bool sToneIsOff = true;
 
 void loop(void) {
     // Timeout of 20000L is 3.4 meter
-    sCentimeterNew = getUSDistanceAsCentiMeter(20000L);
-    if (sCentimeterNew >= 20000L) {
+    uint16_t tUSDistanceMicros = getUSDistance();
+    uint16_t tUSDistanceCentimeter = getCentimeterFromUSMicroSeconds(tUSDistanceMicros);
+//    startUSDistanceAsCentiMeterWithCentimeterTimeoutNonBlocking(DISTANCE_TIMEOUT_CM);
+//    while (!isUSDistanceMeasureFinished()) {
+//    }
+
+#ifdef USE_STANDARD_SERIAL
+    if (!BlueDisplay1.mConnectionEstablished) {
+        if (tUSDistanceCentimeter >= DISTANCE_TIMEOUT_CM) {
+            Serial.println("timeout");
+        } else {
+            Serial.print(tUSDistanceCentimeter);
+            Serial.print(" cm, ");
+            Serial.print(tUSDistanceMicros);
+            Serial.println(" micro secounds.");
+        }
+    }
+#endif
+
+    if (tUSDistanceCentimeter >= DISTANCE_TIMEOUT_CM) {
         // timeout happened
         tone(TONE_PIN, 1000, 50);
         delay(100);
@@ -168,50 +208,58 @@ void loop(void) {
         delay((100 - MEASUREMENT_INTERVAL_MS) - 20);
 
     } else {
-        if (doTone && sCentimeterNew < 40) {
+        if (doTone && tUSDistanceCentimeter < 100) {
             /*
-             * local feedback for distances < 40 cm
+             * local feedback for distances < 100 cm
              */
-            tone(TONE_PIN, sCentimeterNew * 64, MEASUREMENT_INTERVAL_MS + 20);
+            tone(TONE_PIN, tUSDistanceCentimeter * 32, MEASUREMENT_INTERVAL_MS + 20);
         }
-        sCentimeterNew -= sOffset;
-        if (sCentimeterNew != sCentimeterOld) {
-            if (sActualDisplayHeight > 0) {
+        tUSDistanceCentimeter -= sOffset;
+        if (tUSDistanceCentimeter != sCentimeterOld) {
+            if (BlueDisplay1.mConnectionEstablished) {
                 uint16_t tCmXPosition = BlueDisplay1.drawUnsignedByte(getTextWidth(sCaptionTextSize * 2), sValueStartY,
-                        sCentimeterNew, sCaptionTextSize * 2, COLOR_YELLOW,
+                        tUSDistanceCentimeter, sCaptionTextSize * 2, COLOR_YELLOW,
                         COLOR_BLUE);
                 BlueDisplay1.drawText(tCmXPosition, sValueStartY, "cm", sCaptionTextSize, COLOR_WHITE, COLOR_BLUE);
-                SliderShowDistance.setActualValueAndDrawBar(sCentimeterNew);
+                SliderShowDistance.setActualValueAndDrawBar(tUSDistanceCentimeter);
             }
-            if (sCentimeterNew >= 40 || !doTone) {
+            if (tUSDistanceCentimeter >= 40 || !doTone) {
                 /*
                  * Silence here
                  */
                 if (!sToneIsOff) {
                     sToneIsOff = true;
-                    // Stop tone
-                    BlueDisplay1.playTone(TONE_SILENCE);
+                    if (BlueDisplay1.mConnectionEstablished) {
+                        // Stop tone
+                        BlueDisplay1.playTone(TONE_SILENCE);
+                    }
                 }
             } else {
                 sToneIsOff = false;
                 /*
                  * Switch tones only if range changes
                  */
-                if (sCentimeterNew < 40 && sCentimeterNew > 30 && (sCentimeterOld >= 40 || sCentimeterOld <= 30)) {
-                    BlueDisplay1.playTone(22);
-                } else if (sCentimeterNew <= 30 && sCentimeterNew > 20 && (sCentimeterOld >= 30 || sCentimeterOld <= 20)) {
-                    BlueDisplay1.playTone(17);
-                } else if (sCentimeterNew <= 20 && sCentimeterNew > 10 && (sCentimeterOld > 20 || sCentimeterOld <= 10)) {
-                    BlueDisplay1.playTone(18);
-                } else if (sCentimeterNew <= 10 && sCentimeterNew > 3 && (sCentimeterOld > 10 || sCentimeterOld <= 3)) {
-                    BlueDisplay1.playTone(16);
-                } else if (sCentimeterNew <= 3 && sCentimeterOld > 3) {
-                    BlueDisplay1.playTone(36);
+                if (BlueDisplay1.mConnectionEstablished) {
+                    if (tUSDistanceCentimeter < 40 && tUSDistanceCentimeter > 30
+                            && (sCentimeterOld >= 40 || sCentimeterOld <= 30)) {
+                        BlueDisplay1.playTone(22);
+                    } else if (tUSDistanceCentimeter <= 30 && tUSDistanceCentimeter > 20
+                            && (sCentimeterOld >= 30 || sCentimeterOld <= 20)) {
+                        BlueDisplay1.playTone(17);
+                    } else if (tUSDistanceCentimeter <= 20 && tUSDistanceCentimeter > 10
+                            && (sCentimeterOld > 20 || sCentimeterOld <= 10)) {
+                        BlueDisplay1.playTone(18);
+                    } else if (tUSDistanceCentimeter <= 10 && tUSDistanceCentimeter > 3
+                            && (sCentimeterOld > 10 || sCentimeterOld <= 3)) {
+                        BlueDisplay1.playTone(16);
+                    } else if (tUSDistanceCentimeter <= 3 && sCentimeterOld > 3) {
+                        BlueDisplay1.playTone(36);
+                    }
                 }
             }
         }
     }
     checkAndHandleEvents();
-    sCentimeterOld = sCentimeterNew;
+    sCentimeterOld = tUSDistanceCentimeter;
     delay(MEASUREMENT_INTERVAL_MS); // < 200
 }

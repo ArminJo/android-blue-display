@@ -1,6 +1,8 @@
 /*
  *  BlueDisplayExample.cpp
  *  Demo of using the BlueDisplay library for HC-05 on Arduino
+ *
+ *  For handling time, two files from Paul Stoffregens TimeLib https://github.com/PaulStoffregen/Time are included
 
  *  Copyright (C) 2014  Armin Joachimsmeyer
  *  armin.joachimsmeyer@gmail.com
@@ -24,7 +26,7 @@
 #include <Arduino.h>
 
 #include "BlueDisplay.h"
-#include "utility/Time/Time.h"
+#include "TimeLib.h"
 
 // Change this if you have reprogrammed the hc05 module for higher baud rate
 //#define HC_05_BAUD_RATE BAUD_9600
@@ -40,8 +42,6 @@
 #define COLOR_DEMO_BACKGROUND COLOR_BLUE
 #define COLOR_CAPTION COLOR_RED
 
-// Pin 13 has an LED connected on most Arduino boards.
-const int LED_PIN = 13;
 const int TONE_PIN = 2;
 const int ANALOG_INPUT_PIN = A0;
 
@@ -55,13 +55,13 @@ char sStringBuffer[128];
 /*
  * The buttons
  */
-BDButton TouchButtonStartStop;
+BDButton TouchButtonBDExampleBlinkStartStop;
 BDButton TouchButtonPlus;
 BDButton TouchButtonMinus;
 BDButton TouchButtonValueDirect;
 
 // Touch handler for buttons
-void doStartStop(BDButton * aTheTochedButton, int16_t aValue);
+void doBDExampleBlinkStartStop(BDButton * aTheTochedButton, int16_t aValue);
 void doPlusMinus(BDButton * aTheTochedButton, int16_t aValue);
 void doGetDelay(BDButton * aTheTouchedButton, int16_t aValue);
 
@@ -88,11 +88,11 @@ void drawGui(void);
 
 void setup() {
     // initialize the digital pin as an output.
-    pinMode(LED_PIN, OUTPUT);
+    pinMode(LED_BUILTIN, OUTPUT);
     pinMode(TONE_PIN, OUTPUT);
     pinMode(ANALOG_INPUT_PIN, INPUT);
 #ifdef USE_SIMPLE_SERIAL  // see line 38 in BlueSerial.h - use global #define USE_STANDARD_SERIAL to disable it
-    initSimpleSerial(HC_05_BAUD_RATE, false);
+    initSimpleSerial(HC_05_BAUD_RATE);
 #else
     Serial.begin(HC_05_BAUD_RATE);
 #endif
@@ -108,11 +108,20 @@ void setup() {
 
 void loop() {
     static unsigned long sLastMilisOfTimePrinted;
-    if (!BlueDisplay1.mConnectionEstablished) {
+
+    /*
+     * This debug output can also be recognized at the Arduino Serial Monitor
+     */
+//    BlueDisplay1.debug("\r\nDoBlink=", (uint8_t) doBlink);
+    if (!BlueDisplay1.isConnectionEstablished()) {
         int tBlinkDuration = analogRead(ANALOG_INPUT_PIN);
-        digitalWrite(LED_PIN, HIGH);
+
+        // This serial output is readable at the Arduino serial monitor
+        BlueDisplay1.debug("\r\nAnalogIn=", tBlinkDuration);
+
+        digitalWrite(LED_BUILTIN, HIGH);
         delay(tBlinkDuration / 2);
-        digitalWrite(LED_PIN, LOW);
+        digitalWrite(LED_BUILTIN, LOW);
         delay(tBlinkDuration / 2);
     } else {
         if (doBlink) {
@@ -121,7 +130,7 @@ void loop() {
             /*
              * LED on
              */
-            digitalWrite(LED_PIN, HIGH);
+            digitalWrite(LED_BUILTIN, HIGH);
             BlueDisplay1.fillCircle(DISPLAY_WIDTH / 2, DISPLAY_HEIGHT / 2, 20, COLOR_RED);
             /*
              *  Wait for delay time and update "Demo" string at a rate 16 times the blink rate.
@@ -139,7 +148,7 @@ void loop() {
             /*
              * LED off
              */
-            digitalWrite(LED_PIN, LOW);
+            digitalWrite(LED_BUILTIN, LOW);
             BlueDisplay1.fillCircle(DISPLAY_WIDTH / 2, DISPLAY_HEIGHT / 2, 20, COLOR_DEMO_BACKGROUND);
             for (i = 0; i < 8; ++i) {
 #ifdef USE_SIMPLE_SERIAL
@@ -174,20 +183,20 @@ void initDisplay(void) {
     BlueDisplay1.setFlagsAndSize(BD_FLAG_FIRST_RESET_ALL | BD_FLAG_USE_MAX_SIZE | BD_FLAG_TOUCH_BASIC_DISABLE, DISPLAY_WIDTH,
     DISPLAY_HEIGHT);
 
-    TouchButtonPlus.init(270, 80, 40, 40, COLOR_YELLOW, "+", 33, BUTTON_FLAG_DO_BEEP_ON_TOUCH | BUTTON_FLAG_TYPE_AUTOREPEAT,
+    TouchButtonPlus.init(270, 80, 40, 40, COLOR_YELLOW, "+", 33, FLAG_BUTTON_DO_BEEP_ON_TOUCH | FLAG_BUTTON_TYPE_AUTOREPEAT,
     DELAY_CHANGE_VALUE, &doPlusMinus);
     TouchButtonPlus.setButtonAutorepeatTiming(600, 100, 10, 30);
 
-    TouchButtonMinus.init(10, 80, 40, 40, COLOR_YELLOW, "-", 33, BUTTON_FLAG_DO_BEEP_ON_TOUCH | BUTTON_FLAG_TYPE_AUTOREPEAT,
+    TouchButtonMinus.init(10, 80, 40, 40, COLOR_YELLOW, "-", 33, FLAG_BUTTON_DO_BEEP_ON_TOUCH | FLAG_BUTTON_TYPE_AUTOREPEAT,
             -DELAY_CHANGE_VALUE, &doPlusMinus);
     TouchButtonMinus.setButtonAutorepeatTiming(600, 100, 10, 30);
 
-    TouchButtonStartStop.init(30, 150, 140, 55, COLOR_DEMO_BACKGROUND, "Start", 44,
-            BUTTON_FLAG_DO_BEEP_ON_TOUCH | BUTTON_FLAG_TYPE_TOGGLE_RED_GREEN, doBlink, &doStartStop);
-    TouchButtonStartStop.setCaptionForValueTrue("Stop");
+    TouchButtonBDExampleBlinkStartStop.init(30, 150, 140, 55, COLOR_DEMO_BACKGROUND, "Start", 44,
+            FLAG_BUTTON_DO_BEEP_ON_TOUCH | FLAG_BUTTON_TYPE_TOGGLE_RED_GREEN, doBlink, &doBDExampleBlinkStartStop);
+    TouchButtonBDExampleBlinkStartStop.setCaptionForValueTrue("Stop");
 
     // PSTR("...") and initPGM saves RAM since string "..." is stored in flash
-    TouchButtonValueDirect.initPGM(210, 150, 90, 55, COLOR_YELLOW, PSTR("..."), 44, BUTTON_FLAG_DO_BEEP_ON_TOUCH, 0, &doGetDelay);
+    TouchButtonValueDirect.initPGM(210, 150, 90, 55, COLOR_YELLOW, PSTR("..."), 44, FLAG_BUTTON_DO_BEEP_ON_TOUCH, 0, &doGetDelay);
 
     TouchSliderDelay.init(SLIDER_X_POSITION, 40, 12, 150, 100, DELAY_START_VALUE / 10, COLOR_YELLOW, COLOR_GREEN,
             FLAG_SLIDER_SHOW_BORDER | FLAG_SLIDER_SHOW_VALUE | FLAG_SLIDER_IS_HORIZONTAL, &doDelay);
@@ -206,21 +215,24 @@ void initDisplay(void) {
 
 void drawGui(void) {
     BlueDisplay1.clearDisplay(COLOR_DEMO_BACKGROUND);
-    TouchButtonStartStop.drawButton();
+    TouchButtonBDExampleBlinkStartStop.drawButton();
     TouchButtonPlus.drawButton();
     TouchButtonMinus.drawButton();
     TouchButtonValueDirect.drawButton();
     TouchSliderDelay.drawSlider();
 }
 
+#pragma GCC diagnostic ignored "-Wunused-parameter"
 /*
  * Change doBlink flag
  */
-void doStartStop(BDButton * aTheTouchedButton, int16_t aValue) {
+void doBDExampleBlinkStartStop(BDButton * aTheTouchedButton, int16_t aValue) {
     doBlink = aValue;
 }
 
-
+/*
+ * Is called every 5 minutes by default
+ */
 time_t requestTimeSync() {
     BlueDisplay1.getInfo(SUBFUNCTION_GET_INFO_LOCAL_TIME, &infoEventCallback);
     return 0; // the time will be sent later in response to getInfo
@@ -228,8 +240,8 @@ time_t requestTimeSync() {
 
 void infoEventCallback(uint8_t aSubcommand, uint8_t aByteInfo, uint16_t aShortInfo, ByteShortLongFloatUnion aLongInfo) {
     if (aSubcommand == SUBFUNCTION_GET_INFO_LOCAL_TIME) {
-        setTime(aLongInfo.Int32Value);
-        // is called every 5 minutes by default
+        setTime(aLongInfo.uint32Value);
+        // to prove that it is called every 5 minutes by default
         // tone(TONE_PIN, 1000, 200);
     }
 }
@@ -246,10 +258,14 @@ void doPlusMinus(BDButton * aTheTouchedButton, int16_t aValue) {
     if (!doBlink) {
         // enable blinking
         doBlink = true;
-        TouchButtonStartStop.setValueAndDraw(doBlink);
+        TouchButtonBDExampleBlinkStartStop.setValueAndDraw(doBlink);
     }
     // set slider bar accordingly
     TouchSliderDelay.setActualValueAndDrawBar(sDelay);
+    /*
+     * Example for debug/toast output by BlueDisplay
+     */
+    BlueDisplay1.debug("Delay=", sDelay);
 }
 
 /*

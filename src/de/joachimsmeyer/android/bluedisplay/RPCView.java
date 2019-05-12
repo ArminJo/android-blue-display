@@ -79,8 +79,10 @@ public class RPCView extends View {
 	protected int mActualViewHeight; // Display Height - StatusBar - TitleBar
 	protected int mActualViewWidth; // Display Width
 
+	ToneGenerator mToneGeneratorForAbsoluteVolumes;
 	ToneGenerator mToneGenerator;
-	int mActualToneVolume;
+	int mLastSystemVolume;
+	int mLastRequestedToneVolume;
 
 	// 4 values for one line - 4 lines possible
 	public static float[][] mChartScreenBuffer = new float[4][MAX_REFERENCE_CANVAS_WIDTH * 4];
@@ -145,7 +147,7 @@ public class RPCView extends View {
 	protected boolean mShowTouchCoordinates = false;
 	protected int mShowTouchCoordinatesLastStringLength = 19;
 	private final float SWIPE_LIMIT = 10; // 10 pixel
-	private final float MICRO_MOVE_LIMIT_FOR_LONG_TOUCH_DOWN = 5; // 5 pixel to avoid killing of long touch recognition
+	private final float MICRO_MOVE_LIMIT_FOR_LONG_TOUCH_DOWN = 10; // 10 pixel to avoid killing of long touch recognition
 
 	public static boolean mDeviceListActivityLaunched = false; // to prevent multiple launches of DeviceListActivity()
 	private ScaleGestureDetector mScaleDetector;
@@ -373,7 +375,10 @@ public class RPCView extends View {
 		mScaleDetector = new ScaleGestureDetector(aContext, new ScaleListener());
 
 		// to have system sound volume control
-		mToneGenerator = new ToneGenerator(AudioManager.STREAM_SYSTEM, ToneGenerator.MAX_VOLUME);
+		mLastSystemVolume = mBlueDisplayContext.mAudioManager.getStreamVolume(AudioManager.STREAM_SYSTEM);
+		mToneGenerator = new ToneGenerator(AudioManager.STREAM_SYSTEM, (mLastSystemVolume * ToneGenerator.MAX_VOLUME)
+				/ mBlueDisplayContext.mMaxSystemVolume);
+
 		mTextPaint = new Paint();
 		mTextPaint.setTypeface(Typeface.MONOSPACE);
 		mTextPaint.setStyle(Paint.Style.FILL);
@@ -564,7 +569,7 @@ public class RPCView extends View {
 		}
 
 		if (tActionIndex > 0) {
-			// convert pointer actions to plain actions for following evaluations
+			// convert pointer actions to plain actions for ACTION_POINTER_DOWN + ACTION_POINTER_UP
 			if (tMaskedAction == MotionEvent.ACTION_POINTER_DOWN) {
 				tMaskedAction = MotionEvent.ACTION_DOWN;
 			} else if (tMaskedAction == MotionEvent.ACTION_POINTER_UP) {
@@ -1122,11 +1127,12 @@ public class RPCView extends View {
 		try {
 			switch (aCommand) {
 			case FUNCTION_PLAY_TONE:
-				int tTone = ToneGenerator.TONE_CDMA_KEYPAD_VOLUME_KEY_LITE;
+				int tToneIndex = ToneGenerator.TONE_CDMA_KEYPAD_VOLUME_KEY_LITE;
 				int tDurationMillis = -1;
+				ToneGenerator tToneGenerator = mToneGenerator;
 				if (aParamsLength > 0) {
 					if (aParameters[0] > 0 && aParameters[0] <= ToneGenerator.TONE_CDMA_SIGNAL_OFF) {
-						tTone = aParameters[0];
+						tToneIndex = aParameters[0];
 					}
 					if (aParamsLength > 1) {
 						/*
@@ -1139,19 +1145,35 @@ public class RPCView extends View {
 						}
 						if (aParamsLength > 2) {
 							/*
-							 * set volume
+							 * set volume to absolute values between 0% and 100%
 							 */
-							if ((aParameters[2] >= 0 || aParameters[2] < ToneGenerator.MAX_VOLUME)
-									&& aParameters[2] != mActualToneVolume) {
-								mActualToneVolume = aParameters[3];
-								mToneGenerator = new ToneGenerator(AudioManager.STREAM_SYSTEM, mActualToneVolume);
+							if ((aParameters[2] >= 0 || aParameters[2] < ToneGenerator.MAX_VOLUME)) {
+								tToneGenerator = mToneGeneratorForAbsoluteVolumes;
+								if (aParameters[2] != mLastRequestedToneVolume) {
+									/*
+									 * change absolute value of volume
+									 */
+									mLastRequestedToneVolume = aParameters[2];
+									mToneGeneratorForAbsoluteVolumes = new ToneGenerator(AudioManager.STREAM_SYSTEM,
+											mLastRequestedToneVolume);
+								}
 							}
 						}
 					}
 				}
-				mToneGenerator.startTone(tTone, tDurationMillis);
+				/*
+				 * check if user changed volume
+				 */
+				int tActualSystemVolume = mBlueDisplayContext.mAudioManager.getStreamVolume(AudioManager.STREAM_SYSTEM);
+				if (mLastSystemVolume != tActualSystemVolume) {
+					mLastSystemVolume = tActualSystemVolume;
+					mToneGenerator = new ToneGenerator(AudioManager.STREAM_SYSTEM, (tActualSystemVolume * ToneGenerator.MAX_VOLUME)
+							/ mBlueDisplayContext.mMaxSystemVolume);
+				}
+
+				tToneGenerator.startTone(tToneIndex, tDurationMillis);
 				if (MyLog.isINFO()) {
-					MyLog.i(LOG_TAG, "Play tone type=" + tTone + " duration=" + tDurationMillis);
+					MyLog.i(LOG_TAG, "Play tone index=" + tToneIndex + " duration=" + tDurationMillis);
 				}
 				break;
 

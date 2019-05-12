@@ -88,16 +88,17 @@ public class TouchButton {
 	boolean mIsActive;
 	boolean mIsInitialized;
 	static int sTouchBeepIndex = ToneGenerator.TONE_CDMA_KEYPAD_VOLUME_KEY_LITE;
-	static ToneGenerator sToneGenerator;
+	static ToneGenerator sButtonToneGenerator;
+	static int sLastRequestedToneVolume;
+	static int sLastSystemToneVolume;
 	static int sActualToneDurationMillis = -1; // -1 means till end of tone or forever
-	static int sActualToneVolume;
 
 	static int sDefaultButtonColor = Color.RED;
 	static int sDefaultCaptionColor = Color.BLACK;
 
 	private static final int BUTTON_INITIAL_LIST_SIZE = 40;
 
-	private static List<TouchButton> sButtonList = new ArrayList<TouchButton>(BUTTON_INITIAL_LIST_SIZE);
+	public static List<TouchButton> sButtonList = new ArrayList<TouchButton>(BUTTON_INITIAL_LIST_SIZE);
 
 	private static final int FUNCTION_BUTTON_DRAW = 0x40;
 	private static final int FUNCTION_BUTTON_DRAW_CAPTION = 0x41;
@@ -203,8 +204,10 @@ public class TouchButton {
 		mMillisFirstAutorepeatDelay = 0;
 
 		if ((tFlags & FLAG_BUTTON_DO_BEEP_ON_TOUCH) != 0) {
-			if (sToneGenerator == null) {
-				sToneGenerator = new ToneGenerator(AudioManager.STREAM_SYSTEM, ToneGenerator.MAX_VOLUME);
+			if (sButtonToneGenerator == null) {
+				int tActualSystemVolume = mRPCView.mBlueDisplayContext.mAudioManager.getStreamVolume(AudioManager.STREAM_SYSTEM);
+				sButtonToneGenerator = new ToneGenerator(AudioManager.STREAM_SYSTEM,
+						(tActualSystemVolume * ToneGenerator.MAX_VOLUME) / mRPCView.mBlueDisplayContext.mMaxSystemVolume);
 			}
 			mDoBeep = true;
 		}
@@ -265,6 +268,10 @@ public class TouchButton {
 		mRawCaption = aCaption;
 		mEscapedCaption = aCaption.replaceAll("\n", "|");
 		mCaptionStrings = aCaption.split("\n");
+		for (int i = 0; i < mCaptionStrings.length; i++) {
+			// trim all strings
+			mCaptionStrings[i] = mCaptionStrings[i].trim();
+		}
 		positionCaption();
 	}
 
@@ -361,17 +368,28 @@ public class TouchButton {
 	 * @return true if any active button touched
 	 */
 	boolean checkIfTouchInButton(int aTouchPositionX, int aTouchPositionY, boolean aDoCallbackOnlyForAutorepeatButton) {
-		if (mIsActive && mCallbackAddress != 0 && checkIfTouchInButton(aTouchPositionX, aTouchPositionY)) {
+		if (mIsActive && mCallbackAddress != 0 && checkIfTouchInButtonArea(aTouchPositionX, aTouchPositionY)) {
 			if (!aDoCallbackOnlyForAutorepeatButton || mIsAutorepeatButton) {
 				/*
 				 * Touch position is in button - call callback function
 				 */
 				if (mDoBeep) {
-					sToneGenerator.startTone(sTouchBeepIndex, sActualToneDurationMillis);
+					/*
+					 * check if user changed volume
+					 */
+					int tActualSystemVolume = mRPCView.mBlueDisplayContext.mAudioManager
+							.getStreamVolume(AudioManager.STREAM_SYSTEM);
+					if (sLastSystemToneVolume != tActualSystemVolume) {
+						sLastSystemToneVolume = tActualSystemVolume;
+						sButtonToneGenerator = new ToneGenerator(AudioManager.STREAM_SYSTEM,
+								(tActualSystemVolume * ToneGenerator.MAX_VOLUME) / mRPCView.mBlueDisplayContext.mMaxSystemVolume);
+					}
+					sButtonToneGenerator.startTone(sTouchBeepIndex, sActualToneDurationMillis);
 				}
 				/*
 				 * Handle Toggle red/green button
 				 */
+				String tCaptionForInfo = mEscapedCaption;
 				if (mIsRedGreen) {
 					/*
 					 * Toggle value
@@ -395,7 +413,7 @@ public class TouchButton {
 				}
 
 				mRPCView.mBlueDisplayContext.mSerialService.writeGuiCallbackEvent(BluetoothSerialService.EVENT_BUTTON_CALLBACK,
-						mListIndex, mCallbackAddress, mValue);
+						mListIndex, mCallbackAddress, mValue, tCaptionForInfo);
 
 				/*
 				 * Handle autorepeat
@@ -462,7 +480,7 @@ public class TouchButton {
 	/**
 	 * Check if touch event is in button area if yes - return true if no - return false
 	 */
-	private boolean checkIfTouchInButton(int aTouchPositionX, int aTouchPositionY) {
+	private boolean checkIfTouchInButtonArea(int aTouchPositionX, int aTouchPositionY) {
 		if (aTouchPositionX < mPositionX || aTouchPositionX > mPositionX + mWidth || aTouchPositionY < mPositionY
 				|| aTouchPositionY > (mPositionY + mHeight)) {
 			return false;
@@ -477,10 +495,10 @@ public class TouchButton {
 			if (mRPCView.mTouchIsActive[0]) {
 				// beep and send button event
 				if (mDoBeep) {
-					sToneGenerator.startTone(sTouchBeepIndex, sActualToneDurationMillis);
+					sButtonToneGenerator.startTone(sTouchBeepIndex, sActualToneDurationMillis);
 				}
 				mRPCView.mBlueDisplayContext.mSerialService.writeGuiCallbackEvent(BluetoothSerialService.EVENT_BUTTON_CALLBACK,
-						mListIndex, mCallbackAddress, mValue);
+						mListIndex, mCallbackAddress, mValue, mEscapedCaption);
 				if (sAutorepeatState == BUTTON_AUTOREPEAT_FIRST_PERIOD) {
 					sAutorepeatCount--;
 					if (sAutorepeatCount <= 0) {
@@ -575,20 +593,29 @@ public class TouchButton {
 						sActualToneDurationMillis = aParameters[2];
 						if (aParamsLength > 3) {
 							/*
-							 * set volume
+							 * set absolute value of volume
 							 */
 							if ((aParameters[3] >= 0 || aParameters[3] < ToneGenerator.MAX_VOLUME)
-									&& aParameters[3] != sActualToneVolume) {
-								sActualToneVolume = aParameters[3];
-								sToneGenerator = new ToneGenerator(AudioManager.STREAM_SYSTEM, sActualToneVolume);
+									&& aParameters[3] != sLastRequestedToneVolume) {
+								sLastRequestedToneVolume = aParameters[3];
+								sButtonToneGenerator = new ToneGenerator(AudioManager.STREAM_SYSTEM, sLastRequestedToneVolume);
 							}
+						} else {
+							/*
+							 * set to user defined value of volume
+							 */
+							int tActualSystemVolume = aRPCView.mBlueDisplayContext.mAudioManager
+									.getStreamVolume(AudioManager.STREAM_SYSTEM);
+							sButtonToneGenerator = new ToneGenerator(AudioManager.STREAM_SYSTEM,
+									(tActualSystemVolume * ToneGenerator.MAX_VOLUME)
+											/ aRPCView.mBlueDisplayContext.mMaxSystemVolume);
 						}
 					}
 					if (aParameters[1] > 0 && aParameters[1] < ToneGenerator.TONE_CDMA_SIGNAL_OFF) {
 						sTouchBeepIndex = aParameters[1];
 					}
 					if (MyLog.isINFO()) {
-						tInfoString = " Touch tone volume=" + sActualToneVolume + ", index=" + sTouchBeepIndex;
+						tInfoString = " Touch tone volume=" + sLastRequestedToneVolume + ", index=" + sTouchBeepIndex;
 					}
 				}
 			}

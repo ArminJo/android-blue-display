@@ -8,7 +8,7 @@
 <resources>
 
     <string name="app_name">BlueDisplay</string>
-    <string name="app_version">3.6</string>
+    <string name="app_version">3.7</string>
 
     <!-- Alerts -->
     <string name="alert_dialog_no_bt">Bluetooth not available or activated. Stop application.</string>
@@ -40,7 +40,7 @@
     <string name="label_select_device">select a device to connect</string>
     <string name="none_paired">No devices have been paired</string>
     <string name="none_found">No devices found</string>
-    <string name="title_paired_devices">Paired Devices</string>
+    <string name="title_paired_devices">Paired devices</string>
 
     <!-- LogView -->
     <string name="message_clear">Clear all entries now?</string>

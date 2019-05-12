@@ -6,10 +6,13 @@
 -->
 
 <resources xmlns:android="http://schemas.android.com/apk/res/android">
+
     <string-array name="entries_screenorientation_preference">
         <item>Landscape</item>
         <item>Portrait</item>
-        <item>Auto</item><!-- SCREEN_ORIENTATION_UNSPECIFIED -->
+        <item>Auto</item> <!-- SCREEN_ORIENTATION_UNSPECIFIED -->
+        <item>Reverse Landscape</item>
+        <item>Reverse Portrait</item>
     </string-array>
 
     <!-- Do not localize entryvalues -->
@@ -17,8 +20,9 @@
         <item>0</item>
         <item>1</item>
         <item>-1</item>
+        <item>8</item>
+        <item>9</item>
     </string-array>
-
     <string-array name="entries_loglevel_preference">
         <item>Warn</item>
         <item>Info</item>
@@ -33,4 +37,5 @@
         <item>3</item>
         <item>2</item>
     </string-array>
+
 </resources>

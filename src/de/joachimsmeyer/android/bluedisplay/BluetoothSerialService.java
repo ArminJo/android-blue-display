@@ -34,7 +34,6 @@ import java.io.OutputStream;
 import java.lang.reflect.Method;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
-import java.util.Calendar;
 import java.util.Date;
 import java.util.Locale;
 import java.util.TimeZone;
@@ -173,7 +172,7 @@ public class BluetoothSerialService {
 
 	public String getStatisticsString() {
 		String tReturn = mStatisticNumberOfReceivedBytes + " bytes / " + mStatisticNumberOfReceivedCommands + " / "
-				+ mStatisticNumberOfReceivedChartCommands + " commands received\n";
+				+ mStatisticNumberOfReceivedChartCommands + " commands / chart c. received\n";
 		tReturn += mStatisticNumberOfSentBytes + " bytes / " + mStatisticNumberOfSentCommands + " commands sent\n";
 		if (mStatisticNumberOfReceivedCommands != 0) {
 			tReturn += ((mStatisticNanoTimeForCommands / 1000) / mStatisticNumberOfReceivedCommands) + " µs per command\n";
@@ -184,12 +183,12 @@ public class BluetoothSerialService {
 		tReturn += "Buffer wrap arounds=" + mStatisticNumberOfBufferWrapArounds + "\n";
 		int tInputBufferOutIndex = mReceiveBufferOutIndex;
 		int tBytes = getBufferBytesAvailable();
-		String tsearchStateDataLengthToWaitForString = "";
+		String tSearchStateDataLengthToWaitForString = "";
 		if (searchStateDataLengthToWaitFor > MIN_MESSAGE_SIZE) {
-			tsearchStateDataLengthToWaitForString = ", waited for " + searchStateDataLengthToWaitFor;
+			tSearchStateDataLengthToWaitForString = ", waited for " + searchStateDataLengthToWaitFor;
 		}
 		tReturn += "InputBuffer: size=" + SIZE_OF_IN_BUFFER + ", in=" + mReceiveBufferInIndex + ", out=" + tInputBufferOutIndex
-				+ ", not processed=" + tBytes + tsearchStateDataLengthToWaitForString + "\n";
+				+ ", not processed=" + tBytes + tSearchStateDataLengthToWaitForString + "\n";
 		if (MyLog.isDEBUG()) {
 			if (tBytes > 0) {
 				if (tBytes > 20) {
@@ -358,7 +357,7 @@ public class BluetoothSerialService {
 		r.sendTwoIntegerAndTimestamp(aEventType, aX, aY);
 	}
 
-	public void writeGuiCallbackEvent(int aEventType, int aButtonIndex, int aCallbackAddress, int aValue) {
+	public void writeGuiCallbackEvent(int aEventType, int aButtonIndex, int aCallbackAddress, int aValue, String aElementInfo) {
 		// Create temporary object
 		ConnectedThread r;
 		// Synchronize a copy of the ConnectedThread
@@ -368,7 +367,7 @@ public class BluetoothSerialService {
 			r = mConnectedThread;
 		}
 		// Perform the write unsynchronized
-		r.sendGuiCallback(aEventType, aButtonIndex, aCallbackAddress, aValue);
+		r.sendGuiCallback(aEventType, aButtonIndex, aCallbackAddress, aValue, aElementInfo);
 	}
 
 	public void writeNumberCallbackEvent(int aEventType, int aCallbackAddress, float aValue) {
@@ -777,7 +776,7 @@ public class BluetoothSerialService {
 				for (i = 0; i < tLengthReceived; i++) {
 					mDataBuffer[i] = getByteFromBuffer();
 				}
-				if (MyLog.isDEVELPMENT_TESTING()) {
+				if (MyLog.isDEVELOPMENT_TESTING()) {
 					StringBuilder tData = new StringBuilder("Data=");
 					int tValue;
 					for (i = 0; i < tLengthReceived; i++) {
@@ -821,18 +820,18 @@ public class BluetoothSerialService {
 					break;
 				}
 
-			} else {
+			} else /* Data buffer command */{
 				tParamsLength = tLengthReceived / 2;
 				tCommand = tCommandReceived;
 				/*
-				 * Parameters
+				 * Parameters here
 				 */
 
 				for (i = 0; i < tParamsLength; i++) {
 					tByte = getByteFromBuffer();
 					mParameters[i] = convert2BytesToInt(tByte, getByteFromBuffer());
 				}
-				if (MyLog.isDEVELPMENT_TESTING()) {
+				if (MyLog.isDEVELOPMENT_TESTING()) {
 					// Output parameter buffer as short hex values
 					StringBuilder tParamsHex = new StringBuilder("Params=");
 					int tValue;
@@ -869,8 +868,9 @@ public class BluetoothSerialService {
 					i = 0;
 					while (getBufferBytesAvailable() < MIN_MESSAGE_SIZE && i < 100) {
 						try {
-							if (MyLog.isVERBOSE()) {
-								Log.v(LOG_TAG, "wait for data header i=" + i);
+							if (MyLog.isDEBUG()) {
+								// happens quite rare
+								Log.d(LOG_TAG, "wait for data header i=" + i);
 							}
 							Thread.sleep(10);
 							i++;
@@ -907,6 +907,8 @@ public class BluetoothSerialService {
 		private final BluetoothSocket mmSocket;
 		private InputStream mmInStream = null;
 		private OutputStream mmOutStream = null;
+		final static int CALLBACK_DATA_SIZE = 15;
+		private byte[] mSendByteBuffer = new byte[CALLBACK_DATA_SIZE]; // Static buffer since we only send one item at a time
 
 		public ConnectedThread(BluetoothSocket socket) {
 			if (MyLog.isINFO()) {
@@ -935,6 +937,9 @@ public class BluetoothSerialService {
 			// Data is present if data was sent before connection
 			int tReadSize = 0;
 			int tBytesAvailable;
+			/*
+			 * Read old bytes from buffer
+			 */
 			try {
 				try {
 					// 50 is to little, 100 works sometimes, 200 works reliable.
@@ -965,19 +970,19 @@ public class BluetoothSerialService {
 
 			// signal connection to arduino
 			// first write a NOP command for synchronizing
-			sendGuiCallback(EVENT_NOP, 0, 0, 0);
+			sendGuiCallback(EVENT_NOP, 0, 0, 0, null);
 			sendTwoIntegerAndTimestamp(EVENT_CONNECTION_BUILD_UP, mBlueDisplayContext.mRPCView.mActualViewWidth,
 					mBlueDisplayContext.mRPCView.mActualViewHeight);
 
+			/*
+			 * read forever into buffer
+			 */
 			int tReadLength;
 			// Keep listening to the InputStream while connected
 			while (true) {
 				try {
-					/*
-					 * read until sync token
-					 */
-					do {
-						// Read block from InputStream
+					while (true) {
+						// Read block of bytes from InputStream
 						tReadLength = mmInStream.read(mBigReceiveBuffer, mReceiveBufferInIndex, 256);
 						if (tReadLength > 0) {
 							int tBytesInBufferToProcess = getBufferBytesAvailable();
@@ -986,7 +991,7 @@ public class BluetoothSerialService {
 							mStatisticNumberOfReceivedBytes += tReadLength;
 							mReceiveBufferInIndex += tReadLength;
 							if (tOldInIndex < tOutIndex && mReceiveBufferInIndex > tOutIndex) {
-								// input index overhauls out index
+								// input index overtakes out index
 								MyLog.e(LOG_TAG, "Buffer overflow! InIndex=" + mReceiveBufferInIndex);
 							}
 							if (mReceiveBufferInIndex >= SIZE_OF_IN_BUFFER - 256) {
@@ -1016,7 +1021,7 @@ public class BluetoothSerialService {
 									|| tBytesInBufferToProcess < MIN_MESSAGE_SIZE) {
 								mHandler.sendEmptyMessage(BlueDisplay.MESSAGE_UPDATE_VIEW);
 							} else {
-								if (MyLog.isDEVELPMENT_TESTING()) {
+								if (MyLog.isDEVELOPMENT_TESTING()) {
 									Log.d(LOG_TAG, "skip update view message tBytesInBufferToProcess=" + tBytesInBufferToProcess);
 								}
 							}
@@ -1024,7 +1029,7 @@ public class BluetoothSerialService {
 						} else {
 							MyLog.w(LOG_TAG, "Read length = 0");
 						}
-					} while (true);
+					}
 
 				} catch (IOException e) {
 					// end up here if cancel() / mmSocket.close() was called
@@ -1042,29 +1047,28 @@ public class BluetoothSerialService {
 		 * send 16 bit X and Y position
 		 */
 		public void sendTwoInteger(int aEventType, int aX, int aY) {
-			byte[] tTouchData = new byte[7];
 			int tEventLength = 7;
 			int tEventType = aEventType & 0xFF;
 
 			try {
 				// assemble data buffer
 				int tIndex = 0;
-				tTouchData[tIndex++] = (byte) tEventLength; // gross message length in bytes
-				tTouchData[tIndex++] = (byte) tEventType; // Function token
+				mSendByteBuffer[tIndex++] = (byte) tEventLength; // gross message length in bytes
+				mSendByteBuffer[tIndex++] = (byte) tEventType; // Function token
 
 				short tXPos = (short) aX;
-				tTouchData[tIndex++] = (byte) (tXPos & 0xFF); // LSB
-				tTouchData[tIndex++] = (byte) ((tXPos >> 8) & 0xFF); // MSB
+				mSendByteBuffer[tIndex++] = (byte) (tXPos & 0xFF); // LSB
+				mSendByteBuffer[tIndex++] = (byte) ((tXPos >> 8) & 0xFF); // MSB
 				short tYPos = (short) aY;
-				tTouchData[tIndex++] = (byte) (tYPos & 0xFF); // LSB
-				tTouchData[tIndex++] = (byte) ((tYPos >> 8) & 0xFF); // MSB
-				tTouchData[tIndex++] = SYNC_TOKEN;
+				mSendByteBuffer[tIndex++] = (byte) (tYPos & 0xFF); // LSB
+				mSendByteBuffer[tIndex++] = (byte) ((tYPos >> 8) & 0xFF); // MSB
+				mSendByteBuffer[tIndex++] = SYNC_TOKEN;
 				if (MyLog.isINFO()) {
 					String tType = RPCView.sActionMappings.get(tEventType);
 					MyLog.i(LOG_TAG, "Send Type=0x" + Integer.toHexString(tEventType) + "|" + tType + " X=" + aX + " Y=" + aY);
 				}
 
-				mmOutStream.write(tTouchData, 0, tEventLength);
+				mmOutStream.write(mSendByteBuffer, 0, tEventLength);
 				mmOutStream.flush();
 				mStatisticNumberOfSentBytes += tEventLength;
 				mStatisticNumberOfSentCommands++;
@@ -1077,31 +1081,30 @@ public class BluetoothSerialService {
 		 * send 16 bit X and Y position and 8 bit pointer index
 		 */
 		public void sendTwoIntegerAndAByte(int aEventType, int aX, int aY, int aByte) {
-			byte[] tTouchData = new byte[8];
 			int tEventLength = 8;
 			int tEventType = aEventType & 0xFF;
 
 			try {
 				// assemble data buffer
 				int tIndex = 0;
-				tTouchData[tIndex++] = (byte) tEventLength; // gross message length in bytes
-				tTouchData[tIndex++] = (byte) tEventType; // Function token
+				mSendByteBuffer[tIndex++] = (byte) tEventLength; // gross message length in bytes
+				mSendByteBuffer[tIndex++] = (byte) tEventType; // Function token
 
 				short tXPos = (short) aX;
-				tTouchData[tIndex++] = (byte) (tXPos & 0xFF); // LSB
-				tTouchData[tIndex++] = (byte) ((tXPos >> 8) & 0xFF); // MSB
+				mSendByteBuffer[tIndex++] = (byte) (tXPos & 0xFF); // LSB
+				mSendByteBuffer[tIndex++] = (byte) ((tXPos >> 8) & 0xFF); // MSB
 				short tYPos = (short) aY;
-				tTouchData[tIndex++] = (byte) (tYPos & 0xFF); // LSB
-				tTouchData[tIndex++] = (byte) ((tYPos >> 8) & 0xFF); // MSB
-				tTouchData[tIndex++] = (byte) (aByte & 0xFF); // Byte
-				tTouchData[tIndex++] = SYNC_TOKEN;
+				mSendByteBuffer[tIndex++] = (byte) (tYPos & 0xFF); // LSB
+				mSendByteBuffer[tIndex++] = (byte) ((tYPos >> 8) & 0xFF); // MSB
+				mSendByteBuffer[tIndex++] = (byte) (aByte & 0xFF); // Byte
+				mSendByteBuffer[tIndex++] = SYNC_TOKEN;
 				if (MyLog.isINFO()) {
 					String tType = RPCView.sActionMappings.get(tEventType);
 					MyLog.i(LOG_TAG, "Send Type=0x" + Integer.toHexString(tEventType) + "|" + tType + " X=" + aX + " Y=" + aY
-							+ " B=" + aByte);
+							+ " PointerIndex=" + aByte);
 				}
 
-				mmOutStream.write(tTouchData, 0, tEventLength);
+				mmOutStream.write(mSendByteBuffer, 0, tEventLength);
 				mmOutStream.flush();
 				mStatisticNumberOfSentBytes += tEventLength;
 				mStatisticNumberOfSentCommands++;
@@ -1114,22 +1117,21 @@ public class BluetoothSerialService {
 		 * send 16 bit X and Y position
 		 */
 		public void sendTwoIntegerAndTimestamp(int aEventType, int aX, int aY) {
-			byte[] tTouchData = new byte[11];
 			int tEventLength = 11;
 			int tEventType = aEventType & 0xFF;
 
 			try {
 				// assemble data buffer
 				int tIndex = 0;
-				tTouchData[tIndex++] = (byte) tEventLength; // gross message length in bytes
-				tTouchData[tIndex++] = (byte) tEventType; // Function token
+				mSendByteBuffer[tIndex++] = (byte) tEventLength; // gross message length in bytes
+				mSendByteBuffer[tIndex++] = (byte) tEventType; // Function token
 
 				short tXPos = (short) aX;
-				tTouchData[tIndex++] = (byte) (tXPos & 0xFF); // LSB
-				tTouchData[tIndex++] = (byte) ((tXPos >> 8) & 0xFF); // MSB
+				mSendByteBuffer[tIndex++] = (byte) (tXPos & 0xFF); // LSB
+				mSendByteBuffer[tIndex++] = (byte) ((tXPos >> 8) & 0xFF); // MSB
 				short tYPos = (short) aY;
-				tTouchData[tIndex++] = (byte) (tYPos & 0xFF); // LSB
-				tTouchData[tIndex++] = (byte) ((tYPos >> 8) & 0xFF); // MSB
+				mSendByteBuffer[tIndex++] = (byte) (tYPos & 0xFF); // LSB
+				mSendByteBuffer[tIndex++] = (byte) ((tYPos >> 8) & 0xFF); // MSB
 
 				/*
 				 * Timestamp of local time (for convenience reason)
@@ -1137,11 +1139,11 @@ public class BluetoothSerialService {
 				int tGmtOffset = TimeZone.getDefault().getRawOffset() + TimeZone.getDefault().getDSTSavings();
 				long tTimestamp = System.currentTimeMillis() + tGmtOffset;
 				long tTimestampSeconds = tTimestamp / 1000L;
-				tTouchData[tIndex++] = (byte) (tTimestampSeconds & 0xFF); // LSB
-				tTouchData[tIndex++] = (byte) ((tTimestampSeconds >> 8) & 0xFF);
-				tTouchData[tIndex++] = (byte) ((tTimestampSeconds >> 16) & 0xFF);
-				tTouchData[tIndex++] = (byte) ((tTimestampSeconds >> 24) & 0xFF); // MSB
-				tTouchData[tIndex++] = SYNC_TOKEN;
+				mSendByteBuffer[tIndex++] = (byte) (tTimestampSeconds & 0xFF); // LSB
+				mSendByteBuffer[tIndex++] = (byte) ((tTimestampSeconds >> 8) & 0xFF);
+				mSendByteBuffer[tIndex++] = (byte) ((tTimestampSeconds >> 16) & 0xFF);
+				mSendByteBuffer[tIndex++] = (byte) ((tTimestampSeconds >> 24) & 0xFF); // MSB
+				mSendByteBuffer[tIndex++] = SYNC_TOKEN;
 				if (MyLog.isINFO()) {
 					String tType = RPCView.sActionMappings.get(tEventType);
 					// this does not respect the 24 hour setting of android :-(
@@ -1152,7 +1154,7 @@ public class BluetoothSerialService {
 							+ " Date=" + tDateFormat.format(tDate));
 				}
 
-				mmOutStream.write(tTouchData, 0, tEventLength);
+				mmOutStream.write(mSendByteBuffer, 0, tEventLength);
 				mmOutStream.flush();
 				mStatisticNumberOfSentBytes += tEventLength;
 				mStatisticNumberOfSentCommands++;
@@ -1161,45 +1163,49 @@ public class BluetoothSerialService {
 			}
 		}
 
-		final static int CALLBACK_DATA_SIZE = 15;
-
 		/*
-		 * send 16 bit button index, 16 bit filler, 32 bit callback address and 32 bit value
+		 * send 16 bit button / slider index, 16 bit filler, 32 bit callback address and 32 bit value
 		 */
-		public void sendGuiCallback(int aEventType, int aButtonIndex, int aCallbackAddress, int aValue) {
-			byte[] tGuiCallbackData = new byte[CALLBACK_DATA_SIZE];
+		public void sendGuiCallback(int aEventType, int aButtonSliderIndex, int aCallbackAddress, int aValue, String aElementInfo) {
 			int tEventLength = CALLBACK_DATA_SIZE;
 			int tEventType = aEventType & 0xFF;
 
 			try {
 				// assemble data buffer
 				int tIndex = 0;
-				tGuiCallbackData[tIndex++] = (byte) tEventLength; // gross message length in bytes
-				tGuiCallbackData[tIndex++] = (byte) tEventType; // Function token
+				mSendByteBuffer[tIndex++] = (byte) tEventLength; // gross message length in bytes
+				mSendByteBuffer[tIndex++] = (byte) tEventType; // Function token
 
-				short tShortValue = (short) aButtonIndex;
-				tGuiCallbackData[tIndex++] = (byte) (tShortValue & 0xFF); // LSB
-				tGuiCallbackData[tIndex++] = (byte) ((tShortValue >> 8) & 0xFF); // MSB
+				short tShortValue = (short) aButtonSliderIndex;
+				mSendByteBuffer[tIndex++] = (byte) (tShortValue & 0xFF); // LSB
+				mSendByteBuffer[tIndex++] = (byte) ((tShortValue >> 8) & 0xFF); // MSB
 				// for 32 bit padding
-				tGuiCallbackData[tIndex++] = (byte) (0x00); // LSB
-				tGuiCallbackData[tIndex++] = (byte) (0x00); // MSB
+				mSendByteBuffer[tIndex++] = (byte) (0x00); // LSB
+				mSendByteBuffer[tIndex++] = (byte) (0x00); // MSB
 
-				tGuiCallbackData[tIndex++] = (byte) (aCallbackAddress & 0xFF); // LSB
-				tGuiCallbackData[tIndex++] = (byte) ((aCallbackAddress >> 8) & 0xFF); // MSB
-				tGuiCallbackData[tIndex++] = (byte) ((aCallbackAddress >> 16) & 0xFF);
-				tGuiCallbackData[tIndex++] = (byte) ((aCallbackAddress >> 24) & 0xFF);
-				tGuiCallbackData[tIndex++] = (byte) (aValue & 0xFF); // LSB
-				tGuiCallbackData[tIndex++] = (byte) ((aValue >> 8) & 0xFF); // MSB
-				tGuiCallbackData[tIndex++] = (byte) ((aValue >> 16) & 0xFF);
-				tGuiCallbackData[tIndex++] = (byte) ((aValue >> 24) & 0xFF);
-				tGuiCallbackData[tIndex++] = SYNC_TOKEN;
+				mSendByteBuffer[tIndex++] = (byte) (aCallbackAddress & 0xFF); // LSB
+				mSendByteBuffer[tIndex++] = (byte) ((aCallbackAddress >> 8) & 0xFF); // MSB
+				mSendByteBuffer[tIndex++] = (byte) ((aCallbackAddress >> 16) & 0xFF);
+				mSendByteBuffer[tIndex++] = (byte) ((aCallbackAddress >> 24) & 0xFF);
+				mSendByteBuffer[tIndex++] = (byte) (aValue & 0xFF); // LSB
+				mSendByteBuffer[tIndex++] = (byte) ((aValue >> 8) & 0xFF); // MSB
+				mSendByteBuffer[tIndex++] = (byte) ((aValue >> 16) & 0xFF);
+				mSendByteBuffer[tIndex++] = (byte) ((aValue >> 24) & 0xFF);
+				mSendByteBuffer[tIndex++] = SYNC_TOKEN;
+
 				if (MyLog.isINFO()) {
 					String tType = RPCView.sActionMappings.get(tEventType);
-					MyLog.i(LOG_TAG, "Send Type=0x" + Integer.toHexString(tEventType) + "|" + tType + " ButtonIndex="
-							+ aButtonIndex + " CallbackAddress=0x" + Integer.toHexString(aCallbackAddress) + " Value=" + aValue);
+					String tElementInfo = "";
+					if (tEventType == EVENT_BUTTON_CALLBACK) {
+						tElementInfo = " ButtonIndex=" + aButtonSliderIndex + "|" + aElementInfo;
+					} else if (tEventType == EVENT_SLIDER_CALLBACK) {
+						tElementInfo = " SliderIndex=" + aButtonSliderIndex;
+					}
+					MyLog.i(LOG_TAG, "Send Type=0x" + Integer.toHexString(tEventType) + "|" + tType + " CallbackAddress=0x"
+							+ Integer.toHexString(aCallbackAddress) + " Value=" + aValue + tElementInfo);
 				}
 
-				mmOutStream.write(tGuiCallbackData, 0, tEventLength);
+				mmOutStream.write(mSendByteBuffer, 0, tEventLength);
 				mmOutStream.flush();
 				mStatisticNumberOfSentBytes += tEventLength;
 				mStatisticNumberOfSentCommands++;
@@ -1212,41 +1218,40 @@ public class BluetoothSerialService {
 		 * send 16 bit button index, 16 bit filler, 32 bit callback address and 32 bit FLOAT value
 		 */
 		public void sendNumberCallback(int aEventType, int aCallbackAddress, float aValue) {
-			byte[] tGuiCallbackData = new byte[CALLBACK_DATA_SIZE];
 			int tEventLength = CALLBACK_DATA_SIZE;
 			int tEventType = aEventType & 0xFF;
 
 			try {
 				// assemble data buffer
 				int tIndex = 0;
-				tGuiCallbackData[tIndex++] = (byte) tEventLength; // gross message length in bytes
-				tGuiCallbackData[tIndex++] = (byte) tEventType; // Function token
+				mSendByteBuffer[tIndex++] = (byte) tEventLength; // gross message length in bytes
+				mSendByteBuffer[tIndex++] = (byte) tEventType; // Function token
 
 				// for future use (index of function calling getNumber etc.)
 				short tShortValue = (short) 0;
-				tGuiCallbackData[tIndex++] = (byte) (tShortValue & 0xFF); // LSB
-				tGuiCallbackData[tIndex++] = (byte) ((tShortValue >> 8) & 0xFF); // MSB
+				mSendByteBuffer[tIndex++] = (byte) (tShortValue & 0xFF); // LSB
+				mSendByteBuffer[tIndex++] = (byte) ((tShortValue >> 8) & 0xFF); // MSB
 				// for 32 bit padding
-				tGuiCallbackData[tIndex++] = (byte) (0x00); // LSB
-				tGuiCallbackData[tIndex++] = (byte) (0x00); // MSB
+				mSendByteBuffer[tIndex++] = (byte) (0x00); // LSB
+				mSendByteBuffer[tIndex++] = (byte) (0x00); // MSB
 
-				tGuiCallbackData[tIndex++] = (byte) (aCallbackAddress & 0xFF); // LSB
-				tGuiCallbackData[tIndex++] = (byte) ((aCallbackAddress >> 8) & 0xFF); // MSB
-				tGuiCallbackData[tIndex++] = (byte) ((aCallbackAddress >> 16) & 0xFF);
-				tGuiCallbackData[tIndex++] = (byte) ((aCallbackAddress >> 24) & 0xFF);
+				mSendByteBuffer[tIndex++] = (byte) (aCallbackAddress & 0xFF); // LSB
+				mSendByteBuffer[tIndex++] = (byte) ((aCallbackAddress >> 8) & 0xFF); // MSB
+				mSendByteBuffer[tIndex++] = (byte) ((aCallbackAddress >> 16) & 0xFF);
+				mSendByteBuffer[tIndex++] = (byte) ((aCallbackAddress >> 24) & 0xFF);
 				int tValue = Float.floatToIntBits(aValue);
-				tGuiCallbackData[tIndex++] = (byte) (tValue & 0xFF); // LSB
-				tGuiCallbackData[tIndex++] = (byte) ((tValue >> 8) & 0xFF); // MSB
-				tGuiCallbackData[tIndex++] = (byte) ((tValue >> 16) & 0xFF);
-				tGuiCallbackData[tIndex++] = (byte) ((tValue >> 24) & 0xFF);
-				tGuiCallbackData[tIndex++] = SYNC_TOKEN;
+				mSendByteBuffer[tIndex++] = (byte) (tValue & 0xFF); // LSB
+				mSendByteBuffer[tIndex++] = (byte) ((tValue >> 8) & 0xFF); // MSB
+				mSendByteBuffer[tIndex++] = (byte) ((tValue >> 16) & 0xFF);
+				mSendByteBuffer[tIndex++] = (byte) ((tValue >> 24) & 0xFF);
+				mSendByteBuffer[tIndex++] = SYNC_TOKEN;
 				if (MyLog.isINFO()) {
 					String tType = RPCView.sActionMappings.get(tEventType);
 					MyLog.i(LOG_TAG, "Send Type=0x" + Integer.toHexString(tEventType) + "|" + tType + " CallbackAddress=0x"
 							+ Integer.toHexString(aCallbackAddress) + " Value=" + aValue);
 				}
 
-				mmOutStream.write(tGuiCallbackData, 0, tEventLength);
+				mmOutStream.write(mSendByteBuffer, 0, tEventLength);
 				mmOutStream.flush();
 				mStatisticNumberOfSentBytes += tEventLength;
 				mStatisticNumberOfSentCommands++;
@@ -1259,38 +1264,37 @@ public class BluetoothSerialService {
 		 * send 16 bit direction,16 bit filler, 32 bit start position and 32 bit delta
 		 */
 		public void sendSwipeCallback(int aEventType, int aIsXDirection, int aStartX, int aStartY, int aDeltaX, int aDeltaY) {
-			byte[] tSwipeData = new byte[CALLBACK_DATA_SIZE];
 			int tEventLength = CALLBACK_DATA_SIZE;
 			int tEventType = aEventType & 0xFF;
 
 			try {
 				// assemble data buffer
 				int tIndex = 0;
-				tSwipeData[tIndex++] = (byte) tEventLength; // gross message length in bytes
-				tSwipeData[tIndex++] = (byte) tEventType; // Function token
+				mSendByteBuffer[tIndex++] = (byte) tEventLength; // gross message length in bytes
+				mSendByteBuffer[tIndex++] = (byte) tEventType; // Function token
 				short tShortValue = (short) aIsXDirection;
-				tSwipeData[tIndex++] = (byte) (tShortValue & 0xFF); // LSB
-				tSwipeData[tIndex++] = (byte) ((tShortValue >> 8) & 0xFF); // MSB
+				mSendByteBuffer[tIndex++] = (byte) (tShortValue & 0xFF); // LSB
+				mSendByteBuffer[tIndex++] = (byte) ((tShortValue >> 8) & 0xFF); // MSB
 				// for 32 bit padding
-				tSwipeData[tIndex++] = (byte) (0x00); // LSB
-				tSwipeData[tIndex++] = (byte) (0x00); // MSB
+				mSendByteBuffer[tIndex++] = (byte) (0x00); // LSB
+				mSendByteBuffer[tIndex++] = (byte) (0x00); // MSB
 
-				tSwipeData[tIndex++] = (byte) (aStartX & 0xFF); // LSB
-				tSwipeData[tIndex++] = (byte) ((aStartX >> 8) & 0xFF); // MSB
-				tSwipeData[tIndex++] = (byte) (aStartY & 0xFF); // LSB
-				tSwipeData[tIndex++] = (byte) ((aStartY >> 8) & 0xFF); // MSB
-				tSwipeData[tIndex++] = (byte) (aDeltaX & 0xFF); // LSB
-				tSwipeData[tIndex++] = (byte) ((aDeltaX >> 8) & 0xFF); // MSB
-				tSwipeData[tIndex++] = (byte) (aDeltaY & 0xFF); // LSB
-				tSwipeData[tIndex++] = (byte) ((aDeltaY >> 8) & 0xFF); // MSB
-				tSwipeData[tIndex++] = SYNC_TOKEN;
+				mSendByteBuffer[tIndex++] = (byte) (aStartX & 0xFF); // LSB
+				mSendByteBuffer[tIndex++] = (byte) ((aStartX >> 8) & 0xFF); // MSB
+				mSendByteBuffer[tIndex++] = (byte) (aStartY & 0xFF); // LSB
+				mSendByteBuffer[tIndex++] = (byte) ((aStartY >> 8) & 0xFF); // MSB
+				mSendByteBuffer[tIndex++] = (byte) (aDeltaX & 0xFF); // LSB
+				mSendByteBuffer[tIndex++] = (byte) ((aDeltaX >> 8) & 0xFF); // MSB
+				mSendByteBuffer[tIndex++] = (byte) (aDeltaY & 0xFF); // LSB
+				mSendByteBuffer[tIndex++] = (byte) ((aDeltaY >> 8) & 0xFF); // MSB
+				mSendByteBuffer[tIndex++] = SYNC_TOKEN;
 				if (MyLog.isINFO()) {
 					String tType = RPCView.sActionMappings.get(tEventType);
 					MyLog.i(LOG_TAG, "Send Type=0x" + Integer.toHexString(tEventType) + "|" + tType + " Direction=" + aIsXDirection
 							+ " Start=" + aStartX + "/" + aStartY + " Delta=" + aDeltaX + "/" + aDeltaY);
 				}
 
-				mmOutStream.write(tSwipeData, 0, tEventLength);
+				mmOutStream.write(mSendByteBuffer, 0, tEventLength);
 				mmOutStream.flush();
 				mStatisticNumberOfSentBytes += tEventLength;
 				mStatisticNumberOfSentCommands++;
@@ -1301,34 +1305,33 @@ public class BluetoothSerialService {
 
 		public void sendTwoIntegerInfoCallback(int aEventType, int aSubFunction, int aByteInfo, int aShortInfo,
 				int aCallbackAddress, int aInfo_0, int aInfo_1) {
-			byte[] tInfoCallbackData = new byte[CALLBACK_DATA_SIZE];
 			int tEventLength = CALLBACK_DATA_SIZE;
 			int tEventType = aEventType & 0xFF;
 
 			try {
 				// assemble data buffer
 				int tIndex = 0;
-				tInfoCallbackData[tIndex++] = (byte) tEventLength; // gross message length in bytes
+				mSendByteBuffer[tIndex++] = (byte) tEventLength; // gross message length in bytes
 
-				tInfoCallbackData[tIndex++] = (byte) tEventType; // Sub function token
+				mSendByteBuffer[tIndex++] = (byte) tEventType; // Sub function token
 
-				tInfoCallbackData[tIndex++] = (byte) (aSubFunction & 0xFF);
+				mSendByteBuffer[tIndex++] = (byte) (aSubFunction & 0xFF);
 
-				tInfoCallbackData[tIndex++] = (byte) (aByteInfo & 0xFF);
+				mSendByteBuffer[tIndex++] = (byte) (aByteInfo & 0xFF);
 				// put special info here
-				tInfoCallbackData[tIndex++] = (byte) (aShortInfo & 0xFF); // LSB
-				tInfoCallbackData[tIndex++] = (byte) ((aShortInfo >> 8) & 0xFF); // MSB
+				mSendByteBuffer[tIndex++] = (byte) (aShortInfo & 0xFF); // LSB
+				mSendByteBuffer[tIndex++] = (byte) ((aShortInfo >> 8) & 0xFF); // MSB
 
-				tInfoCallbackData[tIndex++] = (byte) (aCallbackAddress & 0xFF); // LSB
-				tInfoCallbackData[tIndex++] = (byte) ((aCallbackAddress >> 8) & 0xFF); // MSB
-				tInfoCallbackData[tIndex++] = (byte) ((aCallbackAddress >> 16) & 0xFF);
-				tInfoCallbackData[tIndex++] = (byte) ((aCallbackAddress >> 24) & 0xFF);
+				mSendByteBuffer[tIndex++] = (byte) (aCallbackAddress & 0xFF); // LSB
+				mSendByteBuffer[tIndex++] = (byte) ((aCallbackAddress >> 8) & 0xFF); // MSB
+				mSendByteBuffer[tIndex++] = (byte) ((aCallbackAddress >> 16) & 0xFF);
+				mSendByteBuffer[tIndex++] = (byte) ((aCallbackAddress >> 24) & 0xFF);
 
-				tInfoCallbackData[tIndex++] = (byte) (aInfo_0 & 0xFF); // LSB
-				tInfoCallbackData[tIndex++] = (byte) ((aInfo_0 >> 8) & 0xFF); // MSB
-				tInfoCallbackData[tIndex++] = (byte) (aInfo_1 & 0xFF); // LSB
-				tInfoCallbackData[tIndex++] = (byte) ((aInfo_1 >> 8) & 0xFF); // MSB
-				tInfoCallbackData[tIndex++] = SYNC_TOKEN;
+				mSendByteBuffer[tIndex++] = (byte) (aInfo_0 & 0xFF); // LSB
+				mSendByteBuffer[tIndex++] = (byte) ((aInfo_0 >> 8) & 0xFF); // MSB
+				mSendByteBuffer[tIndex++] = (byte) (aInfo_1 & 0xFF); // LSB
+				mSendByteBuffer[tIndex++] = (byte) ((aInfo_1 >> 8) & 0xFF); // MSB
+				mSendByteBuffer[tIndex++] = SYNC_TOKEN;
 				if (MyLog.isINFO()) {
 					String tType = RPCView.sActionMappings.get(tEventType);
 					MyLog.i(LOG_TAG, "Send Type=0x" + Integer.toHexString(tEventType) + "|" + tType + " SubFunction="
@@ -1337,7 +1340,7 @@ public class BluetoothSerialService {
 							+ aInfo_1);
 				}
 
-				mmOutStream.write(tInfoCallbackData, 0, tEventLength);
+				mmOutStream.write(mSendByteBuffer, 0, tEventLength);
 				mmOutStream.flush();
 				mStatisticNumberOfSentBytes += tEventLength;
 				mStatisticNumberOfSentCommands++;
@@ -1348,34 +1351,33 @@ public class BluetoothSerialService {
 
 		public void sendLongInfoCallback(int aEventType, int aSubFunction, int aByteInfo, int aShortInfo, int aCallbackAddress,
 				long aLongInfo) {
-			byte[] tInfoCallbackData = new byte[CALLBACK_DATA_SIZE];
 			int tEventLength = CALLBACK_DATA_SIZE;
 			int tEventType = aEventType & 0xFF;
 
 			try {
 				// assemble data buffer
 				int tIndex = 0;
-				tInfoCallbackData[tIndex++] = (byte) tEventLength; // gross message length in bytes
+				mSendByteBuffer[tIndex++] = (byte) tEventLength; // gross message length in bytes
 
-				tInfoCallbackData[tIndex++] = (byte) tEventType; // Function token
+				mSendByteBuffer[tIndex++] = (byte) tEventType; // Function token
 
-				tInfoCallbackData[tIndex++] = (byte) (aSubFunction & 0xFF); // Sub function token
+				mSendByteBuffer[tIndex++] = (byte) (aSubFunction & 0xFF); // Sub function token
 
-				tInfoCallbackData[tIndex++] = (byte) (aByteInfo & 0xFF);
+				mSendByteBuffer[tIndex++] = (byte) (aByteInfo & 0xFF);
 				// put special info here
-				tInfoCallbackData[tIndex++] = (byte) (aShortInfo & 0xFF); // LSB
-				tInfoCallbackData[tIndex++] = (byte) ((aShortInfo >> 8) & 0xFF); // MSB
+				mSendByteBuffer[tIndex++] = (byte) (aShortInfo & 0xFF); // LSB
+				mSendByteBuffer[tIndex++] = (byte) ((aShortInfo >> 8) & 0xFF); // MSB
 
-				tInfoCallbackData[tIndex++] = (byte) (aCallbackAddress & 0xFF); // LSB
-				tInfoCallbackData[tIndex++] = (byte) ((aCallbackAddress >> 8) & 0xFF); // MSB
-				tInfoCallbackData[tIndex++] = (byte) ((aCallbackAddress >> 16) & 0xFF);
-				tInfoCallbackData[tIndex++] = (byte) ((aCallbackAddress >> 24) & 0xFF);
+				mSendByteBuffer[tIndex++] = (byte) (aCallbackAddress & 0xFF); // LSB
+				mSendByteBuffer[tIndex++] = (byte) ((aCallbackAddress >> 8) & 0xFF); // MSB
+				mSendByteBuffer[tIndex++] = (byte) ((aCallbackAddress >> 16) & 0xFF);
+				mSendByteBuffer[tIndex++] = (byte) ((aCallbackAddress >> 24) & 0xFF);
 
-				tInfoCallbackData[tIndex++] = (byte) (aLongInfo & 0xFF); // LSB
-				tInfoCallbackData[tIndex++] = (byte) ((aLongInfo >> 8) & 0xFF); // MSB
-				tInfoCallbackData[tIndex++] = (byte) ((aLongInfo >> 16) & 0xFF);
-				tInfoCallbackData[tIndex++] = (byte) ((aLongInfo >> 24) & 0xFF);
-				tInfoCallbackData[tIndex++] = SYNC_TOKEN;
+				mSendByteBuffer[tIndex++] = (byte) (aLongInfo & 0xFF); // LSB
+				mSendByteBuffer[tIndex++] = (byte) ((aLongInfo >> 8) & 0xFF); // MSB
+				mSendByteBuffer[tIndex++] = (byte) ((aLongInfo >> 16) & 0xFF);
+				mSendByteBuffer[tIndex++] = (byte) ((aLongInfo >> 24) & 0xFF);
+				mSendByteBuffer[tIndex++] = SYNC_TOKEN;
 				if (MyLog.isINFO()) {
 					String tType = RPCView.sActionMappings.get(tEventType);
 					MyLog.i(LOG_TAG, "Send Type=0x" + Integer.toHexString(tEventType) + "|" + tType + " SubFunction="
@@ -1383,7 +1385,7 @@ public class BluetoothSerialService {
 							+ " CallbackAddress=0x" + Integer.toHexString(aCallbackAddress) + " LongInfo=" + aLongInfo);
 				}
 
-				mmOutStream.write(tInfoCallbackData, 0, tEventLength);
+				mmOutStream.write(mSendByteBuffer, 0, tEventLength);
 				mmOutStream.flush();
 				mStatisticNumberOfSentBytes += tEventLength;
 				mStatisticNumberOfSentCommands++;
@@ -1396,39 +1398,38 @@ public class BluetoothSerialService {
 		 * send sensor event type and xyz 32 bit FLOAT values
 		 */
 		public void sendSensor(int aEventType, float aValueX, float aValueY, float aValueZ) {
-			byte[] tSensorEventData = new byte[CALLBACK_DATA_SIZE];
 			int tEventLength = CALLBACK_DATA_SIZE;
 			int tEventType = aEventType & 0xFF;
 
 			try {
 				// assemble data buffer
 				int tIndex = 0;
-				tSensorEventData[tIndex++] = (byte) tEventLength; // gross message length in bytes
-				tSensorEventData[tIndex++] = (byte) tEventType; // Function token
+				mSendByteBuffer[tIndex++] = (byte) tEventLength; // gross message length in bytes
+				mSendByteBuffer[tIndex++] = (byte) tEventType; // Function token
 
 				int tValue = Float.floatToIntBits(aValueX);
-				tSensorEventData[tIndex++] = (byte) (tValue & 0xFF); // LSB
-				tSensorEventData[tIndex++] = (byte) ((tValue >> 8) & 0xFF); // MSB
-				tSensorEventData[tIndex++] = (byte) ((tValue >> 16) & 0xFF);
-				tSensorEventData[tIndex++] = (byte) ((tValue >> 24) & 0xFF);
+				mSendByteBuffer[tIndex++] = (byte) (tValue & 0xFF); // LSB
+				mSendByteBuffer[tIndex++] = (byte) ((tValue >> 8) & 0xFF); // MSB
+				mSendByteBuffer[tIndex++] = (byte) ((tValue >> 16) & 0xFF);
+				mSendByteBuffer[tIndex++] = (byte) ((tValue >> 24) & 0xFF);
 				tValue = Float.floatToIntBits(aValueY);
-				tSensorEventData[tIndex++] = (byte) (tValue & 0xFF); // LSB
-				tSensorEventData[tIndex++] = (byte) ((tValue >> 8) & 0xFF); // MSB
-				tSensorEventData[tIndex++] = (byte) ((tValue >> 16) & 0xFF);
-				tSensorEventData[tIndex++] = (byte) ((tValue >> 24) & 0xFF);
+				mSendByteBuffer[tIndex++] = (byte) (tValue & 0xFF); // LSB
+				mSendByteBuffer[tIndex++] = (byte) ((tValue >> 8) & 0xFF); // MSB
+				mSendByteBuffer[tIndex++] = (byte) ((tValue >> 16) & 0xFF);
+				mSendByteBuffer[tIndex++] = (byte) ((tValue >> 24) & 0xFF);
 				tValue = Float.floatToIntBits(aValueZ);
-				tSensorEventData[tIndex++] = (byte) (tValue & 0xFF); // LSB
-				tSensorEventData[tIndex++] = (byte) ((tValue >> 8) & 0xFF); // MSB
-				tSensorEventData[tIndex++] = (byte) ((tValue >> 16) & 0xFF);
-				tSensorEventData[tIndex++] = (byte) ((tValue >> 24) & 0xFF);
-				tSensorEventData[tIndex++] = SYNC_TOKEN;
+				mSendByteBuffer[tIndex++] = (byte) (tValue & 0xFF); // LSB
+				mSendByteBuffer[tIndex++] = (byte) ((tValue >> 8) & 0xFF); // MSB
+				mSendByteBuffer[tIndex++] = (byte) ((tValue >> 16) & 0xFF);
+				mSendByteBuffer[tIndex++] = (byte) ((tValue >> 24) & 0xFF);
+				mSendByteBuffer[tIndex++] = SYNC_TOKEN;
 				if (MyLog.isDEBUG()) {
 					String tType = RPCView.sActionMappings.get(tEventType);
 					MyLog.d(LOG_TAG, "Send Sensor Event Type=0x" + Integer.toHexString(tEventType) + "|" + tType + " X=" + aValueX
 							+ " Y=" + aValueY + " Z=" + aValueZ);
 				}
 
-				mmOutStream.write(tSensorEventData, 0, tEventLength);
+				mmOutStream.write(mSendByteBuffer, 0, tEventLength);
 				mmOutStream.flush();
 				mStatisticNumberOfSentBytes += tEventLength;
 				mStatisticNumberOfSentCommands++;

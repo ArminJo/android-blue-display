@@ -1,7 +1,7 @@
 # BlueDisplay
 Convert your smartphone into an Android remote touch display for your Arduino or ARM projects.
 
-##SUMMARY
+## SUMMARY
 Let the Arduino sketch create a GUI with Graphics, Buttons and Sliders on your smartphone by simply connecting a HC-05 to the rx/tx pins of your Arduino.
 It receives draw requests from Arduino over Bluetooth and renders it.
 GUI callback, touch and sensor events are sent back to Arduino.
@@ -40,15 +40,25 @@ Bug autorepeat button in conjunction with UseUpEventForButtons fixed.
 
 3.6 connect, reconnect and autoconnect improved/added. Improved debug() command. Simplified Red/Green button handling.
 
+3.7 Handling of no input for getNumber.
 
-### Example for Hex + ASCII output:
+
+### Example for Hex + ASCII output (on log level verbose):
 ```
-V BTSerial RawData=00 4C 13 A5 01 08 00 53 65 74 74 69 6E 67 73 A5 |  L      Settings
-V BTSerial RawData=70 12 00 04 00 00 00 00 00 60 00 34 00 00 F8 0B | p             `
-V BTSerial RawData=03 00 00 30 21 A5 01 07 00 48 69 73 74 6F 72 79 |   0!     History
+V Hex= 00 4C 13 A5 01 08 00 53 65 74 74 69 6E 67 73 A5
+V Asc=     L                 S  e  t  t  i  n  g  s
+V Hex= 70 12 00 04 00 00 00 00 00 60 00 34 00 00 F8 0B
+V Asc=  p                          `     4
+V Hex= 03 00 00 30 21 A5 01 07 00 48 69 73 74 6F 72 79
+V Asc=           0  !              H  i  s  t  o  r  y
 ```
 
-## Hint
+## Hints
+If you need debugging with print() you must use the debug() functions since using Serial.print() etc. gives errors (we have only one serial port on the Arduino) . E.g.
+```
+BlueDisplay1.debug("\r\nDoBlink=", (uint8_t) doBlink);
+```
+
 To enable programming of the Arduino while the HC-05 module is connected, use a diode to connect Arduino rx and HC-05 tx.
 On Arduino MEGA 2560 TX1 is used, so no diode is needed.
 ```

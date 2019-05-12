@@ -56,6 +56,7 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.res.Configuration;
 import android.hardware.SensorManager;
+import android.media.AudioManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
@@ -124,6 +125,12 @@ public class BlueDisplay extends Activity {
 	 */
 	public Sensors mSensorEventListener;
 
+	/*
+	 * Audio manager for getting actual user volume setting
+	 */
+	public AudioManager mAudioManager;
+	public int mMaxSystemVolume;
+
 	private boolean mInTryToEnableEnableBT; // We try to enable Bluetooth
 	private boolean mAutoConnectBT = false; // Auto connect at startup
 	private String mAutoConnectMacAddressFromPreferences; // MAC address for auto connect at startup
@@ -148,6 +155,7 @@ public class BlueDisplay extends Activity {
 	int mPreferredScreenOrientation;
 	protected int mActualScreenOrientation;
 	protected int mRequestedScreenOrientation;
+	// rotation is 1 or 0 for landscape (usb connector right) depending on model
 	protected int mActualRotation;
 	protected boolean mOrientationisLockedByClient = false;
 	protected String mActualScreenOrientationRotationString = "";
@@ -168,6 +176,13 @@ public class BlueDisplay extends Activity {
 			Log.i(LOG_TAG, "+++ ON CREATE +++");
 		}
 
+		/*
+		 * Get Audio manager and max volume for beep volume handling in Buttons and playTone()
+		 * Must be before create RPCView, since RPCView uses this values
+		 */
+		mAudioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+		mMaxSystemVolume = mAudioManager.getStreamMaxVolume(AudioManager.STREAM_SYSTEM);
+		
 		/*
 		 * Create RPCView
 		 */
@@ -222,6 +237,7 @@ public class BlueDisplay extends Activity {
 		if (MyLog.isINFO()) {
 			Log.i(LOG_TAG, "+++ DONE IN ON CREATE +++");
 		}
+
 	}
 
 	@Override
@@ -694,11 +710,10 @@ public class BlueDisplay extends Activity {
 					float tValue;
 					try {
 						tValue = Float.parseFloat(tNumber.toString());
+						mSerialService.writeNumberCallbackEvent(BluetoothSerialService.EVENT_NUMBER_CALLBACK, aCallbackAddress, tValue);
 					} catch (NumberFormatException e) {
-						tValue = RPCView.NUMBER_INITIAL_VALUE_DO_NOT_SHOW;
-						MyLog.d(LOG_TAG, "Entered data \"" + tNumber + "\" is no float");
+						MyLog.i(LOG_TAG, "Entered data \"" + tNumber + "\" is no float. No value sent.");
 					}
-					mSerialService.writeNumberCallbackEvent(BluetoothSerialService.EVENT_NUMBER_CALLBACK, aCallbackAddress, tValue);
 				} else {
 					// getText function here - Not yet implemented
 				}

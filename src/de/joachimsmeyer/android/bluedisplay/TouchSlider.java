@@ -498,7 +498,7 @@ public class TouchSlider {
 			mActualTouchValue = tActualTouchValueInt;
 			// call change handler
 			mRPCView.mBlueDisplayContext.mSerialService.writeGuiCallbackEvent(BluetoothSerialService.EVENT_SLIDER_CALLBACK,
-					mListIndex, mOnChangeHandlerCallbackAddress, tActualTouchValueInt);
+					mListIndex, mOnChangeHandlerCallbackAddress, tActualTouchValueInt, mCaption);
 			if ((mOptions & FLAG_SLIDER_VALUE_BY_CALLBACK) == 0) {
 				// store value and redraw
 				mActualValue = tActualTouchValueInt;
