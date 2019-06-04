@@ -17,30 +17,34 @@ No Android programming needed!
 - Easy mapping of UTF-8 characters like Ohm, Celsius etc..
 - Up to 115200 Baud using HC-05 modules.
 - Local display of received and sent commands for debug purposes.
-- Hex und ASCII output of received Bluetooth data at log level verbose.
+- Hex and ASCII output of received Bluetooth data at log level verbose.
 - Debug messages as toasts.
-- C++ Libraries for [Arduino](https://github.com/ArminJo/android-blue-display/tree/master/arduino/libraries/BlueDisplay/BlueDisplay.zip).
+- C++ Libraries for [Arduino](https://github.com/ArminJo/Arduino-BlueDisplay).
  and [ARM (STM)](https://github.com/ArminJo/android-blue-display/tree/master/STM32/lib).
 
 ## Version Info:
-3.0 Android sensor accessible by Arduino.
 
-3.1 Local display of received and sent commands for debug purposes.
+4.0 Connection with  USB OTG cable now also possible. In this case no Bluetooth adapter is needed.
+Handling of no input for getNumber.
+Slider setScaleFactor() does not scale the actual value, which is delivered as initial value at init().
+Improved tone volume setting - can be adjusted at the smartphone too. trim() for all button caption strings.
 
-3.2 Improved tone und fullscreen handling. Internal refactoring. Bugfixes and minor improvements.
+3.6 connect, reconnect and autoconnect improved/added. Improved debug() command. Simplified Red/Green button handling.
+
+3.5 Slider scaling changed and unit value added.
+
+3.4 Timeout for data messages. Get number initial value fixed.
+Bug autorepeat button in conjunction with UseUpEventForButtons fixed.
 
 3.3 Fixed silent tone bug for Lollipop and other bugs.Multiline text /r /n handling.
 Android time accessible on Arduino. Debug messages as toasts. Changed create button.
 Slider values scalable. GUI multi touch.Hex and ASCII output of received Bluetooth data at log level verbose.
 
-3.4 Timeout for data messages. Get number initial value fixed.
-Bug autorepeat button in conjunction with UseUpEventForButtons fixed.
+3.2 Improved tone and fullscreen handling. Internal refactoring. Bugfixes and minor improvements.
 
-3.5 Slider scaling changed and unit value added.
+3.1 Local display of received and sent commands for debug purposes.
 
-3.6 connect, reconnect and autoconnect improved/added. Improved debug() command. Simplified Red/Green button handling.
-
-3.7 Handling of no input for getNumber.
+3.0 Android sensor accessible by Arduino.
 
 
 ### Example for Hex + ASCII output (on log level verbose):
@@ -91,3 +95,5 @@ Hacked RC car
 RC car control display
 ![RC car control display](https://github.com/ArminJo/android-blue-display/blob/gh-pages/screenshots/RCCarControl.png)
 
+## Credits
+The USB driver library used in this project is [Kai Morichs fork of usb-serial-for-android](https://github.com/kai-morich/usb-serial-for-android)

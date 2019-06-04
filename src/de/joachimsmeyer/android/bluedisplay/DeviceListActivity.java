@@ -69,7 +69,7 @@ public class DeviceListActivity extends Activity {
 		// Initialize the button to perform device discovery
 		Button tConnectButton = (Button) findViewById(R.id.connect_last_device);
 		/*
-		 * Change caption of button
+		 * Change caption of top connect button to include name of last device
 		 */
 		String tDeviceNameLastConnected = this.getIntent().getStringExtra(BlueDisplay.BT_DEVICE_NAME);
 		String tOldCaption = (String) tConnectButton.getText();
@@ -81,7 +81,7 @@ public class DeviceListActivity extends Activity {
 		tNewCaption = tOldCaption + BlueDisplayPreferences.VALUE_SEPARATOR + tDeviceNameLastConnected;
 		tConnectButton.setText(tNewCaption);
 		if (MyLog.isVERBOSE()) {
-			Log.v(LOG_TAG, "Changing title of button from " + tOldCaption + " to " + tNewCaption);
+			Log.v(LOG_TAG, "Changing title of button from \"" + tOldCaption + "\" to \"" + tNewCaption +"\"");
 		}
 
 		tConnectButton.setOnClickListener(new OnClickListener() {
@@ -111,9 +111,10 @@ public class DeviceListActivity extends Activity {
 
 		long tActualTimestampMillis = System.currentTimeMillis();
 		if (mPairedDevices.size() == 1
-				&& BluetoothSerialService.sLastFailOrDisconnectTimestampMillis < (tActualTimestampMillis - 10000)) {
+				&& BluetoothSerialSocket.sLastFailOrDisconnectTimestampMillis < (tActualTimestampMillis - 10000)) {
 			/*
-			 * auto connect if only one device found but not within 10 seconds after last fail or disconnect
+			 * If only one device found, do auto connect (send device address directly)
+			 * But not within 10 seconds after last fail or disconnect.
 			 */
 			Iterator<BluetoothDevice> tIter = mPairedDevices.iterator();
 			// Get the BLuetoothDevice object

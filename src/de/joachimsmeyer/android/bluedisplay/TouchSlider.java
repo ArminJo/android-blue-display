@@ -40,6 +40,7 @@ public class TouchSlider {
 	private static final String LOG_TAG = "SL";
 
 	RPCView mRPCView;
+
 	int mSliderColor; // Color of border
 	int mBarColor;
 	int mBarBackgroundColor;
@@ -96,7 +97,7 @@ public class TouchSlider {
 	int mThresholdValue;
 	float mScaleFactor; // Scale factor for size. 2 means the slider behaves like one which is 2 times larger - default is 1
 
-	int mListIndex; // index in sSliderList
+	int mSliderNumber; // index in sSliderList - to identify slider while debugging
 	int mOnChangeHandlerCallbackAddress;
 	boolean mIsActive;
 	boolean mIsInitialized;
@@ -366,7 +367,7 @@ public class TouchSlider {
 			}
 		}
 
-		// draw background bar
+		// draw part of background bar, which is visible
 		if (tActualValueScaled < mBarLength) {
 			if ((mOptions & FLAG_SLIDER_IS_HORIZONTAL) != 0) {
 				mRPCView.fillRectRel(mPositionX + tShortBorderWidth + tActualValueScaled, mPositionY + tLongBorderWidth, mBarLength
@@ -497,8 +498,8 @@ public class TouchSlider {
 		if (tActualTouchValueInt != mActualTouchValue) {
 			mActualTouchValue = tActualTouchValueInt;
 			// call change handler
-			mRPCView.mBlueDisplayContext.mSerialService.writeGuiCallbackEvent(BluetoothSerialService.EVENT_SLIDER_CALLBACK,
-					mListIndex, mOnChangeHandlerCallbackAddress, tActualTouchValueInt, mCaption);
+			mRPCView.mBlueDisplayContext.mSerialService.writeGuiCallbackEvent(SerialService.EVENT_SLIDER_CALLBACK,
+					mSliderNumber, mOnChangeHandlerCallbackAddress, tActualTouchValueInt, mCaption);
 			if ((mOptions & FLAG_SLIDER_VALUE_BY_CALLBACK) == 0) {
 				// store value and redraw
 				mActualValue = tActualTouchValueInt;
@@ -523,7 +524,7 @@ public class TouchSlider {
 		// walk through list of active elements
 		for (TouchSlider tSlider : sSliderList) {
 			if (tSlider.mIsActive && tSlider.checkIfTouchInSlider(aTouchPositionX, aTouchPositionY, aJustCheck)) {
-				return tSlider.mListIndex;
+				return tSlider.mSliderNumber;
 			}
 		}
 		return -1;
@@ -797,7 +798,8 @@ public class TouchSlider {
 									+ " for SliderNr=" + tSliderNumber);
 						}
 						tSlider.mScaleFactor = tNewScaleFactor;
-						tSlider.mActualValue *= tNewScaleFactor;
+						// do not modify mActualValue, since it was specified with scaling in mind!
+//						tSlider.mActualValue *= tNewScaleFactor;
 					}
 					break;
 
@@ -848,6 +850,7 @@ public class TouchSlider {
 					 */
 					tSlider = new TouchSlider();
 					if (tSliderNumber < sSliderList.size()) {
+						// overwrite existing (old) slider
 						sSliderList.set(tSliderNumber, tSlider);
 					} else {
 						tSliderNumber = sSliderList.size();
@@ -857,7 +860,7 @@ public class TouchSlider {
 									+ sSliderList.size());
 						}
 					}
-					tSlider.mListIndex = tSliderNumber;
+					tSlider.mSliderNumber = tSliderNumber;
 				}
 
 				if (MyLog.isINFO()) {

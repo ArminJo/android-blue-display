@@ -257,7 +257,7 @@ public class Sensors implements SensorEventListener {
 					ValueX = -ValueX;
 					ValueY = -ValueY;
 				}
-				mBlueDisplayContext.mSerialService.writeSensorEvent(BluetoothSerialService.EVENT_FIRST_SENSOR_ACTION_CODE
+				mBlueDisplayContext.mSerialService.writeSensorEvent(SerialService.EVENT_FIRST_SENSOR_ACTION_CODE
 						+ tSensorType, ValueX, ValueY, ValueZ);
 			}
 		}

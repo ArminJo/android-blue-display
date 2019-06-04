@@ -412,7 +412,7 @@ public class TouchButton {
 					}
 				}
 
-				mRPCView.mBlueDisplayContext.mSerialService.writeGuiCallbackEvent(BluetoothSerialService.EVENT_BUTTON_CALLBACK,
+				mRPCView.mBlueDisplayContext.mSerialService.writeGuiCallbackEvent(SerialService.EVENT_BUTTON_CALLBACK,
 						mListIndex, mCallbackAddress, mValue, tCaptionForInfo);
 
 				/*
@@ -497,7 +497,7 @@ public class TouchButton {
 				if (mDoBeep) {
 					sButtonToneGenerator.startTone(sTouchBeepIndex, sActualToneDurationMillis);
 				}
-				mRPCView.mBlueDisplayContext.mSerialService.writeGuiCallbackEvent(BluetoothSerialService.EVENT_BUTTON_CALLBACK,
+				mRPCView.mBlueDisplayContext.mSerialService.writeGuiCallbackEvent(SerialService.EVENT_BUTTON_CALLBACK,
 						mListIndex, mCallbackAddress, mValue, mEscapedCaption);
 				if (sAutorepeatState == BUTTON_AUTOREPEAT_FIRST_PERIOD) {
 					sAutorepeatCount--;
@@ -819,7 +819,6 @@ public class TouchButton {
 			aRPCView.myConvertChars(aDataBytes, RPCView.sCharsArray, aDataLength);
 			tButtonCaption = new String(RPCView.sCharsArray, 0, aDataLength);
 			int tCallbackAddress;
-			// Output real Arduino function address, since function pointer on Arduino are address_of_function >> 1
 			String tCallbackAddressStringAdjustedForClientDebugging = "";
 			if (aParamsLength == 9) {
 				// 16 bit callback address
@@ -833,8 +832,9 @@ public class TouchButton {
 				// 32 bit callback address
 				tCallbackAddress = tCallbackAddress | (aParameters[10] << 16);
 			} else {
+				// Output real Arduino function address, since function pointer on Arduino are address_of_function >> 1
 				// 16 bit Arduino / AVR address
-				tCallbackAddressStringAdjustedForClientDebugging = "/0x" + Integer.toHexString(tCallbackAddress << 1);
+				tCallbackAddressStringAdjustedForClientDebugging = "/avr=0x" + Integer.toHexString(tCallbackAddress << 1);
 			}
 
 			if (tButton == null) {

@@ -8,7 +8,7 @@
 <resources>
 
     <string name="app_name">BlueDisplay</string>
-    <string name="app_version">3.7</string>
+    <string name="app_version">4.0</string>
 
     <!-- Alerts -->
     <string name="alert_dialog_no_bt">Bluetooth not available or activated. Stop application.</string>
@@ -31,7 +31,7 @@
 
     <!-- About menu -->
     <string name="logo">BlueDisplay Logo</string>
-    <string name="copyright">Copyright © 2014/2017 Armin Joachimsmeyer</string>
+    <string name="copyright">Copyright © 2014/2019 Armin Joachimsmeyer</string>
     <string name="license">GPL v3</string>
     <string name="code_www">https://github.com/ArminJo/android-blue-display</string>
 

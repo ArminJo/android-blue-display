@@ -5,7 +5,7 @@
  * 	It also implements basic GUI elements as buttons and sliders.
  * 	GUI callback, touch and sensor events are sent back to Arduino.
  * 
- *  Copyright (C) 2014  Armin Joachimsmeyer
+ *  Copyright (C) 2014-2019  Armin Joachimsmeyer
  *  armin.joachimsmeyer@gmail.com
  *  
  *  This file is part of BlueDisplay.
@@ -56,6 +56,7 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.res.Configuration;
 import android.hardware.SensorManager;
+import android.hardware.usb.UsbManager;
 import android.media.AudioManager;
 import android.os.Bundle;
 import android.os.Handler;
@@ -81,18 +82,20 @@ public class BlueDisplay extends Activity {
 	// Intent request codes
 	public static final int REQUEST_CONNECT_DEVICE = 1;
 	private static final int REQUEST_ENABLE_BT = 2;
+	// TODO needed?
+	static final int REQUEST_PERMISSION_USB = 2;
 
-	// static boolean isDevelopmentTesting = true;
 	static final String LOG_TAG = "BlueDisplay";
 
-	// Message types sent from the BluetoothSerialService Handler
+	// Message types sent from the BluetoothSerialSocket Handler
 	public static final int MESSAGE_CHANGE_MENU_ITEM_FOR_CONNECTED_STATE = 1;
 	public static final int MESSAGE_READ = 2;
 	public static final int MESSAGE_WRITE = 3;
 	public static final int MESSAGE_AFTER_CONNECT = 4;
-	public static final int MESSAGE_DISCONNECT = 5;
-	public static final int MESSAGE_TOAST = 6;
-	public static final int MESSAGE_UPDATE_VIEW = 7;
+	public static final int MESSAGE_BT_DISCONNECT = 5;
+	public static final int MESSAGE_USB_DISCONNECT = 6;
+	public static final int MESSAGE_TOAST = 7;
+	public static final int MESSAGE_UPDATE_VIEW = 8;
 
 	// Message sent by RPCView
 	public static final int REQUEST_INPUT_DATA = 10;
@@ -101,12 +104,13 @@ public class BlueDisplay extends Activity {
 	public static final String NUMBER_INITIAL_VALUE = "initialValue";
 	public static final String NUMBER_FLAG = "doNumber";
 
-	// Key names received from the BluetoothSerialService Handler
+	// Key names received from the BluetoothSerialSocket Handler
 	public static final String TOAST = "toast";
 
 	public static final String STATE_SCALE_FACTOR = "scale_factor";
 
 	private BluetoothAdapter mBluetoothAdapter = null;
+	UsbManager mUsbManager = null;
 
 	/*
 	 * Main view. Displays the remote data.
@@ -118,7 +122,11 @@ public class BlueDisplay extends Activity {
 	/*
 	 * Bluetooth socket handler
 	 */
-	public BluetoothSerialService mSerialService = null;
+	public BluetoothSerialSocket mBTSerialSocket = null;
+	public USBSerialSocket mUSBSerialSocket = null;
+	public SerialService mSerialService = null;
+
+	boolean mUSBDeviceAttached = false;
 
 	/*
 	 * Sensor listener
@@ -140,10 +148,10 @@ public class BlueDisplay extends Activity {
 	private String mDeviceNameToConnect; // Device name for which an connect is tried
 	private String mMacAddressConnected; // MAC address of the actual connected device
 	// to be displayed in DeviceListActivity
-	private String mDeviceNameConnected; // Device name of the actual connected device
+	private String mBluetoothDeviceNameConnected; // Device name of the actual connected Bluetooth device
 	static final String BT_DEVICE_NAME = "bt_device_name";
 
-	// State variable is declared in BluetoothSerialService
+	// State variable is declared in BluetoothSerialSocket
 	private static final String SHOW_TOUCH_COORDINATES_KEY = "show_touch_mode";
 	private static final String ALLOW_INSECURE_CONNECTIONS_KEY = "allowinsecureconnections";
 	private static final String AUTO_CONNECT_KEY = "do_autoconnect";
@@ -168,7 +176,12 @@ public class BlueDisplay extends Activity {
 	/******************
 	 * Event Handler
 	 ******************/
-	/** Called when the activity is first created. */
+	@SuppressLint("InlinedApi")
+	/**
+	 * Called when the activity is first created. Creates Audio Manager, RPCView class, bluetooth adapter + BluetoothSerialSocket,
+	 * try to connect and start listener to sensors.
+	 * After onCreate the RPCView gets an onSizeChanged event.
+	 */
 	@Override
 	public void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
@@ -177,16 +190,16 @@ public class BlueDisplay extends Activity {
 		}
 
 		/*
-		 * Get Audio manager and max volume for beep volume handling in Buttons and playTone()
-		 * Must be before create RPCView, since RPCView uses this values
+		 * Get Audio manager and max volume for beep volume handling in Buttons and playTone() Must be before create RPCView, since
+		 * RPCView uses this values
 		 */
 		mAudioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
 		mMaxSystemVolume = mAudioManager.getStreamMaxVolume(AudioManager.STREAM_SYSTEM);
-		
+
 		/*
 		 * Create RPCView
 		 */
-		mRPCView = new RPCView(this, mHandlerBluetooth);
+		mRPCView = new RPCView(this, mHandlerForGUIRequests);
 		setContentView(mRPCView);
 		mRPCView.setFocusable(true);
 		mRPCView.setFocusableInTouchMode(true);
@@ -198,46 +211,74 @@ public class BlueDisplay extends Activity {
 		readPreferences();
 
 		/*
-		 * Bluetooth
+		 * create the serial buffer handler / interpreter
 		 */
-		mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
-		if (mBluetoothAdapter == null) {
-			if (!MyLog.isVERBOSE()) {
-				// finishDialogNoBluetooth();
-			}
-
-		} else {
-			mSerialService = new BluetoothSerialService(this, mHandlerBluetooth);
-			if (mSerialService.getState() == BluetoothSerialService.STATE_NONE && mBluetoothAdapter.isEnabled()) {
-				if (mAutoConnectBT) {
-					if (mAutoConnectMacAddressFromPreferences != null && mAutoConnectMacAddressFromPreferences.length() > 10) {
-						mMacAddressToConnect = mAutoConnectMacAddressFromPreferences;
-						// Get the BluetoothDevice object
-						BluetoothDevice device = mBluetoothAdapter.getRemoteDevice(mMacAddressToConnect);
-						// Attempt to connect to the device
-						mSerialService.connect(device);
-						mDeviceNameToConnect = device.getName();
-					}
-				} else {
-					launchDeviceListActivity();
-				}
-			} else if (mSerialService.getState() == BluetoothSerialService.STATE_CONNECTED) {
-				// stop running service
-				mSerialService.stop();
-			}
-		}
-
-		mInTryToEnableEnableBT = false;
-		// mRPCView.showTestpage();
+		mSerialService = new SerialService(this, mHandlerForGUIRequests);
 
 		/*
-		 * List sensors
+		 * Start listen to sensors
 		 */
 		mSensorEventListener = new Sensors(this, (SensorManager) getSystemService(Context.SENSOR_SERVICE));
 		if (MyLog.isINFO()) {
 			Log.i(LOG_TAG, "+++ DONE IN ON CREATE +++");
 		}
 
+		/*
+		 * First try to get USB Interface
+		 */
+		if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.HONEYCOMB_MR1) {
+			mUsbManager = (UsbManager) getSystemService(Context.USB_SERVICE);
+			mUSBSerialSocket = new USBSerialSocket(this, mSerialService, mHandlerForGUIRequests, mUsbManager);
+			mUSBSerialSocket.connect();
+			if (mUSBSerialSocket.mIsConnected) {
+				setMenuItemConnect(true);
+			}
+		}
+
+		if (!mUSBDeviceAttached) {
+			MyLog.i(LOG_TAG, "No USB device connected -> switch to Bluetooth");
+			initBluetooth();
+		}
+
+		// mRPCView.showTestpage();
+	}
+
+	/*
+	 * Get Bluetooth interface
+	 */
+	void initBluetooth() {
+		mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+		if (mBluetoothAdapter == null) {
+			// no Bluetooth available on this device
+			finishDialogNoBluetooth();
+
+		} else {
+			/*
+			 * Create BluetoothSerialSocket to get bluetooth data
+			 */
+			mBTSerialSocket = new BluetoothSerialSocket(this, mSerialService, mHandlerForGUIRequests);
+			if (mBTSerialSocket.getState() == BluetoothSerialSocket.STATE_NONE && mBluetoothAdapter.isEnabled()) {
+				if (mAutoConnectBT) {
+					/*
+					 * Preference is "auto connect", so try it...
+					 */
+					if (mAutoConnectMacAddressFromPreferences != null && mAutoConnectMacAddressFromPreferences.length() > 10) {
+						mMacAddressToConnect = mAutoConnectMacAddressFromPreferences;
+						// Get the BluetoothDevice object
+						BluetoothDevice device = mBluetoothAdapter.getRemoteDevice(mMacAddressToConnect);
+						// Attempt to connect to the device
+						mBTSerialSocket.connect(device);
+						mDeviceNameToConnect = device.getName();
+					}
+				} else {
+					launchDeviceListActivity();
+				}
+			} else if (mBTSerialSocket.getState() == BluetoothSerialSocket.STATE_CONNECTED) {
+				// stop running service if not connected here, to enable new connections later
+				mBTSerialSocket.stop();
+			}
+		}
+		mInTryToEnableEnableBT = false;
 	}
 
 	@Override
@@ -246,6 +287,16 @@ public class BlueDisplay extends Activity {
 		if (MyLog.isINFO()) {
 			Log.i(LOG_TAG, "++ ON START ++");
 		}
+	}
+
+	@Override
+	public synchronized void onPause() {
+		super.onPause();
+		if (MyLog.isINFO()) {
+			Log.i(LOG_TAG, "- ON PAUSE -");
+		}
+		mSensorEventListener.deregisterAllActiveSensorListeners();
+		mRPCView.mToneGenerator.stopTone();
 	}
 
 	@SuppressLint("InlinedApi")
@@ -264,7 +315,6 @@ public class BlueDisplay extends Activity {
 				mInTryToEnableEnableBT = true;
 			}
 		}
-		boolean tOldAutoConnectBTValue = mAutoConnectBT;
 		if (mOrientationisLockedByClient) {
 			int tOldPreferredScreenOrientation = mPreferredScreenOrientation;
 			readPreferences();
@@ -273,14 +323,18 @@ public class BlueDisplay extends Activity {
 			readPreferences();
 			setActualScreenOrientation(mPreferredScreenOrientation);
 		}
-		if (mAutoConnectBT && !tOldAutoConnectBTValue && mSerialService != null
-				&& mSerialService.getState() == BluetoothSerialService.STATE_CONNECTED) {
-			writeStringPreference(AUTO_CONNECT_MAC_ADDRESS_KEY, mMacAddressToConnect);
-			writeStringPreference(AUTO_CONNECT_DEVICE_NAME_KEY, mDeviceNameToConnect);
-			mAutoConnectDeviceNameFromPreferences = mDeviceNameToConnect;
+		if (!mUSBDeviceAttached) {
+			boolean tOldAutoConnectBTValue = mAutoConnectBT;
+			if (mAutoConnectBT && !tOldAutoConnectBTValue && mBTSerialSocket != null
+					&& mBTSerialSocket.getState() == BluetoothSerialSocket.STATE_CONNECTED) {
+				writeStringPreference(AUTO_CONNECT_MAC_ADDRESS_KEY, mMacAddressToConnect);
+				writeStringPreference(AUTO_CONNECT_DEVICE_NAME_KEY, mDeviceNameToConnect);
+				mAutoConnectDeviceNameFromPreferences = mDeviceNameToConnect;
+			}
+
+			mMacAddressConnected = mMacAddressToConnect;
+			mBluetoothDeviceNameConnected = mDeviceNameToConnect;
 		}
-		mMacAddressConnected = mMacAddressToConnect;
-		mDeviceNameConnected = mDeviceNameToConnect;
 
 		mActualRotation = getWindowManager().getDefaultDisplay().getRotation();
 		mSensorEventListener.registerAllActiveSensorListeners();
@@ -293,16 +347,6 @@ public class BlueDisplay extends Activity {
 		if (MyLog.isINFO()) {
 			Log.i(LOG_TAG, "+ onWindowFocusChanged focus=" + hasFocus);
 		}
-	}
-
-	@Override
-	public synchronized void onPause() {
-		super.onPause();
-		if (MyLog.isINFO()) {
-			Log.i(LOG_TAG, "- ON PAUSE -");
-		}
-		mSensorEventListener.deregisterAllActiveSensorListeners();
-		mRPCView.mToneGenerator.stopTone();
 	}
 
 	@Override
@@ -319,10 +363,10 @@ public class BlueDisplay extends Activity {
 		if (MyLog.isINFO()) {
 			Log.i(LOG_TAG, "--- ON DESTROY ---");
 		}
-		if (mSerialService != null) {
-			mSerialService.stop();
+		if (mBTSerialSocket != null) {
+			mBTSerialSocket.stop();
 		}
-
+		unregisterReceiver(mUSBSerialSocket.mUSBReceiver);
 	}
 
 	@Override
@@ -339,6 +383,20 @@ public class BlueDisplay extends Activity {
 		setActualScreenOrientationVariables(tNewOrientation);
 		if (MyLog.isINFO()) {
 			Log.i(LOG_TAG, "--- ON ConfigurationChanged --- ");
+		}
+	}
+
+	void setMenuItemConnect(Boolean aIsConnected) {
+		if (mMenuItemConnect != null) {
+			if (aIsConnected) {
+				// modify menu to show disconnect entry
+				mMenuItemConnect.setIcon(android.R.drawable.ic_menu_close_clear_cancel);
+				mMenuItemConnect.setTitle(R.string.menu_disconnect);
+			} else {
+				// show connect entry
+				mMenuItemConnect.setIcon(android.R.drawable.ic_menu_search);
+				mMenuItemConnect.setTitle(R.string.menu_connect);
+			}
 		}
 	}
 
@@ -387,13 +445,13 @@ public class BlueDisplay extends Activity {
 		inflater.inflate(R.menu.option_menu, menu);
 		mMenuItemConnect = menu.getItem(0);
 		if (mMenuItemConnect != null) {
-			if (mSerialService.getState() == BluetoothSerialService.STATE_CONNECTED) {
-				// modify menu to show appropriate entry
-				mMenuItemConnect.setIcon(android.R.drawable.ic_menu_close_clear_cancel);
-				mMenuItemConnect.setTitle(R.string.menu_disconnect);
+			if (mUSBDeviceAttached) {
+				setMenuItemConnect(mUSBSerialSocket.mIsConnected);
 			} else {
-				mMenuItemConnect.setIcon(android.R.drawable.ic_menu_search);
-				mMenuItemConnect.setTitle(R.string.menu_connect);
+				if (mBTSerialSocket == null) {
+					initBluetooth();
+				}
+				setMenuItemConnect(mBTSerialSocket.getState() == BluetoothSerialSocket.STATE_CONNECTED);
 			}
 		}
 		return true;
@@ -407,16 +465,45 @@ public class BlueDisplay extends Activity {
 		}
 		switch (item.getItemId()) {
 		case R.id.menu_connect:
-			if (mSerialService.getState() == BluetoothSerialService.STATE_NONE) {
-				// connect request here
-				launchDeviceListActivity();
-			} else if (mSerialService.getState() == BluetoothSerialService.STATE_CONNECTED) {
-				// Disconnect request here -> stop running service + reset locked orientation in turn
-				// send disconnect message
-				mSerialService.writeTwoIntegerEvent(BluetoothSerialService.EVENT_DISCONNECT, mRPCView.mActualViewWidth,
-						mRPCView.mActualViewHeight);
-				mSerialService.stop();
-				BluetoothSerialService.sLastFailOrDisconnectTimestampMillis = System.currentTimeMillis();
+			if (mUSBDeviceAttached) {
+				if (mUSBSerialSocket.mIsConnected) {
+					// Disconnect request here -> stop running service + reset locked orientation in turn
+					// send disconnect message to Arduino Client
+					mSerialService.writeTwoIntegerEvent(SerialService.EVENT_DISCONNECT, mRPCView.mActualViewWidth,
+							mRPCView.mActualViewHeight);
+					// wait for the serial output to be sent
+					try {
+						Thread.sleep(100);
+					} catch (InterruptedException ignored) {
+					}
+					mUSBSerialSocket.disconnect(); // this sends disconnect message which switches the connect menu item
+					// since it is a manual disconnect the USB device is still attached
+					mUSBDeviceAttached = true;
+				} else {
+					mUSBSerialSocket.connect();
+					// USB connect does not affect the GUI, so do it manually
+					setMenuItemConnect(mUSBSerialSocket.mIsConnected);
+				}
+			} else {
+				if (mBTSerialSocket == null) {
+					initBluetooth();
+				}
+				if (mBTSerialSocket.getState() == BluetoothSerialSocket.STATE_NONE) {
+					// connect request here
+					launchDeviceListActivity();
+				} else if (mBTSerialSocket.getState() == BluetoothSerialSocket.STATE_CONNECTED) {
+					// Disconnect request here -> stop running service + reset locked orientation in turn
+					// send disconnect message to Arduino Client
+					mSerialService.writeTwoIntegerEvent(SerialService.EVENT_DISCONNECT, mRPCView.mActualViewWidth,
+							mRPCView.mActualViewHeight);
+					// wait for the serial output to be sent
+					try {
+						Thread.sleep(100);
+					} catch (InterruptedException ignored) {
+					}
+					mBTSerialSocket.stop();
+					BluetoothSerialSocket.sLastFailOrDisconnectTimestampMillis = System.currentTimeMillis();
+				}
 			}
 			return true;
 
@@ -455,10 +542,10 @@ public class BlueDisplay extends Activity {
 	 * OTHER HANDLER
 	 *****************/
 	/*
-	 * The handler that gets information back from BluetoothSerialService
+	 * The handler that gets information back from *SerialSocket Do not need a BroadcastReceiver here.
 	 */
 	@SuppressLint("HandlerLeak")
-	private final Handler mHandlerBluetooth = new Handler() {
+	private final Handler mHandlerForGUIRequests = new Handler() {
 
 		@Override
 		public void handleMessage(Message msg) {
@@ -471,40 +558,34 @@ public class BlueDisplay extends Activity {
 					Log.v(LOG_TAG, "MESSAGE_CHANGE_MENU_ITEM_FOR_CONNECTED_STATE: " + msg.arg1);
 				}
 				switch (msg.arg1) {
-				case BluetoothSerialService.STATE_CONNECTED:
+				case BluetoothSerialSocket.STATE_CONNECTED:
 					// modify menu to show disconnect entry
-					if (mMenuItemConnect != null) {
-						mMenuItemConnect.setIcon(android.R.drawable.ic_menu_close_clear_cancel);
-						mMenuItemConnect.setTitle(R.string.menu_disconnect);
-					}
+					setMenuItemConnect(true);
 					break;
 
-				case BluetoothSerialService.STATE_CONNECTING:
+				case BluetoothSerialSocket.STATE_CONNECTING:
 					break;
 
-				case BluetoothSerialService.STATE_NONE:
-					if (mMenuItemConnect != null) {
-						mMenuItemConnect.setIcon(android.R.drawable.ic_menu_search);
-						mMenuItemConnect.setTitle(R.string.menu_connect);
-					}
+				case BluetoothSerialSocket.STATE_NONE:
+					setMenuItemConnect(false);
 					break;
 				}
 				break;
 
 			case MESSAGE_AFTER_CONNECT:
 				/*
-				 * called by SerialService after connect -> save the connected device's name,set window to always on, reset button
-				 * and slider and show toast
+				 * called by BluetoothSerialSocket after connect -> save the connected device's name,set window to always on, reset
+				 * button and slider and show toast
 				 */
 				if (MyLog.isDEBUG()) {
-					Log.d(LOG_TAG, "MESSAGE_AFTER_CONNECT: " + mDeviceNameConnected);
+					Log.d(LOG_TAG, "MESSAGE_AFTER_CONNECT: " + mBluetoothDeviceNameConnected);
 				}
 
 				// set window to always on and reset all structures and flags
 				getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
 				mMyToast = Toast.makeText(getApplicationContext(), getString(R.string.toast_connected_to) + " "
-						+ mDeviceNameConnected, Toast.LENGTH_SHORT);
+						+ mBluetoothDeviceNameConnected, Toast.LENGTH_SHORT);
 				mMyToast.show();
 				if (mAutoConnectBT) {
 					writeStringPreference(AUTO_CONNECT_MAC_ADDRESS_KEY, mMacAddressToConnect);
@@ -512,19 +593,40 @@ public class BlueDisplay extends Activity {
 					mAutoConnectDeviceNameFromPreferences = mDeviceNameToConnect;
 				}
 				mMacAddressConnected = mMacAddressToConnect;
-				mDeviceNameConnected = mDeviceNameToConnect;
+				mBluetoothDeviceNameConnected = mDeviceNameToConnect;
 				break;
 
-			case MESSAGE_DISCONNECT:
+			case MESSAGE_USB_DISCONNECT:
 				/*
 				 * show toast, reset locked orientation, set window to normal (not persistent) state, stop tone, unregister sensor
 				 * listener
 				 */
 				if (MyLog.isDEBUG()) {
-					Log.d(LOG_TAG, "MESSAGE_DISCONNECT: " + mDeviceNameConnected);
+					Log.d(LOG_TAG, "MESSAGE_USB_DISCONNECT -> reset GUI");
 				}
-				Toast.makeText(getApplicationContext(), getString(R.string.toast_connection_lost) + " " + mDeviceNameConnected,
-						Toast.LENGTH_SHORT).show();
+				Toast.makeText(getApplicationContext(), getString(R.string.toast_connection_lost) + " USB", Toast.LENGTH_SHORT)
+						.show();
+				setMenuItemConnect(false);
+				// reset eventually locked orientation
+				mOrientationisLockedByClient = false;
+				setActualScreenOrientation(mPreferredScreenOrientation);
+				// set window to normal (not persistent) state
+				getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+				mRPCView.mToneGenerator.stopTone();
+				mSensorEventListener.deregisterAllActiveSensorListeners();
+				break;
+
+			case MESSAGE_BT_DISCONNECT:
+				/*
+				 * show toast, reset locked orientation, set window to normal (not persistent) state, stop tone, unregister sensor
+				 * listener
+				 */
+				if (MyLog.isDEBUG()) {
+					Log.d(LOG_TAG, "MESSAGE_BT_DISCONNECT: " + mBluetoothDeviceNameConnected);
+				}
+				Toast.makeText(getApplicationContext(),
+						getString(R.string.toast_connection_lost) + " " + mBluetoothDeviceNameConnected, Toast.LENGTH_SHORT).show();
+				setMenuItemConnect(false);
 				// reset eventually locked orientation
 				mOrientationisLockedByClient = false;
 				setActualScreenOrientation(mPreferredScreenOrientation);
@@ -549,7 +651,7 @@ public class BlueDisplay extends Activity {
 				 * called by SerialService after command processed.
 				 */
 				if (MyLog.isVERBOSE()) {
-					Log.v(LOG_TAG, "MESSAGE_UPDATE_VIEW");
+					Log.v(LOG_TAG, "Received MESSAGE_UPDATE_VIEW -> call mRPCView.invalidate()");
 				}
 				mRPCView.invalidate();
 				break;
@@ -602,7 +704,7 @@ public class BlueDisplay extends Activity {
 				// Get the BluetoothDevice object
 				BluetoothDevice device = mBluetoothAdapter.getRemoteDevice(tMacAddress);
 				// Attempt to connect to the device
-				mSerialService.connect(device);
+				mBTSerialSocket.connect(device);
 				mMacAddressToConnect = tMacAddress;
 				mDeviceNameToConnect = device.getName();
 			}
@@ -628,8 +730,8 @@ public class BlueDisplay extends Activity {
 	void launchDeviceListActivity() {
 		// Launch the DeviceListActivity to see devices
 		Intent tDeviceListIntent = new Intent(this, DeviceListActivity.class);
-		if (mDeviceNameConnected != null && mDeviceNameConnected.length() > 1) {
-			tDeviceListIntent.putExtra(BT_DEVICE_NAME, mDeviceNameConnected);
+		if (mBluetoothDeviceNameConnected != null && mBluetoothDeviceNameConnected.length() > 1) {
+			tDeviceListIntent.putExtra(BT_DEVICE_NAME, mBluetoothDeviceNameConnected);
 		} else {
 			tDeviceListIntent.putExtra(BT_DEVICE_NAME, mAutoConnectDeviceNameFromPreferences);
 		}
@@ -710,7 +812,7 @@ public class BlueDisplay extends Activity {
 					float tValue;
 					try {
 						tValue = Float.parseFloat(tNumber.toString());
-						mSerialService.writeNumberCallbackEvent(BluetoothSerialService.EVENT_NUMBER_CALLBACK, aCallbackAddress, tValue);
+						mSerialService.writeNumberCallbackEvent(SerialService.EVENT_NUMBER_CALLBACK, aCallbackAddress, tValue);
 					} catch (NumberFormatException e) {
 						MyLog.i(LOG_TAG, "Entered data \"" + tNumber + "\" is no float. No value sent.");
 					}
@@ -809,9 +911,9 @@ public class BlueDisplay extends Activity {
 
 		MyLog.setLoglevel(Integer.parseInt(tSharedPreferences.getString(MyLog.LOGLEVEL_KEY, Log.INFO + "")));
 
-		if (mSerialService != null) {
-			mSerialService.setAllowInsecureConnections(tSharedPreferences.getBoolean(ALLOW_INSECURE_CONNECTIONS_KEY,
-					mSerialService.getAllowInsecureConnections()));
+		if (mBTSerialSocket != null) {
+			mBTSerialSocket.setAllowInsecureConnections(tSharedPreferences.getBoolean(ALLOW_INSECURE_CONNECTIONS_KEY,
+					mBTSerialSocket.getAllowInsecureConnections()));
 		}
 
 		if (mRPCView != null) {

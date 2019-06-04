@@ -5,7 +5,7 @@
  * 	It also implements basic GUI elements as buttons and sliders.
  * 	It sends touch or GUI callback events over Bluetooth back to Arduino.
  * 
- *  Copyright (C) 2014-2016  Armin Joachimsmeyer
+ *  Copyright (C) 2014-2019  Armin Joachimsmeyer
  *  armin.joachimsmeyer@gmail.com
  *  
  * 	This file is part of BlueDisplay.
@@ -65,7 +65,7 @@ import android.widget.Toast;
 @SuppressLint("HandlerLeak")
 public class RPCView extends View {
 
-	public static final String LOG_TAG = "BD";
+	public static final String LOG_TAG = "RPCView";
 
 	BlueDisplay mBlueDisplayContext;
 
@@ -327,27 +327,26 @@ public class RPCView extends View {
 		sActionMappings.put(MotionEvent.ACTION_UP, "up");
 		sActionMappings.put(MotionEvent.ACTION_MOVE, "move");
 		sActionMappings.put(MotionEvent.ACTION_CANCEL, "cancel");
-		sActionMappings.put(BluetoothSerialService.EVENT_CONNECTION_BUILD_UP, "connection build up");
-		sActionMappings.put(BluetoothSerialService.EVENT_REDRAW, "redraw");
-		sActionMappings.put(BluetoothSerialService.EVENT_REORIENTATION, "reorientation");
-		sActionMappings.put(BluetoothSerialService.EVENT_DISCONNECT, "disconnect");
+		sActionMappings.put(SerialService.EVENT_CONNECTION_BUILD_UP, "connection build up");
+		sActionMappings.put(SerialService.EVENT_REDRAW, "redraw");
+		sActionMappings.put(SerialService.EVENT_REORIENTATION, "reorientation");
+		sActionMappings.put(SerialService.EVENT_DISCONNECT, "disconnect");
 
-		sActionMappings.put(BluetoothSerialService.EVENT_LONG_TOUCH_DOWN_CALLBACK, "long down");
-		sActionMappings.put(BluetoothSerialService.EVENT_FIRST_CALLBACK, "first");
-		sActionMappings.put(BluetoothSerialService.EVENT_BUTTON_CALLBACK, "button");
-		sActionMappings.put(BluetoothSerialService.EVENT_SLIDER_CALLBACK, "slider");
+		sActionMappings.put(SerialService.EVENT_LONG_TOUCH_DOWN_CALLBACK, "long down");
+		sActionMappings.put(SerialService.EVENT_FIRST_CALLBACK, "first");
+		sActionMappings.put(SerialService.EVENT_BUTTON_CALLBACK, "button");
+		sActionMappings.put(SerialService.EVENT_SLIDER_CALLBACK, "slider");
 
-		sActionMappings.put(BluetoothSerialService.EVENT_SWIPE_CALLBACK, "swipe");
-		sActionMappings.put(BluetoothSerialService.EVENT_NUMBER_CALLBACK, "number");
-		sActionMappings.put(BluetoothSerialService.EVENT_INFO_CALLBACK, "info");
-		sActionMappings.put(BluetoothSerialService.EVENT_FIRST_SENSOR_ACTION_CODE + Sensor.TYPE_ACCELEROMETER, "Accelerometer");
-		sActionMappings.put(BluetoothSerialService.EVENT_FIRST_SENSOR_ACTION_CODE + Sensor.TYPE_GRAVITY, "Gravity");
-		sActionMappings.put(BluetoothSerialService.EVENT_FIRST_SENSOR_ACTION_CODE + Sensor.TYPE_GYROSCOPE, "Gyroscope");
-		sActionMappings.put(BluetoothSerialService.EVENT_FIRST_SENSOR_ACTION_CODE + Sensor.TYPE_LINEAR_ACCELERATION,
-				"LinAccelation");
-		sActionMappings.put(BluetoothSerialService.EVENT_FIRST_SENSOR_ACTION_CODE + Sensor.TYPE_MAGNETIC_FIELD, "Magnetic");
-		sActionMappings.put(BluetoothSerialService.EVENT_NOP, "nop (for sync)");
-		sActionMappings.put(BluetoothSerialService.EVENT_REQUESTED_DATA_CANVAS_SIZE, "return canvas size and timestamp");
+		sActionMappings.put(SerialService.EVENT_SWIPE_CALLBACK, "swipe");
+		sActionMappings.put(SerialService.EVENT_NUMBER_CALLBACK, "number");
+		sActionMappings.put(SerialService.EVENT_INFO_CALLBACK, "info");
+		sActionMappings.put(SerialService.EVENT_FIRST_SENSOR_ACTION_CODE + Sensor.TYPE_ACCELEROMETER, "Accelerometer");
+		sActionMappings.put(SerialService.EVENT_FIRST_SENSOR_ACTION_CODE + Sensor.TYPE_GRAVITY, "Gravity");
+		sActionMappings.put(SerialService.EVENT_FIRST_SENSOR_ACTION_CODE + Sensor.TYPE_GYROSCOPE, "Gyroscope");
+		sActionMappings.put(SerialService.EVENT_FIRST_SENSOR_ACTION_CODE + Sensor.TYPE_LINEAR_ACCELERATION, "LinAccelation");
+		sActionMappings.put(SerialService.EVENT_FIRST_SENSOR_ACTION_CODE + Sensor.TYPE_MAGNETIC_FIELD, "Magnetic");
+		sActionMappings.put(SerialService.EVENT_NOP, "nop (for sync)");
+		sActionMappings.put(SerialService.EVENT_REQUESTED_DATA_CANVAS_SIZE, "return canvas size and timestamp");
 	}
 
 	protected void setMaxScaleFactor() {
@@ -476,10 +475,7 @@ public class RPCView extends View {
 		}
 
 		// send new max size to client
-		if (mBlueDisplayContext.mSerialService != null) {
-			mBlueDisplayContext.mSerialService.writeTwoIntegerEventAndTimestamp(BluetoothSerialService.EVENT_REORIENTATION, aWidth,
-					aHeight);
-		}
+		mBlueDisplayContext.mSerialService.writeTwoIntegerEventAndTimestamp(SerialService.EVENT_REORIENTATION, aWidth, aHeight);
 		// scale and do not send redraw event, since it may overwrite the client buffer of former reorientation event
 		setScaleFactor(tScaleFactor, true, false);
 	}
@@ -489,12 +485,16 @@ public class RPCView extends View {
 		if (MyLog.isVERBOSE()) {
 			Log.v(LOG_TAG, "+ ON Draw +");
 		}
-		if (mBlueDisplayContext.mSerialService != null) {
+		if (mBlueDisplayContext.mBTSerialSocket != null || mBlueDisplayContext.mUSBSerialSocket != null) {
 			boolean tRetrigger = mBlueDisplayContext.mSerialService.searchCommand(this);
 			canvas.drawBitmap(mBitmap, 0, 0, mBitmapPaint);
 			if (tRetrigger) {
 				// Trigger next frame
 				invalidate();
+				Log.v(LOG_TAG, "Trigger next frame");
+			} else {
+				mBlueDisplayContext.mSerialService.mNeedUpdateViewMessage = true;
+				Log.v(LOG_TAG, "Set mNeedUpdateViewMessage to true");
 			}
 		} else {
 			canvas.drawBitmap(mBitmap, 0, 0, mBitmapPaint);
@@ -626,16 +626,19 @@ public class RPCView extends View {
 			if (tMaskedAction == MotionEvent.ACTION_UP) {
 				mBlueDisplayContext.openOptionsMenu();
 			}
-		} else if (mBlueDisplayContext.mSerialService != null) {
-			if (mBlueDisplayContext.mSerialService.getState() == BluetoothSerialService.STATE_NONE
-					&& mDeviceListActivityLaunched == false) {
-				/*
-				 * Launch the DeviceListActivity to choose device if state is "not connected"
-				 */
-				mBlueDisplayContext.launchDeviceListActivity();
-				mDeviceListActivityLaunched = true;
+		} else {
+			if (mBlueDisplayContext.mBTSerialSocket != null) {
+				if (mBlueDisplayContext.mBTSerialSocket.getState() == BluetoothSerialSocket.STATE_NONE
+						&& mDeviceListActivityLaunched == false) {
+					/*
+					 * Launch the DeviceListActivity to choose device if state is "not connected"
+					 */
+					mBlueDisplayContext.launchDeviceListActivity();
+					mDeviceListActivityLaunched = true;
+				}
 			}
-			if (mBlueDisplayContext.mSerialService.getState() == BluetoothSerialService.STATE_CONNECTED) {
+			if ((mBlueDisplayContext.mUSBDeviceAttached && mBlueDisplayContext.mUSBSerialSocket.mIsConnected)
+					|| (mBlueDisplayContext.mBTSerialSocket != null && mBlueDisplayContext.mBTSerialSocket.getState() == BluetoothSerialSocket.STATE_CONNECTED)) {
 				mDeviceListActivityLaunched = false;
 				/*
 				 * Send EVENT data since we are connected
@@ -660,7 +663,7 @@ public class RPCView extends View {
 							tIsXDirection = 1;
 						}
 						// send swipe event and suppress UP-event sending
-						mBlueDisplayContext.mSerialService.writeSwipeCallbackEvent(BluetoothSerialService.EVENT_SWIPE_CALLBACK,
+						mBlueDisplayContext.mSerialService.writeSwipeCallbackEvent(SerialService.EVENT_SWIPE_CALLBACK,
 								tIsXDirection, (int) (mTouchDownPositionX[tActionIndex] / mScaleFactor),
 								(int) (mTouchDownPositionY[tActionIndex] / mScaleFactor), tDeltaX, tDeltaY);
 						// (ab)use mTouchStartsOnSliderNumber flag to suppress other checks on ACTION_UP and sending of UP-event
@@ -811,7 +814,7 @@ public class RPCView extends View {
 
 			case LONG_TOUCH_DOWN:
 				mDisableButtonUpOnce = true;
-				mBlueDisplayContext.mSerialService.writeTwoIntegerEvent(BluetoothSerialService.EVENT_LONG_TOUCH_DOWN_CALLBACK,
+				mBlueDisplayContext.mSerialService.writeTwoIntegerEvent(SerialService.EVENT_LONG_TOUCH_DOWN_CALLBACK,
 						(int) (mTouchDownPositionX[mLongTouchPointerIndex] / mScaleFactor + 0.5),
 						(int) (mTouchDownPositionY[mLongTouchPointerIndex] / mScaleFactor + 0.5));
 				mLongTouchEventWasSent = true;
@@ -997,15 +1000,16 @@ public class RPCView extends View {
 			invalidate();
 			// send new size to client
 			if (mBlueDisplayContext.mSerialService != null && aSendToClient) {
-				mBlueDisplayContext.mSerialService.writeTwoIntegerEvent(BluetoothSerialService.EVENT_REDRAW, mActualCanvasWidth,
+				mBlueDisplayContext.mSerialService.writeTwoIntegerEvent(SerialService.EVENT_REDRAW, mActualCanvasWidth,
 						mActualCanvasHeight);
 			}
 			// show new Values
 			if (mBlueDisplayContext.mMyToast != null) {
 				mBlueDisplayContext.mMyToast.cancel();
 			}
-			mBlueDisplayContext.mMyToast = Toast.makeText(mBlueDisplayContext, String.format("%5.1f%% ", (mScaleFactor * 100))
-					+ mActualCanvasWidth + "*" + mActualCanvasHeight, Toast.LENGTH_SHORT);
+			mBlueDisplayContext.mMyToast = Toast.makeText(mBlueDisplayContext,
+					String.format("Scale factor=%5.1f%% ", (mScaleFactor * 100)) + " -> " + mActualCanvasWidth + "*"
+							+ mActualCanvasHeight, Toast.LENGTH_SHORT);
 			mBlueDisplayContext.mMyToast.show();
 			return true;
 		}
@@ -1236,11 +1240,11 @@ public class RPCView extends View {
 
 			case FUNCTION_REQUEST_MAX_CANVAS_SIZE:
 				if (MyLog.isINFO()) {
-					MyLog.i(LOG_TAG, "Request max canvas size=" + mActualCanvasWidth + "/" + mActualCanvasHeight);
+					MyLog.i(LOG_TAG, "Request max canvas size. Result=" + mActualCanvasWidth + "/" + mActualCanvasHeight);
 				}
 				if (mBlueDisplayContext.mSerialService != null) {
 					mBlueDisplayContext.mSerialService.writeTwoIntegerEventAndTimestamp(
-							BluetoothSerialService.EVENT_REQUESTED_DATA_CANVAS_SIZE, mActualViewWidth, mActualViewHeight);
+							SerialService.EVENT_REQUESTED_DATA_CANVAS_SIZE, mActualViewWidth, mActualViewHeight);
 				}
 				break;
 
@@ -1267,24 +1271,23 @@ public class RPCView extends View {
 					if (tSubcommand == SUBFUNCTION_GET_INFO_LOCAL_TIME) {
 						tFunctionName = "local time";
 					}
-					if (mBlueDisplayContext.mSerialService != null) {
-						int tUseDaylightTime = 0;
-						if (TimeZone.getDefault().useDaylightTime()) {
-							tUseDaylightTime = 1;
-						}
-						int tGmtOffset = TimeZone.getDefault().getRawOffset() + TimeZone.getDefault().getDSTSavings();
-						long tTimestamp = System.currentTimeMillis();
-						if (tSubcommand == SUBFUNCTION_GET_INFO_LOCAL_TIME) {
-							tTimestamp += tGmtOffset;
-						}
-						long tTimestampSeconds = tTimestamp / 1000L;
-						if (MyLog.isINFO()) {
-							MyLog.i(LOG_TAG, "Get " + tFunctionName + " callback=0x" + Integer.toHexString(tCallbackAddress)
-									+ tCallbackAddressStringAdjustedForClientDebugging);
-						}
-						mBlueDisplayContext.mSerialService.writeInfoCallbackEvent(BluetoothSerialService.EVENT_INFO_CALLBACK,
-								tSubcommand, tUseDaylightTime, tGmtOffset, tCallbackAddress, tTimestampSeconds);
+					int tUseDaylightTime = 0;
+					if (TimeZone.getDefault().useDaylightTime()) {
+						tUseDaylightTime = 1;
 					}
+					int tGmtOffset = TimeZone.getDefault().getRawOffset() + TimeZone.getDefault().getDSTSavings();
+					long tTimestamp = System.currentTimeMillis();
+					if (tSubcommand == SUBFUNCTION_GET_INFO_LOCAL_TIME) {
+						tTimestamp += tGmtOffset;
+					}
+					long tTimestampSeconds = tTimestamp / 1000L;
+					if (MyLog.isINFO()) {
+						MyLog.i(LOG_TAG, "Get " + tFunctionName + " callback=0x" + Integer.toHexString(tCallbackAddress)
+								+ tCallbackAddressStringAdjustedForClientDebugging);
+					}
+					mBlueDisplayContext.mSerialService.writeInfoCallbackEvent(SerialService.EVENT_INFO_CALLBACK, tSubcommand,
+							tUseDaylightTime, tGmtOffset, tCallbackAddress, tTimestampSeconds);
+
 					break;
 				}
 				break;
@@ -1599,7 +1602,7 @@ public class RPCView extends View {
 				mGraphPaintStrokeScaleFactor.setColor(tColor);
 
 				float tYOffset = tYStart;
-				tYStart += BluetoothSerialService.convertByteToFloat(aDataBytes[0]) * mScaleFactor;
+				tYStart += SerialService.convertByteToFloat(aDataBytes[0]) * mScaleFactor;
 				mChartScreenBuffer[tChartIndex][0] = tXStart;
 				mChartScreenBuffer[tChartIndex][1] = tYStart;
 				mChartScreenBufferActualLength = aDataLength;
@@ -1609,7 +1612,7 @@ public class RPCView extends View {
 				// for points for each line
 				while (i < (aDataLength - 2) * 4) {
 					tXStart += mScaleFactor;
-					tYStart = (BluetoothSerialService.convertByteToFloat(aDataBytes[j++]) * mScaleFactor) + tYOffset;
+					tYStart = (SerialService.convertByteToFloat(aDataBytes[j++]) * mScaleFactor) + tYOffset;
 					// end of first line ...
 					mChartScreenBuffer[tChartIndex][i++] = tXStart;
 					mChartScreenBuffer[tChartIndex][i++] = tYStart;
@@ -1618,8 +1621,7 @@ public class RPCView extends View {
 					mChartScreenBuffer[tChartIndex][i++] = tYStart;
 				}
 				mChartScreenBuffer[tChartIndex][i++] = tXStart + mScaleFactor;
-				mChartScreenBuffer[tChartIndex][i] = (BluetoothSerialService.convertByteToFloat(aDataBytes[j++]) * mScaleFactor)
-						+ tYOffset;
+				mChartScreenBuffer[tChartIndex][i] = (SerialService.convertByteToFloat(aDataBytes[j++]) * mScaleFactor) + tYOffset;
 
 				mCanvas.drawLines(mChartScreenBuffer[tChartIndex], 0, aDataLength * 4, mGraphPaintStrokeScaleFactor);
 
@@ -2055,7 +2057,7 @@ public class RPCView extends View {
 		String tResetAllString = "";
 		if ((aFlags & BD_FLAG_FIRST_RESET_ALL) != 0) {
 			resetAll();
-			tResetAllString = "After reset of all ";
+			tResetAllString = " after reset_all";
 		}
 
 		mTouchBasicEnable = ((aFlags & BD_FLAG_TOUCH_BASIC_DISABLE) == 0);
@@ -2073,7 +2075,7 @@ public class RPCView extends View {
 		}
 
 		if (MyLog.isINFO()) {
-			MyLog.i(LOG_TAG, "SetFlags state now: " + tResetAllString + "TouchMoveEnable=" + mTouchMoveEnable
+			MyLog.i(LOG_TAG, "SetFlags state now" + tResetAllString + ": TouchMoveEnable=" + mTouchMoveEnable
 					+ ", LongTouchEnabled=" + mIsLongTouchEnabled + ", UseMaxSize=" + mUseMaxSize);
 		}
 	}
