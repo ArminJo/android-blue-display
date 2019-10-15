@@ -39,6 +39,31 @@
  *  
  */
 
+/*
+ * Startup
+ * - OnCreate of BlueDisplay
+ * - OnCreate of RPCView
+ *   - create initial canvas with white background covering 80% of screen space.
+ * - Create Sensors
+ * - Try connect USB
+ * - Autoconnect Bluetooth
+ *   - Connect thread calls connect() and waits. On success it starts connected thread.
+ *   - Connected thread calls resetAll() waits 200ms, reads old data from BT input, resets buffer and signals connection to Client.
+ *   #### Connected thread forever reads BT input into buffer and calls handleReceived() of SerialService.
+ * - OnStart of BlueDisplay
+ * - OnResume of BlueDisplay
+ * - OnSizeChanged of BlueDisplay with actual Display size
+ * - OnFocusChanged (true)
+ * 
+ * Deactivate
+ * - OnPause
+ * - OnFocusChanged (false)
+ * 
+ * Activate
+ * - OnResume of BlueDisplay
+ * - OnFocusChanged (true)
+ * 
+ */
 package de.joachimsmeyer.android.bluedisplay;
 
 import android.annotation.SuppressLint;
@@ -61,6 +86,7 @@ import android.media.AudioManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
+import android.os.SystemClock;
 import android.preference.PreferenceManager;
 import android.text.Editable;
 import android.text.InputType;
@@ -88,17 +114,18 @@ public class BlueDisplay extends Activity {
 	static final String LOG_TAG = "BlueDisplay";
 
 	// Message types sent from the BluetoothSerialSocket Handler
-	public static final int MESSAGE_CHANGE_MENU_ITEM_FOR_CONNECTED_STATE = 1;
+	public static final int MESSAGE_TIMEOUT_AFTER_CONNECT = 1;
 	public static final int MESSAGE_READ = 2;
 	public static final int MESSAGE_WRITE = 3;
-	public static final int MESSAGE_AFTER_CONNECT = 4;
+	public static final int MESSAGE_BT_CONNECT = 4;
 	public static final int MESSAGE_BT_DISCONNECT = 5;
-	public static final int MESSAGE_USB_DISCONNECT = 6;
-	public static final int MESSAGE_TOAST = 7;
-	public static final int MESSAGE_UPDATE_VIEW = 8;
-
+	public static final int MESSAGE_USB_CONNECT = 6;
+	public static final int MESSAGE_USB_DISCONNECT = 7;
+	public static final int MESSAGE_TOAST = 10;
+	public static final int MESSAGE_UPDATE_VIEW = 11;
 	// Message sent by RPCView
-	public static final int REQUEST_INPUT_DATA = 10;
+	public static final int REQUEST_INPUT_DATA = 20;
+
 	public static final String CALLBACK_ADDRESS = "callback_address";
 	public static final String DIALOG_PROMPT = "dialog_prompt";
 	public static final String NUMBER_INITIAL_VALUE = "initialValue";
@@ -120,13 +147,19 @@ public class BlueDisplay extends Activity {
 	Toast mMyToast;
 
 	/*
-	 * Bluetooth socket handler
+	 * Bluetooth and USB socket handler
 	 */
 	public BluetoothSerialSocket mBTSerialSocket = null;
 	public USBSerialSocket mUSBSerialSocket = null;
 	public SerialService mSerialService = null;
 
 	boolean mUSBDeviceAttached = false;
+	boolean mDeviceConnected = false; // Communication with the device is now possible
+
+	// True for 5 seconds after start of connection and reset by FUNCTION_REQUEST_MAX_CANVAS_SIZE and
+	// SUBFUNCTION_GLOBAL_SET_FLAGS_AND_SIZE
+	boolean mWaitForCommandsAfterConnect = false;
+	public static final int SECONDS_TO_WAIT_FOR_COMMANDS_RECEIVED = 5;
 
 	/*
 	 * Sensor listener
@@ -219,9 +252,6 @@ public class BlueDisplay extends Activity {
 		 * Start listen to sensors
 		 */
 		mSensorEventListener = new Sensors(this, (SensorManager) getSystemService(Context.SENSOR_SERVICE));
-		if (MyLog.isINFO()) {
-			Log.i(LOG_TAG, "+++ DONE IN ON CREATE +++");
-		}
 
 		/*
 		 * First try to get USB Interface
@@ -230,9 +260,9 @@ public class BlueDisplay extends Activity {
 			mUsbManager = (UsbManager) getSystemService(Context.USB_SERVICE);
 			mUSBSerialSocket = new USBSerialSocket(this, mSerialService, mHandlerForGUIRequests, mUsbManager);
 			mUSBSerialSocket.connect();
-			if (mUSBSerialSocket.mIsConnected) {
-				setMenuItemConnect(true);
-			}
+			// if (mUSBSerialSocket.mIsConnected) {
+			// setMenuItemConnect(true);
+			// }
 		}
 
 		if (!mUSBDeviceAttached) {
@@ -240,6 +270,9 @@ public class BlueDisplay extends Activity {
 			initBluetooth();
 		}
 
+		if (MyLog.isINFO()) {
+			Log.i(LOG_TAG, "+++ DONE IN ON CREATE +++");
+		}
 		// mRPCView.showTestpage();
 	}
 
@@ -372,27 +405,41 @@ public class BlueDisplay extends Activity {
 	@Override
 	public void onConfigurationChanged(Configuration newConfig) {
 		super.onConfigurationChanged(newConfig);
+		if (MyLog.isINFO()) {
+			Log.i(LOG_TAG, "+ ON ConfigurationChanged");
+		}
 		int tNewOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
 		if (newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE) {
 			tNewOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE;
 		} else if (newConfig.orientation == Configuration.ORIENTATION_PORTRAIT) {
 			tNewOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
 		} else {
-			MyLog.w(LOG_TAG, "ON ConfigurationChanged new config is" + newConfig.orientation);
+			MyLog.w(LOG_TAG, "ON ConfigurationChanged new orientation is" + newConfig.orientation);
 		}
 		setActualScreenOrientationVariables(tNewOrientation);
-		if (MyLog.isINFO()) {
-			Log.i(LOG_TAG, "--- ON ConfigurationChanged --- ");
-		}
 	}
 
 	void setMenuItemConnect(Boolean aIsConnected) {
-		if (mMenuItemConnect != null) {
-			if (aIsConnected) {
+		mDeviceConnected = aIsConnected;
+		if (aIsConnected) {
+			mWaitForCommandsAfterConnect = true;
+			/*
+			 * Send delayed message to handler, witch in turn shows a toast. Flag is reset and message is deleted on receiving
+			 * FUNCTION_REQUEST_MAX_CANVAS_SIZE and SUBFUNCTION_GLOBAL_SET_FLAGS_AND_SIZE commands from the client.
+			 */
+			if (MyLog.isINFO()) {
+				Log.i(LOG_TAG, "Start timeout waiting for commands");
+			}
+			mHandlerForGUIRequests.sendEmptyMessageAtTime(MESSAGE_TIMEOUT_AFTER_CONNECT, SystemClock.uptimeMillis()
+					+ (SECONDS_TO_WAIT_FOR_COMMANDS_RECEIVED * 1000));
+			if (mMenuItemConnect != null) {
 				// modify menu to show disconnect entry
 				mMenuItemConnect.setIcon(android.R.drawable.ic_menu_close_clear_cancel);
 				mMenuItemConnect.setTitle(R.string.menu_disconnect);
-			} else {
+			}
+		} else {
+			mWaitForCommandsAfterConnect = false;
+			if (mMenuItemConnect != null) {
 				// show connect entry
 				mMenuItemConnect.setIcon(android.R.drawable.ic_menu_search);
 				mMenuItemConnect.setTitle(R.string.menu_connect);
@@ -439,12 +486,13 @@ public class BlueDisplay extends Activity {
 	@Override
 	public boolean onCreateOptionsMenu(Menu menu) {
 		if (MyLog.isINFO()) {
-			Log.i(LOG_TAG, "--- ON CreateOptionsMenu ---");
+			Log.i(LOG_TAG, "+ ON CreateOptionsMenu");
 		}
 		MenuInflater inflater = getMenuInflater();
 		inflater.inflate(R.menu.option_menu, menu);
 		mMenuItemConnect = menu.getItem(0);
 		if (mMenuItemConnect != null) {
+			// Set connected to right state
 			if (mUSBDeviceAttached) {
 				setMenuItemConnect(mUSBSerialSocket.mIsConnected);
 			} else {
@@ -457,14 +505,20 @@ public class BlueDisplay extends Activity {
 		return true;
 	}
 
+	/*
+	 * Handler for Option menu
+	 */
 	@SuppressLint("SimpleDateFormat")
 	@Override
 	public boolean onOptionsItemSelected(MenuItem item) {
 		if (MyLog.isVERBOSE()) {
-			Log.v(LOG_TAG, "Item " + item.getTitle());
+			Log.v(LOG_TAG, "Item selected=" + item.getTitle());
 		}
 		switch (item.getItemId()) {
 		case R.id.menu_connect:
+			/*
+			 * Connect / disconnect button
+			 */
 			if (mUSBDeviceAttached) {
 				if (mUSBSerialSocket.mIsConnected) {
 					// Disconnect request here -> stop running service + reset locked orientation in turn
@@ -480,9 +534,10 @@ public class BlueDisplay extends Activity {
 					// since it is a manual disconnect the USB device is still attached
 					mUSBDeviceAttached = true;
 				} else {
-					mUSBSerialSocket.connect();
-					// USB connect does not affect the GUI, so do it manually
-					setMenuItemConnect(mUSBSerialSocket.mIsConnected);
+					// Connect request here -> try to connect and set item according to result
+					mUSBSerialSocket.connect(); // this sends connect message which switches the connect menu item
+					// // USB connect does not affect the GUI, so do it manually
+					// setMenuItemConnect(mUSBSerialSocket.mIsConnected);
 				}
 			} else {
 				if (mBTSerialSocket == null) {
@@ -545,41 +600,20 @@ public class BlueDisplay extends Activity {
 	 * The handler that gets information back from *SerialSocket Do not need a BroadcastReceiver here.
 	 */
 	@SuppressLint("HandlerLeak")
-	private final Handler mHandlerForGUIRequests = new Handler() {
+	final Handler mHandlerForGUIRequests = new Handler() {
 
 		@Override
 		public void handleMessage(Message msg) {
 			switch (msg.what) {
-			case MESSAGE_CHANGE_MENU_ITEM_FOR_CONNECTED_STATE:
-				/*
-				 * called by SerialService -> manage the menu item
-				 */
-				if (MyLog.isVERBOSE()) {
-					Log.v(LOG_TAG, "MESSAGE_CHANGE_MENU_ITEM_FOR_CONNECTED_STATE: " + msg.arg1);
-				}
-				switch (msg.arg1) {
-				case BluetoothSerialSocket.STATE_CONNECTED:
-					// modify menu to show disconnect entry
-					setMenuItemConnect(true);
-					break;
-
-				case BluetoothSerialSocket.STATE_CONNECTING:
-					break;
-
-				case BluetoothSerialSocket.STATE_NONE:
-					setMenuItemConnect(false);
-					break;
-				}
-				break;
-
-			case MESSAGE_AFTER_CONNECT:
+			case MESSAGE_BT_CONNECT:
 				/*
 				 * called by BluetoothSerialSocket after connect -> save the connected device's name,set window to always on, reset
 				 * button and slider and show toast
 				 */
 				if (MyLog.isDEBUG()) {
-					Log.d(LOG_TAG, "MESSAGE_AFTER_CONNECT: " + mBluetoothDeviceNameConnected);
+					Log.d(LOG_TAG, "MESSAGE_BT_CONNECT: " + mBluetoothDeviceNameConnected);
 				}
+				setMenuItemConnect(true);
 
 				// set window to always on and reset all structures and flags
 				getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
@@ -588,12 +622,45 @@ public class BlueDisplay extends Activity {
 						+ mBluetoothDeviceNameConnected, Toast.LENGTH_SHORT);
 				mMyToast.show();
 				if (mAutoConnectBT) {
+					// Update the preferences with the latest successful connection
 					writeStringPreference(AUTO_CONNECT_MAC_ADDRESS_KEY, mMacAddressToConnect);
 					writeStringPreference(AUTO_CONNECT_DEVICE_NAME_KEY, mDeviceNameToConnect);
 					mAutoConnectDeviceNameFromPreferences = mDeviceNameToConnect;
 				}
 				mMacAddressConnected = mMacAddressToConnect;
 				mBluetoothDeviceNameConnected = mDeviceNameToConnect;
+				break;
+
+			case MESSAGE_USB_CONNECT:
+				/*
+				 * called by USBSerialSocket after connect -> set window to always on, reset button and slider and show toast
+				 */
+				if (MyLog.isDEBUG()) {
+					Log.d(LOG_TAG, "MESSAGE_USB_CONNECT received");
+				}
+				setMenuItemConnect(false);
+
+				// set window to always on and reset all structures and flags
+				getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+
+				mMyToast = Toast.makeText(getApplicationContext(), getString(R.string.toast_connected_to) + " USB",
+						Toast.LENGTH_SHORT);
+				mMyToast.show();
+				break;
+
+			case MESSAGE_TIMEOUT_AFTER_CONNECT:
+				/*
+				 * Show toast, that no data was received after connection was established.
+				 */
+				mWaitForCommandsAfterConnect = false;
+				MyLog.w(LOG_TAG, getString(R.string.toast_connection_data_timeout));
+				// show toast for 3* 3.5 seconds
+				Toast.makeText(getApplicationContext(), getString(R.string.toast_connection_data_timeout), Toast.LENGTH_LONG)
+						.show();
+				Toast.makeText(getApplicationContext(), getString(R.string.toast_connection_data_timeout), Toast.LENGTH_LONG)
+						.show();
+				Toast.makeText(getApplicationContext(), getString(R.string.toast_connection_data_timeout), Toast.LENGTH_LONG)
+						.show();
 				break;
 
 			case MESSAGE_USB_DISCONNECT:
@@ -604,9 +671,10 @@ public class BlueDisplay extends Activity {
 				if (MyLog.isDEBUG()) {
 					Log.d(LOG_TAG, "MESSAGE_USB_DISCONNECT -> reset GUI");
 				}
+				setMenuItemConnect(false);
+
 				Toast.makeText(getApplicationContext(), getString(R.string.toast_connection_lost) + " USB", Toast.LENGTH_SHORT)
 						.show();
-				setMenuItemConnect(false);
 				// reset eventually locked orientation
 				mOrientationisLockedByClient = false;
 				setActualScreenOrientation(mPreferredScreenOrientation);
@@ -624,9 +692,10 @@ public class BlueDisplay extends Activity {
 				if (MyLog.isDEBUG()) {
 					Log.d(LOG_TAG, "MESSAGE_BT_DISCONNECT: " + mBluetoothDeviceNameConnected);
 				}
+				setMenuItemConnect(false);
+
 				Toast.makeText(getApplicationContext(),
 						getString(R.string.toast_connection_lost) + " " + mBluetoothDeviceNameConnected, Toast.LENGTH_SHORT).show();
-				setMenuItemConnect(false);
 				// reset eventually locked orientation
 				mOrientationisLockedByClient = false;
 				setActualScreenOrientation(mPreferredScreenOrientation);

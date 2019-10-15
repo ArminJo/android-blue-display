@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <string name="alert_dialog_no_bt">Kein Bluetooth vorhanden oder aktiviert. Applikation wird beendet.</string>
+    <string name="alert_dialog_no_bt">Kein Bluetooth vorhanden oder aktiviert -> BlueDisplay Applikation wird beendet.</string>
     <string name="alert_dialog_ok">OK</string>
     <string name="alert_dialog_cancel">Abbruch</string>
     <string name="toast_connected_to">Verbunden zu</string>

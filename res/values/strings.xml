@@ -11,13 +11,14 @@
     <string name="app_version">4.0</string>
 
     <!-- Alerts -->
-    <string name="alert_dialog_no_bt">Bluetooth not available or activated. Stop application.</string>
+    <string name="alert_dialog_no_bt">Bluetooth not available or activated -> BlueDisplay application will be stopped.</string>
     <string name="alert_dialog_ok">OK</string>
     <string name="alert_dialog_cancel">Cancel</string>
     <string name="alert_dialog_reset">Reset</string>
     <string name="toast_connected_to">Connected to</string>
     <string name="toast_unable_to_connect">Unable to connect to device</string>
     <string name="toast_connection_lost">Disconnected from</string>
+    <string name="toast_connection_data_timeout">No data received after connection. Reset Arduino and check if the baudrate of BT-Module and your program is matching.</string>
 
     <!-- Options menu -->
     <string name="menu_connect">Connect device</string>

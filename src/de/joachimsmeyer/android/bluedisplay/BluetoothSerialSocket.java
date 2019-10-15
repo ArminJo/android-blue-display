@@ -96,22 +96,6 @@ public class BluetoothSerialSocket {
 	}
 
 	/**
-	 * Set the current state of the connection
-	 * 
-	 * @param state
-	 *            An integer defining the current connection state
-	 */
-	private synchronized void setState(int state) {
-		if (MyLog.isDEBUG()) {
-			Log.d(LOG_TAG, "setState() " + mState + " -> " + state);
-		}
-		mState = state;
-
-		// Give the new state to the Handler so the UI Activity can update
-		mHandler.obtainMessage(BlueDisplay.MESSAGE_CHANGE_MENU_ITEM_FOR_CONNECTED_STATE, state, -1).sendToTarget();
-	}
-
-	/**
 	 * Return the current connection state.
 	 */
 	public synchronized int getState() {
@@ -126,7 +110,7 @@ public class BluetoothSerialSocket {
 	 */
 	public synchronized void connect(BluetoothDevice device) {
 		if (MyLog.isINFO()) {
-			MyLog.i(LOG_TAG, "connect to: " + device);
+			MyLog.i(LOG_TAG, "Start connect thread and try to connect to: " + device);
 		}
 
 		// Cancel any thread attempting to make a connection
@@ -146,7 +130,7 @@ public class BluetoothSerialSocket {
 		// Start the thread to connect with the given device
 		mConnectThread = new ConnectThread(device);
 		mConnectThread.start();
-		setState(STATE_CONNECTING);
+		mState = STATE_CONNECTING;
 	}
 
 	/**
@@ -158,10 +142,6 @@ public class BluetoothSerialSocket {
 	 *            The BluetoothDevice that has been connected
 	 */
 	public synchronized void connected(BluetoothSocket socket, BluetoothDevice device) {
-		if (MyLog.isINFO()) {
-			MyLog.i(LOG_TAG, "connected");
-		}
-
 		// Cancel the thread that completed the connection
 		if (mConnectThread != null) {
 			// can it really happen to end up here ???
@@ -188,10 +168,10 @@ public class BluetoothSerialSocket {
 		/*
 		 * Send the event to the UI Activity, which in turn shows the connected toast and sets window to always on
 		 */
-		Message msg = mHandler.obtainMessage(BlueDisplay.MESSAGE_AFTER_CONNECT);
+		Message msg = mHandler.obtainMessage(BlueDisplay.MESSAGE_BT_CONNECT);
 		mHandler.sendMessage(msg);
 
-		setState(STATE_CONNECTED);
+		mState = STATE_CONNECTED;
 	}
 
 	/**
@@ -212,7 +192,7 @@ public class BluetoothSerialSocket {
 			mConnectedThread = null;
 		}
 
-		setState(STATE_NONE);
+		mState = STATE_NONE;
 	}
 
 	/**
@@ -235,7 +215,7 @@ public class BluetoothSerialSocket {
 	 * Indicate that the connection attempt failed and notify the UI Activity.
 	 */
 	private void connectionFailed(String aName) {
-		setState(STATE_NONE);
+		mState = STATE_NONE;
 		sLastFailOrDisconnectTimestampMillis = System.currentTimeMillis();
 
 		// Send a failure message back to the Activity
@@ -250,7 +230,7 @@ public class BluetoothSerialSocket {
 	 * Indicate that the connection was lost and notify the UI Activity.
 	 */
 	private void connectionLost() {
-		setState(STATE_NONE);
+		mState = STATE_NONE;
 
 		// Send a disconnect message back to the Activity
 		mHandler.sendEmptyMessage(BlueDisplay.MESSAGE_BT_DISCONNECT);
@@ -292,7 +272,7 @@ public class BluetoothSerialSocket {
 
 		public void run() {
 			if (MyLog.isINFO()) {
-				Log.i(LOG_TAG, "BEGIN mConnectThread");
+				Log.i(LOG_TAG, "run mConnectThread");
 			}
 			setName("ConnectThread");
 
@@ -365,8 +345,7 @@ public class BluetoothSerialSocket {
 			}
 
 			/*
-			 *  reset flags, buttons, sliders and sensors (and log this :-))
-			 *  Must be at first
+			 * reset flags, buttons, sliders and sensors (and log this :-)) Must be at first
 			 */
 			mBlueDisplayContext.mRPCView.resetAll();
 

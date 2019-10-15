@@ -255,10 +255,16 @@ public class SerialService {
 	}
 
 	void writeEvent(byte[] aEventDataBuffer, int aEventDataLength) {
+		if(mBlueDisplayContext.mDeviceConnected) {
 		if (mBlueDisplayContext.mUSBDeviceAttached) {
 			mBlueDisplayContext.mUSBSerialSocket.writeEvent(mSendByteBuffer, aEventDataLength);
 		} else {
 			mBlueDisplayContext.mBTSerialSocket.writeEvent(mSendByteBuffer, aEventDataLength);
+		}
+		} else{
+			if (MyLog.isINFO()) {
+				MyLog.i(LOG_TAG, "Do not send event, because client is not (yet) connected");
+			}
 		}
 	}
 

@@ -133,7 +133,7 @@ public class RPCView extends View {
 	/*
 	 * Flags which can be set by client
 	 */
-	private boolean mUseMaxSize;
+	private boolean mUseMaxSize; // true after reset
 	protected boolean mTouchBasicEnable; // send down, (move) and up events
 	protected boolean mTouchMoveEnable; // can be used to suppress only the move events if mTouchBasicEnable is true
 	private boolean mIsLongTouchEnabled;
@@ -353,7 +353,7 @@ public class RPCView extends View {
 		float tMaxHeightFactor = (float) mActualViewHeight / mRequestedCanvasHeight;
 		float tMaxWidthFactor = (float) mActualViewWidth / mRequestedCanvasWidth;
 		mMaxScaleFactor = Math.min(tMaxHeightFactor, tMaxWidthFactor);
-		if (MyLog.isDEBUG()) {
+		if (MyLog.isINFO()) {
 			MyLog.d(LOG_TAG, "MaxScaleFactor=" + mMaxScaleFactor);
 		}
 	}
@@ -418,7 +418,6 @@ public class RPCView extends View {
 		/*
 		 * create start Bitmap
 		 */
-		// be prepared...
 		try {
 			Point tDisplaySize = new Point();
 			mBlueDisplayContext.getWindowManager().getDefaultDisplay().getSize(tDisplaySize);
@@ -428,7 +427,16 @@ public class RPCView extends View {
 			mRequestedCanvasWidth = mBlueDisplayContext.getWindowManager().getDefaultDisplay().getWidth();
 			mRequestedCanvasHeight = mBlueDisplayContext.getWindowManager().getDefaultDisplay().getHeight();
 		}
-
+		/*
+		 * Let initial bitmap cover only 80 % of display to have space to call the options menu. Needed for devices / android
+		 * versions without an options button.
+		 */
+		if (mRequestedCanvasWidth > mRequestedCanvasHeight) {
+			mRequestedCanvasHeight = (mRequestedCanvasHeight * 100) / 80;
+		} else {
+			mRequestedCanvasWidth = (mRequestedCanvasWidth * 100) / 80;
+		}
+		
 		mActualCanvasWidth = mRequestedCanvasWidth;
 		mActualCanvasHeight = mRequestedCanvasHeight;
 		mBitmap = Bitmap.createBitmap(mActualCanvasWidth, mActualCanvasHeight, Bitmap.Config.ARGB_8888);
@@ -437,7 +445,7 @@ public class RPCView extends View {
 		mBitmapPaint = new Paint();
 
 		mCanvas = new Canvas(mBitmap);
-		mCanvas.drawColor(Color.WHITE); // background
+		mCanvas.drawColor(Color.WHITE); // white background
 		initCharMappingArray();
 
 		/*
@@ -470,14 +478,14 @@ public class RPCView extends View {
 
 		// resize canvas
 		float tScaleFactor = mScaleFactor;
-		if (mUseMaxSize) {
-			tScaleFactor = 10;
-		}
 
-		// send new max size to client
-		mBlueDisplayContext.mSerialService.writeTwoIntegerEventAndTimestamp(SerialService.EVENT_REORIENTATION, aWidth, aHeight);
+		// send new max size to client, but only if device is connected (check needed here since we always get an onSizeChanged
+		// event at startup)
+		if (mBlueDisplayContext.mDeviceConnected) {
+			mBlueDisplayContext.mSerialService.writeTwoIntegerEventAndTimestamp(SerialService.EVENT_REORIENTATION, aWidth, aHeight);
+		}
 		// scale and do not send redraw event, since it may overwrite the client buffer of former reorientation event
-		setScaleFactor(tScaleFactor, true, false);
+		setScaleFactor(tScaleFactor, false);
 	}
 
 	@Override
@@ -550,7 +558,7 @@ public class RPCView extends View {
 
 		if (mTouchStartsOnButtonNumber[0] < 0 && mTouchStartsOnSliderNumber[0] < 0 && mTouchStartsOnButtonNumber[tActionIndex] < 0
 				&& mTouchStartsOnSliderNumber[tActionIndex] < 0) {
-			// process event by scale detector is started on an empty space
+			// process event by scale detector if event is started on an empty (no button or slider) space
 			mScaleDetector.onTouchEvent(aEvent);
 		}
 
@@ -863,7 +871,7 @@ public class RPCView extends View {
 			// save and restore mTouchScaleFactor since setScaleFactor will
 			// overwrite it with tScaleFactor
 			tTempScaleFactor = mTouchScaleFactor;
-			boolean tRetvalue = !setScaleFactor(tScaleFactorSnapped, true, true);
+			boolean tRetvalue = !setScaleFactor(tScaleFactorSnapped, true);
 			mTouchScaleFactor = tTempScaleFactor;
 			// return true if event was handled
 			return tRetvalue;
@@ -957,14 +965,15 @@ public class RPCView extends View {
 	 * Creates a new canvas with new scale factor. Clips scale factor to value between 1 and maximum possible scale factor
 	 * 
 	 * @param aScaleFactor
-	 * @param aResizeCanvas
-	 *            if true also resize canvas (false only for tests)
 	 * @return true if canvas size was changed
 	 */
-	public boolean setScaleFactor(float aScaleFactor, boolean allowFloatFactor, boolean aSendToClient) {
+	public boolean setScaleFactor(float aScaleFactor, boolean aSendToClient) {
 
 		float tOldFactor = mScaleFactor;
-		if (aScaleFactor <= 1) {
+		if (mUseMaxSize) { // true after reset
+			aScaleFactor = mMaxScaleFactor;
+			mScaleFactor = mMaxScaleFactor;
+		} else if (aScaleFactor <= 1) {
 			mScaleFactor = 1;
 		} else {
 			/*
@@ -974,12 +983,6 @@ public class RPCView extends View {
 				mScaleFactor = mMaxScaleFactor;
 			} else {
 				mScaleFactor = aScaleFactor;
-			}
-
-			if (!allowFloatFactor) {
-				// not really used yet
-				int tIntFactor = (int) mScaleFactor;
-				mScaleFactor = tIntFactor;
 			}
 		}
 		if (tOldFactor != mScaleFactor) {
@@ -994,8 +997,8 @@ public class RPCView extends View {
 			mGraphPaintStrokeScaleFactor.setStrokeWidth(mScaleFactor);
 
 			if (MyLog.isINFO()) {
-				MyLog.i(LOG_TAG, "setScaleFactor(" + aScaleFactor + ") old factor=" + tOldFactor + " resulting factor="
-						+ mScaleFactor);
+				MyLog.i(LOG_TAG, "setScaleFactor(" + aScaleFactor + ") UseMaxSize=" + mUseMaxSize + " old factor=" + tOldFactor
+						+ " resulting factor=" + mScaleFactor);
 			}
 			invalidate();
 			// send new size to client
@@ -1239,6 +1242,7 @@ public class RPCView extends View {
 				break;
 
 			case FUNCTION_REQUEST_MAX_CANVAS_SIZE:
+				resetWaitMessage();
 				if (MyLog.isINFO()) {
 					MyLog.i(LOG_TAG, "Request max canvas size. Result=" + mActualCanvasWidth + "/" + mActualCanvasHeight);
 				}
@@ -1992,6 +1996,19 @@ public class RPCView extends View {
 		// Log.i(LOG_TAG, "Interpret=" + (tEnd - tStart));
 	}
 
+	/*
+	 * Called by FUNCTION_REQUEST_MAX_CANVAS_SIZE and SUBFUNCTION_GLOBAL_SET_FLAGS_AND_SIZE
+	 */
+	public void resetWaitMessage(){
+		if (mBlueDisplayContext.mWaitForCommandsAfterConnect) {
+			// reset timeout by clearing messages
+			if (MyLog.isINFO()) {
+				Log.i(LOG_TAG, "Reset timeout waiting for commands");
+			}
+			mBlueDisplayContext.mHandlerForGUIRequests.removeMessages(BlueDisplay.MESSAGE_TIMEOUT_AFTER_CONNECT);
+			mBlueDisplayContext.mWaitForCommandsAfterConnect = false;
+		}
+	}
 	public void fillRectRel(float aXStart, float aYStart, float aWidth, float aHeight, int aColor) {
 		mGraphPaintStroke1Fill.setColor(aColor);
 		mCanvas.drawRect(aXStart * mScaleFactor, aYStart * mScaleFactor, (aXStart + aWidth) * mScaleFactor, (aYStart + aHeight)
@@ -2054,6 +2071,7 @@ public class RPCView extends View {
 	}
 
 	private void setFlags(int aFlags) {
+		resetWaitMessage();
 		String tResetAllString = "";
 		if ((aFlags & BD_FLAG_FIRST_RESET_ALL) != 0) {
 			resetAll();
@@ -2068,10 +2086,10 @@ public class RPCView extends View {
 		if ((aFlags & BD_FLAG_USE_MAX_SIZE) != 0) {
 			mUseMaxSize = true;
 			// resize canvas
-			setScaleFactor(10, true, false);
+			setScaleFactor(10, false);
 		} else {
 			mUseMaxSize = false;
-			setScaleFactor(1, true, false);
+			setScaleFactor(1, false);
 		}
 
 		if (MyLog.isINFO()) {

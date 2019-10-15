@@ -112,13 +112,13 @@ public class USBSerialSocket implements SerialInputOutputManager.Listener {
 			} else if (aIntent.getAction().equals(ACTION_USB_ATTACHED)) {
 				MyLog.d(LOG_TAG, "USB attached received");
 				// Not needed to connect since the application is restarted (BlueDisplay OnCreate is called)
-//				MyLog.i(LOG_TAG, "USB attached received -> call connect()");
-//				connect(); // this leads to a read error
+				// MyLog.i(LOG_TAG, "USB attached received -> call connect()");
+				// connect(); // this leads to a read error
 			} else if (aIntent.getAction().equals(ACTION_USB_DETACHED)) {
 				MyLog.d(LOG_TAG, "USB detached received");
 				// The driver get the detached info faster ( by IOException ), so this is redundant.
-//				MyLog.i(LOG_TAG, "USB detached received -> call disconnect()");
-//				disconnect();
+				// MyLog.i(LOG_TAG, "USB detached received -> call disconnect()");
+				// disconnect();
 			}
 		}
 	};
@@ -136,7 +136,12 @@ public class USBSerialSocket implements SerialInputOutputManager.Listener {
 			// Open a connection to the first available driver.
 			mUsbSerialDriver = availableDrivers.get(0);
 			mUSBDevice = mUsbSerialDriver.getDevice();
-			if (!mUsbManager.hasPermission(mUSBDevice)) {
+			if (mUsbManager.hasPermission(mUSBDevice)) {
+				/*
+				 * Open device if permission still granted
+				 */
+				openUSBDevice();
+			} else {
 				/*
 				 * Request user permission
 				 */
@@ -146,11 +151,6 @@ public class USBSerialSocket implements SerialInputOutputManager.Listener {
 				PendingIntent tUSBPermissionIntent = PendingIntent.getBroadcast(mBlueDisplayContext, 0, new Intent(
 						ACTION_USB_PERMISSION), 0);
 				mUsbManager.requestPermission(mUSBDevice, tUSBPermissionIntent);
-			} else {
-				/*
-				 * Open device if permission still granted
-				 */
-				openUSBDevice();
 			}
 		}
 	}
@@ -192,8 +192,8 @@ public class USBSerialSocket implements SerialInputOutputManager.Listener {
 					// Just do nothing
 				}
 
-				// reset flags, buttons, sliders and sensors (and log this :-))
-				mBlueDisplayContext.mRPCView.resetAll();
+//				// reset flags, buttons, sliders and sensors (and log this :-))
+//				mBlueDisplayContext.mRPCView.resetAll();
 				/*
 				 * Now we have read all old bytes from input stream. Start and initialize big ring buffer.
 				 */
@@ -201,6 +201,10 @@ public class USBSerialSocket implements SerialInputOutputManager.Listener {
 				mSerialService.resetStatistics();
 				// signal connection to Client
 				mSerialService.signalBlueDisplayConnection();
+				/*
+				 * Send the event to the UI Activity, which in turn shows the connected toast and sets window to always on
+				 */
+				mHandler.sendEmptyMessage(BlueDisplay.MESSAGE_USB_CONNECT);
 
 			} catch (IOException e) {
 				disconnect();
@@ -238,7 +242,6 @@ public class USBSerialSocket implements SerialInputOutputManager.Listener {
 		if (mUSBDeviceConnection != null) {
 			mUSBDeviceConnection.close();
 			mUSBDeviceConnection = null;
-			
 
 			// Indicate that the connection was lost and notify the UI Activity.
 			// do not do it twice so do it here
