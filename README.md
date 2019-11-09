@@ -1,4 +1,4 @@
-# BlueDisplay - convert your smartphone into an Android remote touch display for your Arduino or ARM projects.
+# [BlueDisplay App](https://play.google.com/store/apps/details?id=de.joachimsmeyer.android.bluedisplay) - convert your smartphone into an Android remote touch display for your Arduino or ARM projects.
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Hit Counter](https://hitcounter.pythonanywhere.com/count/tag.svg?url=https%3A%2F%2Fgithub.com%2FArminJo%2Fandroid-blue-display)](https://github.com/brentvollebregt/hit-counter)
 
