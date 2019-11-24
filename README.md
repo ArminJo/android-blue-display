@@ -1,12 +1,18 @@
 # [BlueDisplay App](https://play.google.com/store/apps/details?id=de.joachimsmeyer.android.bluedisplay) - convert your smartphone into an Android remote touch display for your Arduino or ARM projects.
+### Version 4.1
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Hit Counter](https://hitcounter.pythonanywhere.com/count/tag.svg?url=https%3A%2F%2Fgithub.com%2FArminJo%2Fandroid-blue-display)](https://github.com/brentvollebregt/hit-counter)
 
 ## SUMMARY
 Let the Arduino sketch create a GUI with Graphics, Buttons and Sliders on your smartphone by simply connecting a HC-05 to the rx/tx pins of your Arduino.
+Directly connecting the Arduino with an USB cable and an USB-OTG adapter to your smartphone is also supported.<br/>
 It receives draw requests from Arduino over Bluetooth and renders it.
 GUI callback, touch and sensor events are sent back to Arduino.
-No Android programming needed!
+**No Android programming needed!**
+
+### The Arduino library with lot of examples can be found [here](https://github.com/ArminJo/Arduino-BlueDisplay).
+
+Or use *(Ctrl+Shift+I)* in the Arduino IDE and search for BlueDisplay.
 
 ## Features
 - Graphic + text output as well as printf implementation.
@@ -16,8 +22,9 @@ No Android programming needed!
 - Button and slider callback as well as touch and sensor events are sent back to Arduino.
 - Automatic and manually scaling of display region.
 - Easy mapping of UTF-8 characters like Ohm, Celsius etc..
-- Up to 115200 Baud using HC-05 modules.
-- Local display of received and sent commands for debug purposes.
+- Up to 115200 Baud using HC-05 modules or OTG cable.
+- USB OTG connection can be used instead of Bluetooth.
+- Local display of received and sent commands for debugging purposes.
 - Hex and ASCII output of received Bluetooth data at log level verbose.
 - Debug messages as toasts.
 - C++ Libraries for [Arduino](https://github.com/ArminJo/Arduino-BlueDisplay).
