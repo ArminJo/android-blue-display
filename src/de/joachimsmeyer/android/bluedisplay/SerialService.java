@@ -67,7 +67,7 @@ public class SerialService {
 
 	public static final int SIZE_OF_DEBUG_BUFFER = 16;
 	byte[] mHexOutputTempBuffer = new byte[SIZE_OF_DEBUG_BUFFER]; // holds one output line for verbose HEX output
-	int mHexOutputTempBufferActualIndex = 0;
+	int mHexOutputTempBufferCurrentIndex = 0;
 	// Forces the end of writing to bitmap after 0.5 seconds and thus allow
 	// bitmap to be displayed
 	private static final long MAX_DRAW_INTERVAL_NANOS = 500000000;
@@ -234,9 +234,10 @@ public class SerialService {
 		}
 
 		RPCView tRPCView = mBlueDisplayContext.mRPCView;
-		tReturn += "\nScale=" + tRPCView.mScaleFactor * 100 + "%    " + tRPCView.mRequestedCanvasWidth + "*"
-				+ tRPCView.mRequestedCanvasHeight + " -> " + tRPCView.mActualCanvasWidth + "*" + tRPCView.mActualCanvasHeight
-				+ "  max=" + tRPCView.mActualViewWidth + "/" + tRPCView.mActualViewHeight + "\n";
+		tReturn += "Scale=" + tRPCView.mScaleFactor * 100 + "%     max=" + tRPCView.mCurrentViewWidth + "/"
+				+ tRPCView.mCurrentViewHeight + "\nRequested=" + tRPCView.mRequestedCanvasWidth + "*"
+				+ tRPCView.mRequestedCanvasHeight + " -> current=" + tRPCView.mCurrentCanvasWidth + "*"
+				+ tRPCView.mCurrentCanvasHeight + "\n";
 		tReturn += "Codepage=" + System.getProperty("file.encoding");
 		return tReturn;
 	}
@@ -244,24 +245,24 @@ public class SerialService {
 	/*
 	 * Signal connection to Arduino. First write a NOP command for synchronizing, i.e. the client receive buffer is filled up once.
 	 * Then send EVENT_CONNECTION_BUILD_UP, which calls the connect and redraw callback, specified at initCommunication(), on the
-	 * client. The very first call for USB sends 0 as actual size values. In response we first get a NOP command for syncing the
+	 * client. The very first call for USB sends 0 as current size values. In response we first get a NOP command for syncing the
 	 * host, and then the commands of the client ConnectCallback() function.
 	 */
 	void signalBlueDisplayConnection() {
 		// first write a NOP command for synchronizing
 		writeGuiCallbackEvent(SerialService.EVENT_NOP, 0, 0, 0, null);
-		writeTwoIntegerEventAndTimestamp(SerialService.EVENT_CONNECTION_BUILD_UP, mBlueDisplayContext.mRPCView.mActualViewWidth,
-				mBlueDisplayContext.mRPCView.mActualViewHeight);
+		writeTwoIntegerEventAndTimestamp(SerialService.EVENT_CONNECTION_BUILD_UP, mBlueDisplayContext.mRPCView.mCurrentViewWidth,
+				mBlueDisplayContext.mRPCView.mCurrentViewHeight);
 	}
 
 	void writeEvent(byte[] aEventDataBuffer, int aEventDataLength) {
-		if(mBlueDisplayContext.mDeviceConnected) {
-		if (mBlueDisplayContext.mUSBDeviceAttached) {
-			mBlueDisplayContext.mUSBSerialSocket.writeEvent(mSendByteBuffer, aEventDataLength);
+		if (mBlueDisplayContext.mDeviceConnected) {
+			if (mBlueDisplayContext.mUSBDeviceAttached) {
+				mBlueDisplayContext.mUSBSerialSocket.writeEvent(mSendByteBuffer, aEventDataLength);
+			} else {
+				mBlueDisplayContext.mBTSerialSocket.writeEvent(mSendByteBuffer, aEventDataLength);
+			}
 		} else {
-			mBlueDisplayContext.mBTSerialSocket.writeEvent(mSendByteBuffer, aEventDataLength);
-		}
-		} else{
 			if (MyLog.isINFO()) {
 				MyLog.i(LOG_TAG, "Do not send event, because client is not (yet) connected");
 			}
@@ -700,9 +701,9 @@ public class SerialService {
 	byte getByteFromBuffer() {
 		byte tByte = mBigReceiveBuffer[mReceiveBufferOutIndex];
 		if (MyLog.isVERBOSE()) {
-			mHexOutputTempBuffer[mHexOutputTempBufferActualIndex++] = tByte;
-			if (mHexOutputTempBufferActualIndex == SIZE_OF_DEBUG_BUFFER) {
-				mHexOutputTempBufferActualIndex = 0;
+			mHexOutputTempBuffer[mHexOutputTempBufferCurrentIndex++] = tByte;
+			if (mHexOutputTempBufferCurrentIndex == SIZE_OF_DEBUG_BUFFER) {
+				mHexOutputTempBufferCurrentIndex = 0;
 				StringBuilder tDataRaw = new StringBuilder();
 				StringBuilder tDataString = new StringBuilder();
 				int tValue;
@@ -765,17 +766,17 @@ public class SerialService {
 		 * 2 seconds timeout for data messages which does not arrive (because of reprogramming the client and misinterpreting the
 		 * program data)
 		 */
-		long tActualNanos = System.nanoTime();
+		long tCurrentNanos = System.nanoTime();
 		if (searchStateInputLengthToWaitFor > MIN_MESSAGE_SIZE && getBufferBytesAvailable() < searchStateInputLengthToWaitFor) {
 			// here we wait for a bigger chunk of data, but it was not completely received yet
-			if (sTimestampOfLastDataWait + 2000000000 < tActualNanos) {
+			if (sTimestampOfLastDataWait + 2000000000 < tCurrentNanos) {
 				// reset state and continue with searching for sync token
 				searchStateInputLengthToWaitFor = MIN_COMMAND_SIZE;
 				searchStateMustBeLoaded = false;
-				sTimestampOfLastDataWait = tActualNanos;
+				sTimestampOfLastDataWait = tCurrentNanos;
 			}
 		} else {
-			sTimestampOfLastDataWait = tActualNanos;
+			sTimestampOfLastDataWait = tCurrentNanos;
 		}
 
 		/*

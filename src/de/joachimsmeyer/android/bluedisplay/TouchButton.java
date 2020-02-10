@@ -91,7 +91,7 @@ public class TouchButton {
 	static ToneGenerator sButtonToneGenerator;
 	static int sLastRequestedToneVolume;
 	static int sLastSystemToneVolume;
-	static int sActualToneDurationMillis = -1; // -1 means till end of tone or forever
+	static int sCurrentToneDurationMillis = -1; // -1 means till end of tone or forever
 
 	static int sDefaultButtonColor = Color.RED;
 	static int sDefaultCaptionColor = Color.BLACK;
@@ -205,9 +205,9 @@ public class TouchButton {
 
 		if ((tFlags & FLAG_BUTTON_DO_BEEP_ON_TOUCH) != 0) {
 			if (sButtonToneGenerator == null) {
-				int tActualSystemVolume = mRPCView.mBlueDisplayContext.mAudioManager.getStreamVolume(AudioManager.STREAM_SYSTEM);
+				int tCurrentSystemVolume = mRPCView.mBlueDisplayContext.mAudioManager.getStreamVolume(AudioManager.STREAM_SYSTEM);
 				sButtonToneGenerator = new ToneGenerator(AudioManager.STREAM_SYSTEM,
-						(tActualSystemVolume * ToneGenerator.MAX_VOLUME) / mRPCView.mBlueDisplayContext.mMaxSystemVolume);
+						(tCurrentSystemVolume * ToneGenerator.MAX_VOLUME) / mRPCView.mBlueDisplayContext.mMaxSystemVolume);
 			}
 			mDoBeep = true;
 		}
@@ -377,14 +377,14 @@ public class TouchButton {
 					/*
 					 * check if user changed volume
 					 */
-					int tActualSystemVolume = mRPCView.mBlueDisplayContext.mAudioManager
+					int tCurrentSystemVolume = mRPCView.mBlueDisplayContext.mAudioManager
 							.getStreamVolume(AudioManager.STREAM_SYSTEM);
-					if (sLastSystemToneVolume != tActualSystemVolume) {
-						sLastSystemToneVolume = tActualSystemVolume;
+					if (sLastSystemToneVolume != tCurrentSystemVolume) {
+						sLastSystemToneVolume = tCurrentSystemVolume;
 						sButtonToneGenerator = new ToneGenerator(AudioManager.STREAM_SYSTEM,
-								(tActualSystemVolume * ToneGenerator.MAX_VOLUME) / mRPCView.mBlueDisplayContext.mMaxSystemVolume);
+								(tCurrentSystemVolume * ToneGenerator.MAX_VOLUME) / mRPCView.mBlueDisplayContext.mMaxSystemVolume);
 					}
-					sButtonToneGenerator.startTone(sTouchBeepIndex, sActualToneDurationMillis);
+					sButtonToneGenerator.startTone(sTouchBeepIndex, sCurrentToneDurationMillis);
 				}
 				/*
 				 * Handle Toggle red/green button
@@ -495,7 +495,7 @@ public class TouchButton {
 			if (mRPCView.mTouchIsActive[0]) {
 				// beep and send button event
 				if (mDoBeep) {
-					sButtonToneGenerator.startTone(sTouchBeepIndex, sActualToneDurationMillis);
+					sButtonToneGenerator.startTone(sTouchBeepIndex, sCurrentToneDurationMillis);
 				}
 				mRPCView.mBlueDisplayContext.mSerialService.writeGuiCallbackEvent(SerialService.EVENT_BUTTON_CALLBACK,
 						mListIndex, mCallbackAddress, mValue, mEscapedCaption);
@@ -590,7 +590,7 @@ public class TouchButton {
 						/*
 						 * set duration in ms
 						 */
-						sActualToneDurationMillis = aParameters[2];
+						sCurrentToneDurationMillis = aParameters[2];
 						if (aParamsLength > 3) {
 							/*
 							 * set absolute value of volume
@@ -604,10 +604,10 @@ public class TouchButton {
 							/*
 							 * set to user defined value of volume
 							 */
-							int tActualSystemVolume = aRPCView.mBlueDisplayContext.mAudioManager
+							int tCurrentSystemVolume = aRPCView.mBlueDisplayContext.mAudioManager
 									.getStreamVolume(AudioManager.STREAM_SYSTEM);
 							sButtonToneGenerator = new ToneGenerator(AudioManager.STREAM_SYSTEM,
-									(tActualSystemVolume * ToneGenerator.MAX_VOLUME)
+									(tCurrentSystemVolume * ToneGenerator.MAX_VOLUME)
 											/ aRPCView.mBlueDisplayContext.mMaxSystemVolume);
 						}
 					}

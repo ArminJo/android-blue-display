@@ -12,7 +12,7 @@
     <string name="menu_connect">Gerät verbinden</string>
     <string name="menu_disconnect">Gerät trennen</string>
     <string name="menu_preferences">Einstellungen</string>
-    <string name="menu_show_font_testpage">Font Testseite</string>
+    <string name="menu_show_testpage">Testseite</string>
     <string name="menu_show_graph_testpage">Grafik Testseite</string>
     <string name="menu_show_statistics">Statistik</string>
     <string name="menu_show_log">Log anzeigen</string>

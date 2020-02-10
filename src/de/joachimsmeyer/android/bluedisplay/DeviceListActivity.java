@@ -109,9 +109,9 @@ public class DeviceListActivity extends Activity {
 		// Get a set of currently paired devices
 		mPairedDevices = mBtAdapter.getBondedDevices();
 
-		long tActualTimestampMillis = System.currentTimeMillis();
+		long tCurrentTimestampMillis = System.currentTimeMillis();
 		if (mPairedDevices.size() == 1
-				&& BluetoothSerialSocket.sLastFailOrDisconnectTimestampMillis < (tActualTimestampMillis - 10000)) {
+				&& BluetoothSerialSocket.sLastFailOrDisconnectTimestampMillis < (tCurrentTimestampMillis - 10000)) {
 			/*
 			 * If only one device found, do auto connect (send device address directly)
 			 * But not within 10 seconds after last fail or disconnect.

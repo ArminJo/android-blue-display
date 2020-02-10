@@ -90,10 +90,10 @@ public class TouchSlider {
 	private static final int FLAG_SLIDER_VALUE_BY_CALLBACK = 0x10;
 	private static final int FLAG_SLIDER_IS_ONLY_OUTPUT = 0x20;
 
-	int mActualTouchValue;
-	// mActualValue is as delivered by client. Before internal use they must be scaled by mScaleFactor
-	// This value can be different from mActualTouchValue and is provided by callback handler
-	int mActualValue;
+	int mCurrentTouchValue;
+	// mCurrentValue is as delivered by client. Before internal use they must be scaled by mScaleFactor
+	// This value can be different from mCurrentTouchValue and is provided by callback handler
+	int mCurrentValue;
 	int mThresholdValue;
 	float mScaleFactor; // Scale factor for size. 2 means the slider behaves like one which is 2 times larger - default is 1
 
@@ -182,9 +182,9 @@ public class TouchSlider {
 			mOptions |= FLAG_SLIDER_IS_INVERSE;
 		}
 
-		mActualValue = aInitalValue;
+		mCurrentValue = aInitalValue;
 		if (aInitalValue < 0) {
-			mActualValue = -aInitalValue;
+			mCurrentValue = -aInitalValue;
 		}
 		mThresholdValue = aThresholdValue;
 		if (aThresholdValue < 0) {
@@ -264,7 +264,7 @@ public class TouchSlider {
 					mCaptionLayoutInfo.mSize, mCaptionLayoutInfo.mColor, mCaptionLayoutInfo.mBackgroundColor);
 		}
 		if ((mOptions & FLAG_SLIDER_SHOW_VALUE) != 0) {
-			printActualValue();
+			printCurrentValue();
 		}
 	}
 
@@ -288,9 +288,9 @@ public class TouchSlider {
 	}
 
 	@SuppressLint("DefaultLocale")
-	void printActualValue() {
+	void printCurrentValue() {
 		if (mValueLayoutInfo != null) {
-			String tValueString = String.format(mValueFormatString, mActualValue);
+			String tValueString = String.format(mValueFormatString, mCurrentValue);
 			printValueString(tValueString);
 		}
 	}
@@ -330,15 +330,15 @@ public class TouchSlider {
 	}
 
 	/*
-	 * (re)draws the middle bar according to actual value
+	 * (re)draws the middle bar according to current value
 	 */
 	void drawBar() {
-		int tActualValueScaled = (int) (mActualValue / mScaleFactor);
-		if (tActualValueScaled > mBarLength) {
-			tActualValueScaled = mBarLength;
+		int tCurrentValueScaled = (int) (mCurrentValue / mScaleFactor);
+		if (tCurrentValueScaled > mBarLength) {
+			tCurrentValueScaled = mBarLength;
 		}
-		if (tActualValueScaled < 0) {
-			tActualValueScaled = 0;
+		if (tCurrentValueScaled < 0) {
+			tCurrentValueScaled = 0;
 		}
 
 		int tShortBorderWidth = mShortBorderWidth;
@@ -356,36 +356,36 @@ public class TouchSlider {
 			 * switch colors and invert value
 			 */
 			tBarBackgroundColor = tBarColor;
-			if (mActualValue > mThresholdValue) {
+			if (mCurrentValue > mThresholdValue) {
 				tBarBackgroundColor = mBarThresholdColor;
 			}
 			tBarColor = mBarBackgroundColor;
-			tActualValueScaled = mBarLength - tActualValueScaled;
+			tCurrentValueScaled = mBarLength - tCurrentValueScaled;
 		} else {
-			if (mActualValue > mThresholdValue) {
+			if (mCurrentValue > mThresholdValue) {
 				tBarColor = mBarThresholdColor;
 			}
 		}
 
 		// draw part of background bar, which is visible
-		if (tActualValueScaled < mBarLength) {
+		if (tCurrentValueScaled < mBarLength) {
 			if ((mOptions & FLAG_SLIDER_IS_HORIZONTAL) != 0) {
-				mRPCView.fillRectRel(mPositionX + tShortBorderWidth + tActualValueScaled, mPositionY + tLongBorderWidth, mBarLength
-						- tActualValueScaled, mBarWidth, tBarBackgroundColor);
+				mRPCView.fillRectRel(mPositionX + tShortBorderWidth + tCurrentValueScaled, mPositionY + tLongBorderWidth, mBarLength
+						- tCurrentValueScaled, mBarWidth, tBarBackgroundColor);
 			} else {
 				mRPCView.fillRectRel(mPositionX + tLongBorderWidth, mPositionY + tShortBorderWidth, mBarWidth, mBarLength
-						- tActualValueScaled, tBarBackgroundColor);
+						- tCurrentValueScaled, tBarBackgroundColor);
 			}
 		}
 
 		// Draw value bar
-		if (tActualValueScaled > 0) {
+		if (tCurrentValueScaled > 0) {
 			if ((mOptions & FLAG_SLIDER_IS_HORIZONTAL) != 0) {
-				mRPCView.fillRectRel(mPositionX + tShortBorderWidth, mPositionY + tLongBorderWidth, tActualValueScaled, mBarWidth,
+				mRPCView.fillRectRel(mPositionX + tShortBorderWidth, mPositionY + tLongBorderWidth, tCurrentValueScaled, mBarWidth,
 						tBarColor);
 			} else {
-				mRPCView.fillRectRel(mPositionX + tLongBorderWidth, mPositionYBottom - tShortBorderWidth - tActualValueScaled + 1,
-						mBarWidth, tActualValueScaled, tBarColor);
+				mRPCView.fillRectRel(mPositionX + tLongBorderWidth, mPositionYBottom - tShortBorderWidth - tCurrentValueScaled + 1,
+						mBarWidth, tCurrentValueScaled, tBarColor);
 			}
 		}
 	}
@@ -471,41 +471,41 @@ public class TouchSlider {
 		}
 
 		// adjust value according to size of upper and lower border
-		int tActualTouchValue;
+		int tCurrentTouchValue;
 		if ((mOptions & FLAG_SLIDER_IS_HORIZONTAL) != 0) {
 			if (aTouchPositionX < (mPositionX + tShortBorderWidth)) {
-				tActualTouchValue = 0;
+				tCurrentTouchValue = 0;
 			} else if (aTouchPositionX > (mPositionXRight - tShortBorderWidth)) {
-				tActualTouchValue = mBarLength;
+				tCurrentTouchValue = mBarLength;
 			} else {
-				tActualTouchValue = aTouchPositionX - mPositionX - tShortBorderWidth + 1;
+				tCurrentTouchValue = aTouchPositionX - mPositionX - tShortBorderWidth + 1;
 			}
 		} else {
 			if (aTouchPositionY > (mPositionYBottom - tShortBorderWidth)) {
-				tActualTouchValue = 0;
+				tCurrentTouchValue = 0;
 			} else if (aTouchPositionY < (mPositionY + tShortBorderWidth)) {
-				tActualTouchValue = mBarLength;
+				tCurrentTouchValue = mBarLength;
 			} else {
-				tActualTouchValue = mPositionYBottom - tShortBorderWidth - aTouchPositionY + 1;
+				tCurrentTouchValue = mPositionYBottom - tShortBorderWidth - aTouchPositionY + 1;
 			}
 		}
 		if ((mOptions & FLAG_SLIDER_IS_INVERSE) != 0) {
-			tActualTouchValue = mBarLength - tActualTouchValue;
+			tCurrentTouchValue = mBarLength - tCurrentTouchValue;
 		}
 
-		int tActualTouchValueInt = (int) (tActualTouchValue * mScaleFactor);
+		int tCurrentTouchValueInt = (int) (tCurrentTouchValue * mScaleFactor);
 
-		if (tActualTouchValueInt != mActualTouchValue) {
-			mActualTouchValue = tActualTouchValueInt;
+		if (tCurrentTouchValueInt != mCurrentTouchValue) {
+			mCurrentTouchValue = tCurrentTouchValueInt;
 			// call change handler
 			mRPCView.mBlueDisplayContext.mSerialService.writeGuiCallbackEvent(SerialService.EVENT_SLIDER_CALLBACK,
-					mSliderNumber, mOnChangeHandlerCallbackAddress, tActualTouchValueInt, mCaption);
+					mSliderNumber, mOnChangeHandlerCallbackAddress, tCurrentTouchValueInt, mCaption);
 			if ((mOptions & FLAG_SLIDER_VALUE_BY_CALLBACK) == 0) {
 				// store value and redraw
-				mActualValue = tActualTouchValueInt;
+				mCurrentValue = tCurrentTouchValueInt;
 				drawBar();
 				if ((mOptions & FLAG_SLIDER_SHOW_VALUE) != 0) {
-					printActualValue();
+					printCurrentValue();
 				}
 			}
 		}
@@ -706,12 +706,12 @@ public class TouchSlider {
 				case SUBFUNCTION_SLIDER_SET_VALUE_AND_DRAW_BAR:
 				case SUBFUNCTION_SLIDER_SET_VALUE:
 					String tFunction = "";
-					tSlider.mActualValue = aParameters[2];
+					tSlider.mCurrentValue = aParameters[2];
 					if (tSubcommand == SUBFUNCTION_SLIDER_SET_VALUE_AND_DRAW_BAR) {
 						tSlider.drawBar();
 						tFunction = " and draw bar";
 						if ((tSlider.mOptions & FLAG_SLIDER_SHOW_VALUE) != 0) {
-							tSlider.printActualValue();
+							tSlider.printCurrentValue();
 						}
 					}
 					// Log on debug level, because it may be called very often
@@ -798,8 +798,8 @@ public class TouchSlider {
 									+ " for SliderNr=" + tSliderNumber);
 						}
 						tSlider.mScaleFactor = tNewScaleFactor;
-						// do not modify mActualValue, since it was specified with scaling in mind!
-//						tSlider.mActualValue *= tNewScaleFactor;
+						// do not modify mCurrentValue, since it was specified with scaling in mind!
+//						tSlider.mCurrentValue *= tNewScaleFactor;
 					}
 					break;
 

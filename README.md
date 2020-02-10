@@ -1,5 +1,5 @@
 # [BlueDisplay App](https://play.google.com/store/apps/details?id=de.joachimsmeyer.android.bluedisplay) - convert your smartphone into an Android remote touch display for your Arduino or ARM projects.
-### Version 4.1
+### Version 4.2
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Hit Counter](https://hitcounter.pythonanywhere.com/count/tag.svg?url=https%3A%2F%2Fgithub.com%2FArminJo%2Fandroid-blue-display)](https://github.com/brentvollebregt/hit-counter)
 
@@ -11,37 +11,51 @@ GUI callback, touch and sensor events are sent back to Arduino.
 **No Android programming needed!**
 
 ### The Arduino library with lot of examples can be found [here](https://github.com/ArminJo/Arduino-BlueDisplay).
-
-Or use *(Ctrl+Shift+I)* in the Arduino IDE and search for BlueDisplay.
+You can load the library with *Tools -> Manage Libraries...* or *Ctrl+Shift+I*. Use "BlueDisplay" as filter string.
+The library includes examples for easy initializing a HC-05 and for a simple DSO with 0.3 megasamples/sec.
 
 ## Features
-- Graphic + text output as well as printf implementation.
-- Draw chart from byte or short values. Enables clearing of last drawn chart.
-- Play system tones.
 - Touch button + slider objects with tone feedback.
 - Button and slider callback as well as touch and sensor events are sent back to Arduino.
+- Graphic + text output as well as basic printf implementation.
+- Draw chart from byte or short values. Enables clearing of last drawn chart.
+- Play system tones.
 - Automatic and manually scaling of display region.
-- Easy mapping of UTF-8 characters like Ohm, Celsius etc..
+- Easy mapping of any UTF-8 characters like Ohm, Celsius etc..
 - Up to 115200 Baud using HC-05 modules or OTG cable.
 - USB OTG connection can be used instead of Bluetooth.
-- Local display of received and sent commands for debugging purposes.
+- Local display of received and sent command log for debugging purposes.
 - Hex and ASCII output of received Bluetooth data at log level verbose.
-- Debug messages as toasts.
+- Debug messages shown as toasts.
 - C++ Libraries for [Arduino](https://github.com/ArminJo/Arduino-BlueDisplay).
  and [ARM (STM)](https://github.com/ArminJo/android-blue-display/tree/master/STM32/lib).
 
+Usage:
+Before using the examples, take care that the BT-module (e.g. the the HC-05 module) is connected to your Android device and is visible in the Bluetooth Settings.
+For full screen applications, the menu is called by swiping from the left edge of the screen. Otherwise, you can call it by touching the area not occupied by the client application (black display area).
+
+Baudrate:
+All examples initially use the baudrate of 9600. Especially the SimpleTouchScreenDSO example will run smoother with a baudrate of 115200.
+For this, change the example baudrate by deactivating the line `#define HC_05_BAUD_RATE BAUD_9600` and activating `#define HC_05_BAUD_RATE BAUD_115200`.
+AND change the BT-Module baudrate e.g. by using the BTModuleProgrammer.ino example.
+
 # Revision History
+### Version 4.2
+- Swipe from the left border in application full screen mode opens the options menu.
+- Removed unnecessary message on no data received under certain circumstances.
+- Added parameter values `*LOCK_SENSOR_LANDSCAPE` and `*LOCK_SENSOR_PORTRAIT` for function `setScreenOrientationLock()`.
+
 ### Version 4.1
-- Improved startup. New message if no data received after connect and part of screen is inactive/black, to access the log.
+- Improved startup. New message if no data received after connect and part of screen is inactive/black, to access the options menu.
 
 ### Version 4.0 
-- Connection with  USB OTG cable now also possible. In this case no Bluetooth adapter is needed.
+- Connection with USB OTG cable now also possible. In this case no Bluetooth adapter is needed.
 - Handling of no input for getNumber.
-- Slider setScaleFactor() does not scale the actual value, which is delivered as initial value at init().
-- Improved tone volume setting - can be adjusted at the smartphone too. trim() for all button caption strings.
+- Slider `setScaleFactor()` does not scale the current value, which is delivered as initial value at `init()`.
+- Improved tone volume setting - can be adjusted at the smartphone too. `trim()` for all button caption strings.
 
 ### Version 3.6
-- connect, reconnect and autoconnect improved/added. Improved debug() command. Simplified Red/Green button handling.
+- connect, reconnect and autoconnect improved/added. Improved `debug()` command. Simplified Red/Green button handling.
 
 ### Version 3.5
 - Slider scaling changed and unit value added.
@@ -53,7 +67,7 @@ Or use *(Ctrl+Shift+I)* in the Arduino IDE and search for BlueDisplay.
 ### Version 3.3
 - Fixed silent tone bug for Lollipop and other bugs.Multiline text /r /n handling.
 - Android time accessible on Arduino. Debug messages as toasts. Changed create button.
-- Slider values scalable. GUI multi touch.Hex and ASCII output of received Bluetooth data at log level verbose.
+- Slider values scalable. GUI multi touch. Hex and ASCII output of received Bluetooth data at log level verbose.
 
 ### Version 3.2
 - Improved tone and fullscreen handling. Internal refactoring. Bugfixes and minor improvements.

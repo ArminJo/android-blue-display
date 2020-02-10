@@ -50,8 +50,8 @@
         android:title="@string/menu_show_graph_testpage"/>
     -->
     <item
-        android:id="@+id/menu_show_font_testpage"
+        android:id="@+id/menu_show_testpage"
         android:icon="@android:drawable/ic_menu_report_image"
-        android:title="@string/menu_show_font_testpage"/>
+        android:title="@string/menu_show_testpage"/>
 
 </menu>

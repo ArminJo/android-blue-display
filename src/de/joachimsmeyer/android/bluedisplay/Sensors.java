@@ -121,18 +121,20 @@ public class Sensors implements SensorEventListener {
 					 * angle 180 is Surface.ROTATION_180<br>
 					 * angle 270 is Surface.ROTATION_90
 					 */
-					if (mBlueDisplayContext.mRequestedScreenOrientation == ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) {
-						if ((315 < mAngle || mAngle < 45 && mBlueDisplayContext.mActualRotation != Surface.ROTATION_0)
-								|| (45 < mAngle && mAngle < 135 && mBlueDisplayContext.mActualRotation != Surface.ROTATION_270)
-								|| (135 < mAngle && mAngle < 225 && mBlueDisplayContext.mActualRotation != Surface.ROTATION_180)
-								|| (225 < mAngle && mAngle < 315 && mBlueDisplayContext.mActualRotation != Surface.ROTATION_90)) {
+					if (!mBlueDisplayContext.mOrientationisLockedByClient
+							|| mBlueDisplayContext.mCurrentScreenOrientation == ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+							|| mBlueDisplayContext.mCurrentScreenOrientation == ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT) {
+						if ((315 < mAngle || mAngle < 45 && mBlueDisplayContext.mCurrentRotation != Surface.ROTATION_0)
+								|| (45 < mAngle && mAngle < 135 && mBlueDisplayContext.mCurrentRotation != Surface.ROTATION_270)
+								|| (135 < mAngle && mAngle < 225 && mBlueDisplayContext.mCurrentRotation != Surface.ROTATION_180)
+								|| (225 < mAngle && mAngle < 315 && mBlueDisplayContext.mCurrentRotation != Surface.ROTATION_90)) {
 							if (MyLog.isDEBUG()) {
 								MyLog.d(LOG_TAG, "Trigger reading of rotation. Angle=" + mAngle);
 							}
-							if (mBlueDisplayContext.mActualRotation != mBlueDisplayContext.getWindowManager().getDefaultDisplay()
+							if (mBlueDisplayContext.mCurrentRotation != mBlueDisplayContext.getWindowManager().getDefaultDisplay()
 									.getRotation()) {
 								mBlueDisplayContext
-										.setActualScreenOrientationVariables(mBlueDisplayContext.mActualScreenOrientation);
+										.setCurrentScreenOrientationAndRotationVariables(mBlueDisplayContext.mCurrentScreenOrientation);
 							}
 						}
 					}
@@ -244,21 +246,21 @@ public class Sensors implements SensorEventListener {
 				if (MyLog.isVERBOSE()) {
 					// timestamp in nanoseconds
 					Log.v(LOG_TAG, "Values=" + ValueX + " " + ValueY + " " + ValueZ + " rotation="
-							+ mBlueDisplayContext.mActualRotation + " TimeStamp=" + aEvent.timestamp / 1000 + "µs");
+							+ mBlueDisplayContext.mCurrentRotation + " TimeStamp=" + aEvent.timestamp / 1000 + "µs");
 				}
 
-				if (mBlueDisplayContext.mActualRotation == Surface.ROTATION_90) {
+				if (mBlueDisplayContext.mCurrentRotation == Surface.ROTATION_90) {
 					ValueY = ValueX;
 					ValueX = -aEvent.values[1]; // -ValueY
-				} else if (mBlueDisplayContext.mActualRotation == Surface.ROTATION_270) {
+				} else if (mBlueDisplayContext.mCurrentRotation == Surface.ROTATION_270) {
 					ValueY = -ValueX;
 					ValueX = aEvent.values[1]; // -ValueY
-				} else if (mBlueDisplayContext.mActualRotation == Surface.ROTATION_180) {
+				} else if (mBlueDisplayContext.mCurrentRotation == Surface.ROTATION_180) {
 					ValueX = -ValueX;
 					ValueY = -ValueY;
 				}
-				mBlueDisplayContext.mSerialService.writeSensorEvent(SerialService.EVENT_FIRST_SENSOR_ACTION_CODE
-						+ tSensorType, ValueX, ValueY, ValueZ);
+				mBlueDisplayContext.mSerialService.writeSensorEvent(SerialService.EVENT_FIRST_SENSOR_ACTION_CODE + tSensorType,
+						ValueX, ValueY, ValueZ);
 			}
 		}
 	}
