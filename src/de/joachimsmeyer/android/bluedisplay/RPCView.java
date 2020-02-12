@@ -35,8 +35,6 @@ import java.util.TimeZone;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
-import android.content.pm.ActivityInfo;
-import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -58,7 +56,6 @@ import android.util.SparseArray;
 import android.view.GestureDetector.SimpleOnGestureListener;
 import android.view.MotionEvent;
 import android.view.ScaleGestureDetector;
-import android.view.Surface;
 import android.view.View;
 import android.widget.Toast;
 
@@ -92,10 +89,17 @@ public class RPCView extends View {
 
 	public static Bitmap mBitmap;
 	private Paint mBitmapPaint; // only used for onDraw() to draw bitmap
-	private Paint mInfoPaint; // for internal info text
+	private Paint mInfoPaint; // for internal info text like touch coordinates
+	
+	static final float TEXT_ASCEND_FACTOR = 0.76f;
+	static final float TEXT_DECEND_FACTOR = 0.24f;
+	static final float TEXT_WIDTH_FACTOR = 0.6f;
+	
 	private static final int TEXT_SIZE_INFO_PAINT = 22;
-	private static final int TEXT_WIDTH_INFO_PAINT = (int) ((TEXT_SIZE_INFO_PAINT * 0.6) + 0.5);
+	private static final int TEXT_WIDTH_INFO_PAINT = (int) ((TEXT_SIZE_INFO_PAINT * TEXT_WIDTH_FACTOR) + 0.5);
 
+
+	
 	private Paint mTextPaint; // for all scaled text
 	private Paint mTextBackgroundPaint; // for all scaled text background
 	private Paint mGraphPaintStroke1Fill; // for circle, rectangles and path
@@ -1459,7 +1463,7 @@ public class RPCView extends View {
 					break;
 
 				case FLAG_WRITE_SETTINGS_SET_LINE_COLUMN:
-					mTextPrintTextCurrentPosX = (int) ((aParameters[1] * mTextPrintTextSize * 0.6) + 0.5);
+					mTextPrintTextCurrentPosX = (int) ((aParameters[1] * mTextPrintTextSize * TEXT_WIDTH_FACTOR) + 0.5);
 					mTextPrintTextCurrentPosY = aParameters[2] * mTextPrintTextSize;
 					if (MyLog.isINFO()) {
 						MyLog.i(LOG_TAG, "Set printf start position to: " + aParameters[1] + " / " + aParameters[2] + " = "
@@ -1801,12 +1805,12 @@ public class RPCView extends View {
 				int tPrintBufferEnd = aDataLength;
 				float tScaledTextPrintTextSize = mTextPrintTextSize * mScaleFactor;
 				mTextPrintPaint.setTextSize(tScaledTextPrintTextSize);
-				int tTextUnscaledWidth = (int) ((mTextPrintTextSize * 0.6) + 0.5);
+				int tTextUnscaledWidth = (int) ((mTextPrintTextSize * TEXT_WIDTH_FACTOR) + 0.5);
 				int tLineLengthInChars = (int) (mRequestedCanvasWidth / tTextUnscaledWidth);
 				boolean doFlushAndNewline = false;
 				int tColumn = (int) (mTextPrintTextCurrentPosX / tTextUnscaledWidth);
 				// ascend for background color.
-				tAscend = (float) (tScaledTextPrintTextSize * 0.76);
+				tAscend = (float) (tScaledTextPrintTextSize * TEXT_ASCEND_FACTOR);
 				while (true) {
 					// check for terminate condition
 					if (tCurrentCharacterIndex >= tPrintBufferEnd) {
@@ -1815,7 +1819,7 @@ public class RPCView extends View {
 							tYStart = mTextPrintTextCurrentPosY * mScaleFactor;
 							tXStart = mTextPrintTextCurrentPosX * mScaleFactor;
 							int tIntegerTextSize = (int) (tScaledTextPrintTextSize + 0.5);
-							tIntegerTextSize = (int) ((tIntegerTextSize * 0.6) + 0.5);
+							tIntegerTextSize = (int) ((tIntegerTextSize * TEXT_WIDTH_FACTOR) + 0.5);
 							float tTextLength = (tPrintBufferEnd - tPrintBufferStart) * tIntegerTextSize;
 
 							// draw background
@@ -1864,7 +1868,7 @@ public class RPCView extends View {
 						tXStart = mTextPrintTextCurrentPosX * mScaleFactor;
 						tYStart = mTextPrintTextCurrentPosY * mScaleFactor;
 						int tIntegerTextSize = (int) (tScaledTextPrintTextSize + 0.5);
-						tIntegerTextSize = (int) ((tIntegerTextSize * 0.6) + 0.5);
+						tIntegerTextSize = (int) ((tIntegerTextSize * TEXT_WIDTH_FACTOR) + 0.5);
 						// do not count the newline or space
 						float tTextLength = ((tCurrentCharacterIndex - 1) - tPrintBufferStart) * tIntegerTextSize;
 
@@ -1892,8 +1896,8 @@ public class RPCView extends View {
 				tTextSize = (int) (aParameters[2] * mScaleFactor);
 				mTextPaint.setTextSize(tTextSize);
 				// ascend for background color. + mScaleFactor for upper margin
-				tAscend = (float) (tTextSize * 0.76) + mScaleFactor;
-				tDecend = (float) (tTextSize * 0.24);
+				tAscend = (float) (tTextSize * TEXT_ASCEND_FACTOR) + mScaleFactor;
+				tDecend = (float) (tTextSize * TEXT_DECEND_FACTOR);
 
 				int tDataLength = aDataLength;
 				if (aCommand == FUNCTION_DRAW_CHAR) {
@@ -2046,8 +2050,8 @@ public class RPCView extends View {
 
 		// draw background
 		// ascend for background color. + mScaleFactor for upper margin
-		float tAscend = (float) (aTextSize * 0.76) + mScaleFactor;
-		float tDecend = (float) (aTextSize * 0.24);
+		float tAscend = (float) (aTextSize * TEXT_ASCEND_FACTOR) + mScaleFactor;
+		float tDecend = (float) (aTextSize * TEXT_DECEND_FACTOR);
 		float tTextLength = mTextPaint.measureText(aText);
 		mTextBackgroundPaint.setColor(aBGColor);
 		mCanvas.drawRect(aPosX, aPosY - tAscend, aPosX + tTextLength, aPosY + tDecend, mTextBackgroundPaint);
@@ -2783,7 +2787,7 @@ public class RPCView extends View {
 			tTextSize = tTextSizesArray[i];
 			tTextPaint.setTextSize(tTextSize);
 			tEndX = startX + (3 * ((tTextSize * 6) + 4) / 10);
-			tCanvas.drawRect(startX, tYPos - (float) (tTextSize * 0.76), tEndX, tYPos + (float) (tTextSize * 0.24),
+			tCanvas.drawRect(startX, tYPos - (float) (tTextSize * TEXT_ASCEND_FACTOR), tEndX, tYPos + (float) (tTextSize * TEXT_DECEND_FACTOR),
 					tTextBackgroundPaint);
 			tCanvas.drawText(tExampleString, startX, tYPos, tTextPaint);
 			startX = tEndX + 3;

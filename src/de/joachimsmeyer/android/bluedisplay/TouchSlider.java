@@ -260,6 +260,7 @@ public class TouchSlider {
 		// Fill middle bar with initial value
 		drawBar();
 		if (mCaption != null && mCaptionLayoutInfo != null) {
+			computeTextPositions(mCaptionLayoutInfo, mCaption);
 			mRPCView.drawTextWithBackground(mCaptionLayoutInfo.mPositionX, mCaptionLayoutInfo.mPositionY, mCaption,
 					mCaptionLayoutInfo.mSize, mCaptionLayoutInfo.mColor, mCaptionLayoutInfo.mBackgroundColor);
 		}
@@ -269,7 +270,7 @@ public class TouchSlider {
 	}
 
 	/**
-	 * Sets mValueFormatString according to maximum possible value and appending optional unit string
+	 * Sets mValueFormatString according to maximum possible slider value and appends optional unit string E.g. %4dcm
 	 */
 	void setFormatString() {
 		float tMaxValue = mScaleFactor * mBarLength;
@@ -370,8 +371,8 @@ public class TouchSlider {
 		// draw part of background bar, which is visible
 		if (tCurrentValueScaled < mBarLength) {
 			if ((mOptions & FLAG_SLIDER_IS_HORIZONTAL) != 0) {
-				mRPCView.fillRectRel(mPositionX + tShortBorderWidth + tCurrentValueScaled, mPositionY + tLongBorderWidth, mBarLength
-						- tCurrentValueScaled, mBarWidth, tBarBackgroundColor);
+				mRPCView.fillRectRel(mPositionX + tShortBorderWidth + tCurrentValueScaled, mPositionY + tLongBorderWidth,
+						mBarLength - tCurrentValueScaled, mBarWidth, tBarBackgroundColor);
 			} else {
 				mRPCView.fillRectRel(mPositionX + tLongBorderWidth, mPositionY + tShortBorderWidth, mBarWidth, mBarLength
 						- tCurrentValueScaled, tBarBackgroundColor);
@@ -395,7 +396,7 @@ public class TouchSlider {
 			return;
 		}
 
-		int tTextPixelLength = (int) ((0.6 * aTextLayoutInfo.mSize * aText.length()) + 0.5);
+		int tTextPixelLength = (int) ((RPCView.TEXT_WIDTH_FACTOR * aTextLayoutInfo.mSize * aText.length()) + 0.5);
 
 		int tSliderShortWidth = mBarWidth;
 		int tSliderLongWidth = mBarLength;
@@ -415,10 +416,10 @@ public class TouchSlider {
 			}
 			if (aTextLayoutInfo.mAbove) {
 				aTextLayoutInfo.mPositionY = mPositionY - aTextLayoutInfo.mMargin - aTextLayoutInfo.mSize
-						+ (int) ((0.76 * aTextLayoutInfo.mSize) + 0.5);
+						+ (int) ((RPCView.TEXT_ASCEND_FACTOR * aTextLayoutInfo.mSize) + 0.5);
 			} else {
 				aTextLayoutInfo.mPositionY = mPositionY + tSliderShortWidth + aTextLayoutInfo.mMargin
-						+ (int) ((0.76 * aTextLayoutInfo.mSize) + 0.5);
+						+ (int) ((RPCView.TEXT_ASCEND_FACTOR * aTextLayoutInfo.mSize) + 0.5);
 			}
 
 		} else {
@@ -431,11 +432,22 @@ public class TouchSlider {
 				aTextLayoutInfo.mPositionX = mPositionX;
 			}
 			if (aTextLayoutInfo.mAbove) {
-				aTextLayoutInfo.mPositionY = mPositionY - aTextLayoutInfo.mMargin - aTextLayoutInfo.mSize
-						+ (int) ((0.76 * aTextLayoutInfo.mSize) + 0.5);
+				if ((mPositionY - aTextLayoutInfo.mMargin - aTextLayoutInfo.mSize) < 0) {
+					MyLog.w(LOG_TAG, "Not enough space for text \"" + aText + "\" above slider");
+					aTextLayoutInfo.mPositionY = (int) ((RPCView.TEXT_ASCEND_FACTOR * aTextLayoutInfo.mSize) + 0.5);
+				} else {
+					aTextLayoutInfo.mPositionY = mPositionY - aTextLayoutInfo.mMargin - aTextLayoutInfo.mSize
+							+ (int) ((RPCView.TEXT_ASCEND_FACTOR * aTextLayoutInfo.mSize) + 0.5);
+				}
 			} else {
-				aTextLayoutInfo.mPositionY = mPositionY + tSliderLongWidth + aTextLayoutInfo.mMargin
-						+ (int) ((0.76 * aTextLayoutInfo.mSize) + 0.5);
+				if ((mPositionY + tSliderLongWidth + aTextLayoutInfo.mMargin + aTextLayoutInfo.mSize) > mRPCView.mRequestedCanvasHeight) {
+					MyLog.w(LOG_TAG, "Not enough space for text \"" + aText + "\" below slider");
+					aTextLayoutInfo.mPositionY = (mRPCView.mRequestedCanvasHeight - aTextLayoutInfo.mSize)
+							+ (int) ((RPCView.TEXT_ASCEND_FACTOR * aTextLayoutInfo.mSize) + 0.5);
+				} else {
+					aTextLayoutInfo.mPositionY = mPositionY + tSliderLongWidth + aTextLayoutInfo.mMargin
+							+ (int) ((RPCView.TEXT_ASCEND_FACTOR * aTextLayoutInfo.mSize) + 0.5);
+				}
 			}
 		}
 	}
@@ -498,8 +510,8 @@ public class TouchSlider {
 		if (tCurrentTouchValueInt != mCurrentTouchValue) {
 			mCurrentTouchValue = tCurrentTouchValueInt;
 			// call change handler
-			mRPCView.mBlueDisplayContext.mSerialService.writeGuiCallbackEvent(SerialService.EVENT_SLIDER_CALLBACK,
-					mSliderNumber, mOnChangeHandlerCallbackAddress, tCurrentTouchValueInt, mCaption);
+			mRPCView.mBlueDisplayContext.mSerialService.writeGuiCallbackEvent(SerialService.EVENT_SLIDER_CALLBACK, mSliderNumber,
+					mOnChangeHandlerCallbackAddress, tCurrentTouchValueInt, mCaption);
 			if ((mOptions & FLAG_SLIDER_VALUE_BY_CALLBACK) == 0) {
 				// store value and redraw
 				mCurrentValue = tCurrentTouchValueInt;
@@ -799,7 +811,7 @@ public class TouchSlider {
 						}
 						tSlider.mScaleFactor = tNewScaleFactor;
 						// do not modify mCurrentValue, since it was specified with scaling in mind!
-//						tSlider.mCurrentValue *= tNewScaleFactor;
+						// tSlider.mCurrentValue *= tNewScaleFactor;
 					}
 					break;
 

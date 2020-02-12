@@ -34,7 +34,8 @@
         android:text="@string/title_paired_devices"
         android:textColor="#fff"
         android:visibility="gone" />
-
+    
+<!-- increasing layout height or useing minHeight does not affect anything in my tests -->
     <ListView
         android:id="@+id/paired_devices"
         android:layout_width="match_parent"

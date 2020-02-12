@@ -284,9 +284,9 @@ public class TouchButton {
 				if (mCaptionSize * mCaptionStrings.length >= mHeight) {
 					// Font height to big
 					MyLog.w(LOG_TAG, "caption\"" + mEscapedCaption + "\" with " + mCaptionStrings.length + " lines to high");
-					mCaptionPositionY = mPositionY + (int) ((0.76 * mCaptionSize) + 0.5); // Fallback - start at top + ascend
+					mCaptionPositionY = mPositionY + (int) ((RPCView.TEXT_ASCEND_FACTOR * mCaptionSize) + 0.5); // Fallback - start at top + ascend
 				} else {
-					mCaptionPositionY = (mPositionY + ((mHeight - mCaptionSize * (mCaptionStrings.length)) / 2) + (int) ((0.76 * mCaptionSize) + 0.5));
+					mCaptionPositionY = (mPositionY + ((mHeight - mCaptionSize * (mCaptionStrings.length)) / 2) + (int) ((RPCView.TEXT_ASCEND_FACTOR * mCaptionSize) + 0.5));
 				}
 				mCaptionPositionX = -1; // to indicate multiline caption
 
@@ -294,7 +294,7 @@ public class TouchButton {
 				/*
 				 * Single line caption - just try to position the string in the middle of the box
 				 */
-				int tLength = (int) ((0.6 * mCaptionSize * mEscapedCaption.length()) + 0.5);
+				int tLength = (int) ((RPCView.TEXT_WIDTH_FACTOR * mCaptionSize * mEscapedCaption.length()) + 0.5);
 				if (tLength >= mWidth) {
 					// String too long here
 					mCaptionPositionX = mPositionX;
@@ -307,8 +307,8 @@ public class TouchButton {
 					// Font height to big
 					MyLog.w(LOG_TAG, "caption\"" + mEscapedCaption + "\" to high");
 				}
-				// (0.76 * mCaptionSize) is Ascend
-				mCaptionPositionY = (int) ((mPositionY + ((mHeight - mCaptionSize) / 2) + (0.76 * mCaptionSize)) + 0.5);
+				// (RPCView.TEXT_ASCEND_FACTOR * mCaptionSize) is Ascend
+				mCaptionPositionY = (int) ((mPositionY + ((mHeight - mCaptionSize) / 2) + (RPCView.TEXT_ASCEND_FACTOR * mCaptionSize)) + 0.5);
 			}
 		}
 	}
@@ -327,7 +327,7 @@ public class TouchButton {
 				// Multiline caption
 				for (int i = 0; i < mCaptionStrings.length; i++) {
 					// try to position the string in the middle of the box
-					int tLength = (int) ((0.6 * mCaptionSize * mCaptionStrings[i].length()) + 0.5);
+					int tLength = (int) ((RPCView.TEXT_WIDTH_FACTOR * mCaptionSize * mCaptionStrings[i].length()) + 0.5);
 					int tCaptionPositionX;
 					if (tLength >= mWidth) {
 						// String too long here
