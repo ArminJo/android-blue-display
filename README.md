@@ -45,6 +45,7 @@ AND change the BT-Module baudrate e.g. by using the BTModuleProgrammer.ino examp
 - Removed unnecessary message on no data received under certain circumstances.
 - Added parameter values `*LOCK_SENSOR_LANDSCAPE` and `*LOCK_SENSOR_PORTRAIT` for function `setScreenOrientationLock()`.
 - Slider caption handling improved.
+- Added short `drawText` functions.
 
 ### Version 4.1
 - Improved startup. New message if no data received after connect and part of screen is inactive/black, to access the options menu.

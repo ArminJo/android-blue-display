@@ -90,16 +90,14 @@ public class RPCView extends View {
 	public static Bitmap mBitmap;
 	private Paint mBitmapPaint; // only used for onDraw() to draw bitmap
 	private Paint mInfoPaint; // for internal info text like touch coordinates
-	
+
 	static final float TEXT_ASCEND_FACTOR = 0.76f;
 	static final float TEXT_DECEND_FACTOR = 0.24f;
 	static final float TEXT_WIDTH_FACTOR = 0.6f;
-	
+
 	private static final int TEXT_SIZE_INFO_PAINT = 22;
 	private static final int TEXT_WIDTH_INFO_PAINT = (int) ((TEXT_SIZE_INFO_PAINT * TEXT_WIDTH_FACTOR) + 0.5);
 
-
-	
 	private Paint mTextPaint; // for all scaled text
 	private Paint mTextBackgroundPaint; // for all scaled text background
 	private Paint mGraphPaintStroke1Fill; // for circle, rectangles and path
@@ -116,6 +114,10 @@ public class RPCView extends View {
 	private Paint mTextPrintPaint; // for printf implementation
 	private int mTextPrintBackgroundColor = Color.BLACK; // for printf implementation
 	private boolean mTextPrintDoClearScreenOnWrap = true; // for printf implementation
+
+	private int mLastDrawStringTextSize;
+	private int mLastDrawStringColor;
+	private int mLastDrawStringBackgroundColor;
 
 	private Canvas mCanvas;
 	private Path mPath = new Path();
@@ -255,12 +257,12 @@ public class RPCView extends View {
 	private final static int SUBFUNCTION_GLOBAL_SET_SCREEN_ORIENTATION_LOCK = 0x0C;
 	// Flags for SUBFUNCTION_GLOBAL_SET_SCREEN_ORIENTATION_LOCK
 	// We have the same values as used in Android
-	private final static int FLAG_SCREEN_ORIENTATION_LOCK_LANDSCAPE = 0x00;
-	private final static int FLAG_SCREEN_ORIENTATION_LOCK_PORTRAIT = 0x01;
-	private final static int FLAG_SCREEN_ORIENTATION_LOCK_SENSOR_LANDSCAPE = 0x06;
-	private final static int FLAG_SCREEN_ORIENTATION_LOCK_SENSOR_PORTRAIT = 0x07;
-	private final static int FLAG_SCREEN_ORIENTATION_LOCK_REVERSE_LANDSCAPE = 0x08;
-	private final static int FLAG_SCREEN_ORIENTATION_LOCK_REVERSE_PORTRAIT = 0x09;
+	// private final static int FLAG_SCREEN_ORIENTATION_LOCK_LANDSCAPE = 0x00;
+	// private final static int FLAG_SCREEN_ORIENTATION_LOCK_PORTRAIT = 0x01;
+	// private final static int FLAG_SCREEN_ORIENTATION_LOCK_SENSOR_LANDSCAPE = 0x06;
+	// private final static int FLAG_SCREEN_ORIENTATION_LOCK_SENSOR_PORTRAIT = 0x07;
+	// private final static int FLAG_SCREEN_ORIENTATION_LOCK_REVERSE_LANDSCAPE = 0x08;
+	// private final static int FLAG_SCREEN_ORIENTATION_LOCK_REVERSE_PORTRAIT = 0x09;
 
 	private final static int FLAG_SCREEN_ORIENTATION_LOCK_CURRENT = 0x02;
 	private final static int FLAG_SCREEN_ORIENTATION_LOCK_UNLOCK = 0x03;
@@ -1893,8 +1895,33 @@ public class RPCView extends View {
 
 			case FUNCTION_DRAW_CHAR:
 			case FUNCTION_DRAW_STRING:
-				tTextSize = (int) (aParameters[2] * mScaleFactor);
+				tYStart = aParameters[1] * mScaleFactor;
+				int tBackgroundColor;
+
+				if (aParamsLength <= 2) {
+					/*
+					 * Get the last 3 parameters from preceding command
+					 */
+					tTextSize = (int) (mLastDrawStringTextSize * mScaleFactor);
+					tColor = mLastDrawStringColor;
+					tBackgroundColor = mLastDrawStringBackgroundColor;
+				} else {
+					if (aCommand != FUNCTION_DRAW_CHAR) {
+						/*
+						 * Store the last 3 parameters from next command
+						 */
+						mLastDrawStringTextSize = aParameters[2];
+						mLastDrawStringColor = aParameters[3];
+						mLastDrawStringBackgroundColor = aParameters[4];
+					}
+					tTextSize = (int) (aParameters[2] * mScaleFactor);
+					tColor = aParameters[3];
+					tBackgroundColor = aParameters[4];
+				}
+
 				mTextPaint.setTextSize(tTextSize);
+				mTextPaint.setColor(shortToLongColor(tColor));
+
 				// ascend for background color. + mScaleFactor for upper margin
 				tAscend = (float) (tTextSize * TEXT_ASCEND_FACTOR) + mScaleFactor;
 				tDecend = (float) (tTextSize * TEXT_DECEND_FACTOR);
@@ -1910,16 +1937,17 @@ public class RPCView extends View {
 				}
 				tStringParameter = new String(sCharsArray, 0, tDataLength);
 
-				mTextPaint.setColor(shortToLongColor(aParameters[3]));
-
 				if (MyLog.isDEBUG()) {
 					MyLog.d(LOG_TAG, tFunctionName + "(\"" + tStringParameter + "\", " + aParameters[0] + ", " + aParameters[1]
-							+ ", size=" + aParameters[2] + ") color= " + shortToColorString(aParameters[3]) + " bg= "
-							+ shortToColorString(aParameters[4]));
+							+ ", size=" + mLastDrawStringTextSize + ") color= " + shortToColorString(tColor) + " bg= "
+							+ shortToColorString(tBackgroundColor));
 				}
-
+				
+				/*
+				 * Handle background modes
+				 */
 				tIndex = tStringParameter.indexOf('\n');
-				boolean tDrawBackgroundExtend = false;
+				boolean tDrawBackgroundExtend = false; // true -> draw background for whole rest of line
 				int tCRIndex = tStringParameter.indexOf('\r');
 				if (tCRIndex >= 0 && (tCRIndex < tIndex || tIndex < 0)) {
 					tIndex = tCRIndex;
@@ -1927,11 +1955,11 @@ public class RPCView extends View {
 				}
 
 				boolean tDrawBackground;
-				if (aParameters[4] == COLOR_NO_BACKGROUND) {
+				if (tBackgroundColor == COLOR_NO_BACKGROUND) {
 					tDrawBackground = false;
 					tDrawBackgroundExtend = false;
 				} else {
-					mTextBackgroundPaint.setColor(shortToLongColor(aParameters[4]));
+					mTextBackgroundPaint.setColor(shortToLongColor(tBackgroundColor));
 					tDrawBackground = true;
 				}
 
@@ -2787,8 +2815,8 @@ public class RPCView extends View {
 			tTextSize = tTextSizesArray[i];
 			tTextPaint.setTextSize(tTextSize);
 			tEndX = startX + (3 * ((tTextSize * 6) + 4) / 10);
-			tCanvas.drawRect(startX, tYPos - (float) (tTextSize * TEXT_ASCEND_FACTOR), tEndX, tYPos + (float) (tTextSize * TEXT_DECEND_FACTOR),
-					tTextBackgroundPaint);
+			tCanvas.drawRect(startX, tYPos - (float) (tTextSize * TEXT_ASCEND_FACTOR), tEndX, tYPos
+					+ (float) (tTextSize * TEXT_DECEND_FACTOR), tTextBackgroundPaint);
 			tCanvas.drawText(tExampleString, startX, tYPos, tTextPaint);
 			startX = tEndX + 3;
 		}

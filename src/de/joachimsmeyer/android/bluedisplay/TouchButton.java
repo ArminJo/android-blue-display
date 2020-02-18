@@ -114,7 +114,7 @@ public class TouchButton {
 	private static final int FLAG_BUTTON_GLOBAL_SET_BEEP_TONE = 0x02;
 
 	// Function with variable data size
-	private static final int FUNCTION_BUTTON_CREATE = 0x70;
+	private static final int FUNCTION_BUTTON_INIT = 0x70;
 	// Flags for button settings contained in flags parameter
 	private static final int FLAG_BUTTON_DO_BEEP_ON_TOUCH = 0x01;
 	// Red if value == 0 else green
@@ -246,10 +246,13 @@ public class TouchButton {
 		mIsActive = false;
 	}
 
+	/*
+	 * Sets color and caption position
+	 */
 	private void handleValueForRedGreenButton(int aValue) {
 		if (mValue != 0) {
 			// TRUE
-			mValue = 1;
+			mValue = 1; // set to one instead of keeping any value != 0
 			mButtonColor = Color.GREEN;
 			if (mRawCaptionForValueTrue != null) {
 				handleCaption(mRawCaptionForValueTrue);
@@ -539,7 +542,7 @@ public class TouchButton {
 				if (tButtonNumber >= 0 && tButtonNumber < sButtonList.size()) {
 					// get button for create with existent button number
 					tButton = sButtonList.get(tButtonNumber);
-					if (aCommand != FUNCTION_BUTTON_CREATE && (tButton == null || !tButton.mIsInitialized)) {
+					if (aCommand != FUNCTION_BUTTON_INIT && (tButton == null || !tButton.mIsInitialized)) {
 						MyLog.e(LOG_TAG, "Command=0x" + Integer.toHexString(aCommand) + " ButtonNr=" + tButtonNumber
 								+ " is null or not initialized.");
 						return;
@@ -547,7 +550,7 @@ public class TouchButton {
 					if (MyLog.isINFO()) {
 						tButtonCaption = " \"" + tButton.mEscapedCaption + "\". ButtonNr=";
 					}
-				} else if (aCommand != FUNCTION_BUTTON_CREATE) {
+				} else if (aCommand != FUNCTION_BUTTON_INIT) {
 					MyLog.e(LOG_TAG, "Command=0x" + Integer.toHexString(aCommand) + " ButtonNr=" + tButtonNumber
 							+ " not found. Only " + sButtonList.size() + " buttons created.");
 					return;
@@ -815,7 +818,7 @@ public class TouchButton {
 			}
 			break;
 
-		case FUNCTION_BUTTON_CREATE:
+		case FUNCTION_BUTTON_INIT:
 			aRPCView.myConvertChars(aDataBytes, RPCView.sCharsArray, aDataLength);
 			tButtonCaption = new String(RPCView.sCharsArray, 0, aDataLength);
 			int tCallbackAddress;
@@ -875,7 +878,7 @@ public class TouchButton {
 						tCallbackAddress);
 
 				if (MyLog.isINFO()) {
-					MyLog.i(LOG_TAG, "Create button. ButtonNr=" + tButtonNumber + ", new TouchButton(\"" + tButton.mEscapedCaption
+					MyLog.i(LOG_TAG, "Init button. ButtonNr=" + tButtonNumber + ", init(\"" + tButton.mEscapedCaption
 							+ "\", x=" + aParameters[1] + ", y=" + aParameters[2] + ", width=" + aParameters[3] + ", height="
 							+ aParameters[4] + ", color=" + RPCView.shortToColorString(aParameters[5]) + ", size=" + aParameters[6]
 							+ ", flags=" + Integer.toHexString(aParameters[7]) + ", value=" + aParameters[8] + ", callback=0x"
