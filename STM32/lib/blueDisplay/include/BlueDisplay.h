@@ -7,7 +7,7 @@
  *  It also implements basic GUI elements as buttons and sliders.
  *  GUI callback, touch and sensor events are sent back to Arduino.
  *
- *  Copyright (C) 2014  Armin Joachimsmeyer
+ *  Copyright (C) 2014-2020  Armin Joachimsmeyer
  *  armin.joachimsmeyer@gmail.com
  *
  *  This file is part of BlueDisplay https://github.com/ArminJo/android-blue-display.
@@ -31,8 +31,10 @@
 #define BLUEDISPLAY_H_
 
 #ifdef ARDUINO
+#  if ! defined(ESP32)
 // For not AVR platforms this contains mapping defines (at least for STM32)
 #include <avr/pgmspace.h>
+#  endif
 #  if defined(strcpy_P) // check if we have mapping defines
 #    if ! defined(strncpy_P)
 // this define is not included in the pgmspace.h file :-(
@@ -72,13 +74,22 @@
 #include "BDSlider.h" // for BDSliderHandle_t
 #endif
 
-#define VERSION_BLUE_DISPLAY "1.3.0"
-#define VERSION_BLUE_DISPLAY_NUMERICAL 130
+#define VERSION_BLUE_DISPLAY "2.0.0"
+#define VERSION_BLUE_DISPLAY_NUMERICAL 200
 /*
+ * Version 2.1.0
+ * - Improved initCommunication and late connection handling.
+ *
+ * Version 2.0.0
+ * - ESP32 and ESP8266 support added. External BT module needed for ESP8266.
+ *
  * Version 1.3.0
  * - Added `sMillisOfLastReceivedBDEvent` for user timeout detection.
  * - Fixed bug in `debug(const char* aMessage, float aFloat)`.
  * - Added `*LOCK_SENSOR_LANDSCAPE` and `*LOCK_SENSOR_LANDSCAPE` in function `setScreenOrientationLock()`. Needs BD app version 4.2.
+ * - Removed unused `mCurrentDisplayHeight` and `mCurrentDisplayWidth` member variables.
+ * - Fixed bug in draw function from `drawByte` to `drawLong`.
+ * - Added short `drawText` functions. Needs BD app version 4.2.
  *
  * Version 1.2.0
  * - Use type `Print *` instead of `Stream *`.
@@ -357,6 +368,7 @@ public:
     uint16_t drawChar(uint16_t aPosX, uint16_t aPosY, char aChar, uint16_t aCharSize, color16_t aFGColor, color16_t aBGColor);
     uint16_t drawText(uint16_t aXStart, uint16_t aYStart, const char *aStringPtr, uint16_t aFontSize, color16_t aFGColor,
             color16_t aBGColor);
+    void drawText(uint16_t aXStart, uint16_t aYStart, const char *aStringPtr);
 
     uint16_t drawByte(uint16_t aPosX, uint16_t aPosY, int8_t aByte, uint16_t aTextSize = TEXT_SIZE_11, color16_t aFGColor =
     COLOR_BLACK, color16_t aBGColor = COLOR_WHITE);
@@ -381,8 +393,8 @@ public:
     void debug(int8_t aByte);
     void debug(uint16_t aShort);
     void debug(const char* aMessage, uint16_t aShort);
-    void debug(int aShort);
-    void debug(const char* aMessage, int aShort);
+    void debug(int16_t aShort);
+    void debug(const char* aMessage, int16_t aShort);
     void debug(uint32_t aLong);
     void debug(const char* aMessage, uint32_t aLong);
     void debug(int32_t aLong);
@@ -443,11 +455,13 @@ public:
 #ifdef AVR
     uint16_t drawTextPGM(uint16_t aXStart, uint16_t aYStart, const char * aPGMString, uint16_t aTextSize, color16_t aFGColor,
             color16_t aBGColor);
+    void drawTextPGM(uint16_t aXStart, uint16_t aYStart, const char * aPGMString);
     void getNumberWithShortPromptPGM(void (*aNumberHandler)(float), const char *aPGMShortPromptString);
     void getNumberWithShortPromptPGM(void (*aNumberHandler)(float), const char *aPGMShortPromptString, float aInitialValue);
 
     uint16_t drawText(uint16_t aXStart, uint16_t aYStart, const __FlashStringHelper * aPGMString, uint16_t aTextSize,
             color16_t aFGColor, color16_t aBGColor);
+    void drawText(uint16_t aXStart, uint16_t aYStart, const __FlashStringHelper * aPGMString);
     void getNumberWithShortPrompt(void (*aNumberHandler)(float), const __FlashStringHelper *aPGMShortPromptString);
     void getNumberWithShortPrompt(void (*aNumberHandler)(float), const __FlashStringHelper *aPGMShortPromptString,
             float aInitialValue);
@@ -564,7 +578,7 @@ void writeStringC(const char *aStringPtr, uint8_t aStringLength);
  */
 #ifdef AVR
 uint16_t readADCChannelWithReferenceOversample(uint8_t aChannelNumber, uint8_t aReference, uint8_t aOversampleExponent);
-float getVCCValue(void);
+float getVCCValue(void) __attribute__ ((deprecated ("Renamed to getVCCVoltage()")));
 float getVCCVoltage(void);
 float getTemperature(void);
 #endif
