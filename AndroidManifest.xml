@@ -21,7 +21,7 @@
         android:largeScreens="true"
         android:xlargeScreens="true" />
 
-    <uses-sdk android:minSdkVersion="10" android:targetSdkVersion="28" />
+    <uses-sdk android:minSdkVersion="10" android:targetSdkVersion="29" />
     <!-- use 10 and omit entry android:targetSdkVersion="xx" because only this combination enables the menu button -->
     <!-- 7/2019 But this is not more accepted by play store :-( -->
 

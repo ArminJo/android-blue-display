@@ -5,7 +5,7 @@
  * 	It also implements basic GUI elements as buttons and sliders.
  * 	It sends touch or GUI callback events over Bluetooth back to Arduino.
  * 
- *  Copyright (C) 2014-2019  Armin Joachimsmeyer
+ *  Copyright (C) 2014-2020  Armin Joachimsmeyer
  *  armin.joachimsmeyer@gmail.com
  *  
  * 	This file is part of BlueDisplay.
@@ -66,10 +66,10 @@ public class RPCView extends View {
 
 	BlueDisplay mBlueDisplayContext;
 
-	protected int mCurrentCanvasWidth;
-	protected int mCurrentCanvasHeight;
-	protected int mRequestedCanvasWidth;
+	protected int mRequestedCanvasWidth; // Of course without scale factor.
 	protected int mRequestedCanvasHeight;
+	protected int mCurrentCanvasWidth; // The value used for drawing
+	protected int mCurrentCanvasHeight;
 	// the maximum display area available for this orientation
 	protected int mCurrentViewHeight; // Display Height - StatusBar - TitleBar
 	protected int mCurrentViewWidth; // Display Width
@@ -98,7 +98,7 @@ public class RPCView extends View {
 	private static final int TEXT_SIZE_INFO_PAINT = 22;
 	private static final int TEXT_WIDTH_INFO_PAINT = (int) ((TEXT_SIZE_INFO_PAINT * TEXT_WIDTH_FACTOR) + 0.5);
 
-	private Paint mTextPaint; // for all scaled text
+	private Paint mTempTextPaint; // To avoid garbage collection. For all scaled text
 	private Paint mTextBackgroundPaint; // for all scaled text background
 	private Paint mGraphPaintStroke1Fill; // for circle, rectangles and path
 	private Paint mGraphPaintStrokeScaleFactor; // for pixel, line and chart
@@ -109,10 +109,11 @@ public class RPCView extends View {
 	 */
 	private int mTextPrintTextCurrentPosX; // for printf implementation
 	private int mTextPrintTextCurrentPosY; // for printf implementation
-	private int mTextPrintTextSize = 12; // for printf implementation
+	private int mTextPrintTextSize = 12; // Unscaled value, for printf implementation
+	private int mTextExpandedPrintColor = Color.BLACK; // for printf implementation
 
-	private Paint mTextPrintPaint; // for printf implementation
-	private int mTextPrintBackgroundColor = Color.BLACK; // for printf implementation
+	private Paint mTextPrintPaint; // Storage of color and scaled size for printf implementation
+	private int mTextExpandedPrintBackgroundColor = Color.BLACK; // for printf implementation
 	private boolean mTextPrintDoClearScreenOnWrap = true; // for printf implementation
 
 	private int mLastDrawStringTextSize;
@@ -394,9 +395,9 @@ public class RPCView extends View {
 		mToneGenerator = new ToneGenerator(AudioManager.STREAM_SYSTEM, (mLastSystemVolume * ToneGenerator.MAX_VOLUME)
 				/ mBlueDisplayContext.mMaxSystemVolume);
 
-		mTextPaint = new Paint();
-		mTextPaint.setTypeface(Typeface.MONOSPACE);
-		mTextPaint.setStyle(Paint.Style.FILL);
+		mTempTextPaint = new Paint();
+		mTempTextPaint.setTypeface(Typeface.MONOSPACE);
+		mTempTextPaint.setStyle(Paint.Style.FILL);
 
 		mTextPrintPaint = new Paint();
 		mTextPrintPaint.setStrokeWidth(1);
@@ -504,19 +505,23 @@ public class RPCView extends View {
 		setScaleFactor(tScaleFactor, false);
 	}
 
+	/**
+	 * Is called in reaction to invalidate()
+	 */
 	@Override
 	protected void onDraw(Canvas canvas) {
 		if (MyLog.isVERBOSE()) {
 			Log.v(LOG_TAG, "+ ON Draw +");
 		}
 		if (mBlueDisplayContext.mBTSerialSocket != null || mBlueDisplayContext.mUSBSerialSocket != null) {
-			boolean tRetrigger = mBlueDisplayContext.mSerialService.searchCommand(this);
+			boolean tRedraw = mBlueDisplayContext.mSerialService.searchCommand(this);
 			canvas.drawBitmap(mBitmap, 0, 0, mBitmapPaint);
-			if (tRetrigger) {
-				// Trigger next frame
+			if (tRedraw) {
+				// We have more data in buffer, but want to show the bitmap now, so trigger next call of OnDraw
 				invalidate();
-				Log.v(LOG_TAG, "Trigger next frame");
+				Log.v(LOG_TAG, "Call invalidate() to redraw again");
 			} else {
+				// Buffer is empty now, so call of invalidate() must be triggered by a message if new data was received.
 				mBlueDisplayContext.mSerialService.mNeedUpdateViewMessage = true;
 				Log.v(LOG_TAG, "Set mNeedUpdateViewMessage to true");
 			}
@@ -589,7 +594,7 @@ public class RPCView extends View {
 					+ tCurrentYScaled;
 			mShowTouchCoordinatesLastStringLength = tInfoString.length();
 			mCanvas.drawText(tInfoString, 0, 20, mInfoPaint);
-			invalidate();
+			invalidate(); // To show the new coordinates
 		}
 
 		if (tActionIndex > 0) {
@@ -720,7 +725,7 @@ public class RPCView extends View {
 					int tSliderNumber = TouchSlider.checkAllSliders(tCurrentXScaled, tCurrentYScaled, false);
 					if (tSliderNumber >= 0) {
 						mTouchStartsOnSliderNumber[tActionIndex] = tSliderNumber;
-						invalidate(); // show new slider bar value
+						invalidate(); // Show new local slider bar value
 					}
 				} else {
 					/*
@@ -729,7 +734,7 @@ public class RPCView extends View {
 					if (tMaskedAction == MotionEvent.ACTION_MOVE && mTouchStartsOnSliderNumber[tActionIndex] >= 0) {
 						TouchSlider
 								.checkIfTouchInSlider(tCurrentXScaled, tCurrentYScaled, mTouchStartsOnSliderNumber[tActionIndex]);
-						invalidate(); // show new slider bar value
+						invalidate(); // Show new local slider bar value
 					}
 				}
 
@@ -1035,7 +1040,8 @@ public class RPCView extends View {
 				MyLog.i(LOG_TAG, "setScaleFactor(" + aScaleFactor + ") UseMaxSize=" + mUseMaxSize + " old factor=" + tOldFactor
 						+ " resulting factor=" + mScaleFactor);
 			}
-			invalidate();
+			invalidate(); // Show resized bitmap
+			
 			// send new size to client
 			if (mBlueDisplayContext.mSerialService != null && aSendToClient) {
 				mBlueDisplayContext.mSerialService.writeTwoIntegerEvent(SerialService.EVENT_REDRAW, mCurrentCanvasWidth,
@@ -1111,7 +1117,7 @@ public class RPCView extends View {
 			// wrap around to top of screen
 			tPrintY = 0;
 			if (mTextPrintDoClearScreenOnWrap) {
-				mCanvas.drawColor(mTextPrintBackgroundColor);
+				mCanvas.drawColor(mTextExpandedPrintBackgroundColor);
 			}
 		}
 		mTextPrintTextCurrentPosX = 0;
@@ -1133,6 +1139,10 @@ public class RPCView extends View {
 			tParam.append(" data length=" + aDataLength);
 			MyLog.v(LOG_TAG, tParam.toString());
 		}
+
+		// Disable message, which triggers the toast, that no data was received.
+		resetWaitMessage();
+
 		if ((aCommand >= INDEX_FIRST_FUNCTION_BUTTON && aCommand <= INDEX_LAST_FUNCTION_BUTTON)
 				|| aCommand >= INDEX_FIRST_FUNCTION_BUTTON_WITH_DATA && aCommand <= INDEX_LAST_FUNCTION_BUTTON_WITH_DATA) {
 			TouchButton.interpretCommand(this, aCommand, aParameters, aParamsLength, aDataBytes, aDataInts, aDataLength);
@@ -1153,7 +1163,7 @@ public class RPCView extends View {
 			tXStart = aParameters[0] * mScaleFactor;
 			tYStart = aParameters[1] * mScaleFactor;
 		}
-		int tTextSize;
+		float tScaledTextSize;
 		int tColor;
 		int tIndex;
 		String tFunctionName;
@@ -1264,8 +1274,10 @@ public class RPCView extends View {
 							+ tCallbackAddressStringAdjustedForClientDebugging + " prompt=\"" + tStringParameter + "\""
 							+ tInitialInfo);
 				}
-				// Send request for number input to the UI Activity
 
+				/*
+				 * Send request for number input to the UI Activity Ends up in showInputDialog() If cancelled nothing is sent back
+				 */
 				Message msg = mHandler.obtainMessage(BlueDisplay.REQUEST_INPUT_DATA);
 				Bundle bundle = new Bundle();
 				bundle.putInt(BlueDisplay.CALLBACK_ADDRESS, tCallbackAddress);
@@ -1277,7 +1289,6 @@ public class RPCView extends View {
 				break;
 
 			case FUNCTION_REQUEST_MAX_CANVAS_SIZE:
-				resetWaitMessage();
 				if (MyLog.isINFO()) {
 					MyLog.i(LOG_TAG, "Request max canvas size. Result=" + mCurrentViewWidth + "/" + mCurrentViewHeight);
 				}
@@ -1440,9 +1451,10 @@ public class RPCView extends View {
 				switch (tSubcommand) {
 				case FLAG_WRITE_SETTINGS_SET_SIZE_AND_COLORS_AND_FLAGS:
 					mTextPrintTextSize = aParameters[1];
+					mTextExpandedPrintColor = shortToLongColor(aParameters[2]);
 					mTextPrintPaint.setTextSize(mTextPrintTextSize * mScaleFactor);
 					mTextPrintPaint.setColor(shortToLongColor(aParameters[2]));
-					mTextPrintBackgroundColor = shortToLongColor(aParameters[3]);
+					mTextExpandedPrintBackgroundColor = shortToLongColor(aParameters[3]);
 					if (aParameters[4] > 0) {
 						mTextPrintDoClearScreenOnWrap = true;
 					} else {
@@ -1791,7 +1803,7 @@ public class RPCView extends View {
 				break;
 
 			/*
-			 * Writes string with fixed font and do line and page wrapping For print emulation
+			 * Writes string with fixed font and do line and page wrapping for print emulation
 			 */
 			case FUNCTION_WRITE_STRING:
 				myConvertChars(aDataBytes, sCharsArray, aDataLength);
@@ -1806,7 +1818,6 @@ public class RPCView extends View {
 				int tPrintBufferStart = 0;
 				int tPrintBufferEnd = aDataLength;
 				float tScaledTextPrintTextSize = mTextPrintTextSize * mScaleFactor;
-				mTextPrintPaint.setTextSize(tScaledTextPrintTextSize);
 				int tTextUnscaledWidth = (int) ((mTextPrintTextSize * TEXT_WIDTH_FACTOR) + 0.5);
 				int tLineLengthInChars = (int) (mRequestedCanvasWidth / tTextUnscaledWidth);
 				boolean doFlushAndNewline = false;
@@ -1825,12 +1836,12 @@ public class RPCView extends View {
 							float tTextLength = (tPrintBufferEnd - tPrintBufferStart) * tIntegerTextSize;
 
 							// draw background
-							mTextBackgroundPaint.setColor(mTextPrintBackgroundColor);
+							mTextBackgroundPaint.setColor(mTextExpandedPrintBackgroundColor);
 							mCanvas.drawRect(tXStart, tYStart, tXStart + tTextLength, tYStart + tScaledTextPrintTextSize,
 									mTextBackgroundPaint);
 							// draw char / string
-							mCanvas.drawText(tStringParameter, tPrintBufferStart, tPrintBufferEnd - 1, tXStart, tYStart + tAscend,
-									mTextPrintPaint);
+							drawText(tStringParameter, tPrintBufferStart, tPrintBufferEnd - 1, tXStart, tYStart + tAscend,
+									tScaledTextPrintTextSize, mTextExpandedPrintColor);
 						}
 						break;
 					}
@@ -1874,12 +1885,12 @@ public class RPCView extends View {
 						// do not count the newline or space
 						float tTextLength = ((tCurrentCharacterIndex - 1) - tPrintBufferStart) * tIntegerTextSize;
 
-						mTextBackgroundPaint.setColor(mTextPrintBackgroundColor);
+						mTextBackgroundPaint.setColor(mTextExpandedPrintBackgroundColor);
 						mCanvas.drawRect(tXStart, tYStart, tXStart + tTextLength, tYStart + tScaledTextPrintTextSize,
 								mTextBackgroundPaint);
 						// draw char / string
-						mCanvas.drawText(tStringParameter, tPrintBufferStart, tCurrentCharacterIndex - 1, tXStart, tYStart
-								+ tAscend, mTextPrintPaint);
+						drawText(tStringParameter, tPrintBufferStart, tCurrentCharacterIndex - 1, tXStart, tYStart + tAscend,
+								tScaledTextPrintTextSize, mTextExpandedPrintColor);
 
 						tPrintBufferStart = tCurrentCharacterIndex;
 						mTextPrintTextCurrentPosY = printNewline();
@@ -1902,7 +1913,7 @@ public class RPCView extends View {
 					/*
 					 * Get the last 3 parameters from preceding command
 					 */
-					tTextSize = (int) (mLastDrawStringTextSize * mScaleFactor);
+					tScaledTextSize = mLastDrawStringTextSize * mScaleFactor;
 					tColor = mLastDrawStringColor;
 					tBackgroundColor = mLastDrawStringBackgroundColor;
 				} else {
@@ -1914,17 +1925,17 @@ public class RPCView extends View {
 						mLastDrawStringColor = aParameters[3];
 						mLastDrawStringBackgroundColor = aParameters[4];
 					}
-					tTextSize = (int) (aParameters[2] * mScaleFactor);
+					tScaledTextSize = aParameters[2] * mScaleFactor;
 					tColor = aParameters[3];
 					tBackgroundColor = aParameters[4];
 				}
 
-				mTextPaint.setTextSize(tTextSize);
-				mTextPaint.setColor(shortToLongColor(tColor));
+				mTempTextPaint.setTextSize(tScaledTextSize); // will be used below
+				int tExpandedColor = shortToLongColor(tColor);
 
 				// ascend for background color. + mScaleFactor for upper margin
-				tAscend = (float) (tTextSize * TEXT_ASCEND_FACTOR) + mScaleFactor;
-				tDecend = (float) (tTextSize * TEXT_DECEND_FACTOR);
+				tAscend = (tScaledTextSize * TEXT_ASCEND_FACTOR) + mScaleFactor;
+				tDecend = tScaledTextSize * TEXT_DECEND_FACTOR;
 
 				int tDataLength = aDataLength;
 				if (aCommand == FUNCTION_DRAW_CHAR) {
@@ -1942,15 +1953,15 @@ public class RPCView extends View {
 							+ ", size=" + mLastDrawStringTextSize + ") color= " + shortToColorString(tColor) + " bg= "
 							+ shortToColorString(tBackgroundColor));
 				}
-				
+
 				/*
 				 * Handle background modes
 				 */
-				tIndex = tStringParameter.indexOf('\n');
+				int tNewlineIndex = tStringParameter.indexOf('\n');
 				boolean tDrawBackgroundExtend = false; // true -> draw background for whole rest of line
 				int tCRIndex = tStringParameter.indexOf('\r');
-				if (tCRIndex >= 0 && (tCRIndex < tIndex || tIndex < 0)) {
-					tIndex = tCRIndex;
+				if (tCRIndex >= 0 && (tCRIndex < tNewlineIndex || tNewlineIndex < 0)) {
+					tNewlineIndex = tCRIndex;
 					tDrawBackgroundExtend = true;
 				}
 
@@ -1963,10 +1974,10 @@ public class RPCView extends View {
 					tDrawBackground = true;
 				}
 
-				if (tIndex > 0) {
+				if (tNewlineIndex > 0) {
 					int tStartIndex = 0;
 
-					while (tIndex > 0) {
+					while (tNewlineIndex > 0) {
 						/*
 						 * Multiline text
 						 */
@@ -1976,35 +1987,36 @@ public class RPCView extends View {
 									mTextBackgroundPaint);
 						} else if (tDrawBackground) {
 							// draw background only for string except for single newline
-							if (tStartIndex != tIndex) {
-								float tTextLength = mTextPaint.measureText(tStringParameter, tStartIndex, tIndex);
+							if (tStartIndex != tNewlineIndex) {
+								float tTextLength = mTempTextPaint.measureText(tStringParameter, tStartIndex, tNewlineIndex);
 								// draw background
 								mCanvas.drawRect(tXStart, tYStart - tAscend, tXStart + tTextLength, tYStart + tDecend,
 										mTextBackgroundPaint);
 							}
 						}
 						// check for single newline
-						if (tStartIndex != tIndex) {
+						if (tStartIndex != tNewlineIndex) {
 							// draw string
-							mCanvas.drawText(tStringParameter, tStartIndex, tIndex, tXStart, tYStart, mTextPaint);
-							tYStart += tTextSize + mScaleFactor; // + Margin
+							drawText(tStringParameter, tStartIndex, tNewlineIndex, tXStart, tYStart, tScaledTextSize,
+									tExpandedColor);
+							tYStart += tScaledTextSize + mScaleFactor; // + Margin
 						}
 						// search for next newline
-						tStartIndex = tIndex + 1;
-						if (tIndex + 1 <= tStringParameter.length()) {
-							tIndex = tStringParameter.indexOf('\n', tStartIndex);
+						tStartIndex = tNewlineIndex + 1;
+						if (tNewlineIndex + 1 <= tStringParameter.length()) {
+							tNewlineIndex = tStringParameter.indexOf('\n', tStartIndex);
 							tDrawBackgroundExtend = false;
 							tCRIndex = tStringParameter.indexOf('\r', tStartIndex);
-							if (tCRIndex >= 0 && (tCRIndex < tIndex || tIndex < 0)) {
-								tIndex = tCRIndex;
+							if (tCRIndex >= 0 && (tCRIndex < tNewlineIndex || tNewlineIndex < 0)) {
+								tNewlineIndex = tCRIndex;
 								tDrawBackgroundExtend = true;
 							}
 
-							if (tIndex < 0) {
-								tIndex = tStringParameter.length();
+							if (tNewlineIndex < 0) {
+								tNewlineIndex = tStringParameter.length();
 							}
 						} else {
-							tIndex = 0;
+							tNewlineIndex = 0;
 						}
 					}
 				} else {
@@ -2012,16 +2024,15 @@ public class RPCView extends View {
 					 * Single line text
 					 */
 					if (tDrawBackground) {
-						float tTextLength = mTextPaint.measureText(tStringParameter);
+						float tTextLength = mTempTextPaint.measureText(tStringParameter);
 						// draw background
 						mCanvas.drawRect(tXStart, tYStart - tAscend, tXStart + tTextLength, tYStart + tDecend, mTextBackgroundPaint);
-						// mCanvas.drawRect(tXStart, tYStart - tAscend, tXStart +
-						// (tTextWidth * tDataLength) + 1, tYStart + tDecend,
-						// mTextBackgroundPaint);
+						// mCanvas.drawRect(tXStart, tYStart - tAscend, tXStart + (tTextWidth * tDataLength) + 1, tYStart +
+						// tDecend, mTextBackgroundPaint);
 					}
 
 					// draw char / string
-					mCanvas.drawText(tStringParameter, tXStart, tYStart, mTextPaint);
+					drawText(tStringParameter, tXStart, tYStart, tScaledTextSize, tExpandedColor);
 				}
 				break;
 
@@ -2045,7 +2056,7 @@ public class RPCView extends View {
 	}
 
 	/*
-	 * Called by FUNCTION_REQUEST_MAX_CANVAS_SIZE and SUBFUNCTION_GLOBAL_SET_FLAGS_AND_SIZE
+	 * Called only by RPCView.interpretCommand()
 	 */
 	public void resetWaitMessage() {
 		if (mBlueDisplayContext.mWaitForDataAfterConnect) {
@@ -2064,28 +2075,44 @@ public class RPCView extends View {
 				* mScaleFactor, mGraphPaintStroke1Fill);
 	}
 
-	public void drawText(float aPosX, float aPosY, String aText, float aTextSize, int aColor) {
-		mTextPaint.setTextSize(aTextSize * mScaleFactor);
-		mTextPaint.setColor(aColor);
-		mCanvas.drawText(aText, aPosX * mScaleFactor, aPosY * mScaleFactor, mTextPaint);
+	public void drawText(String aText, float aScaledPosX, float aScaledPosY, float aScaledTextSize, int aColor) {
+		mTempTextPaint.setTextSize(aScaledTextSize);
+		mTempTextPaint.setColor(aColor);
+
+		while (aScaledPosX >= mCurrentCanvasWidth) {
+			// Wrap around
+			aScaledPosX -= mCurrentCanvasWidth;
+		}
+		while (aScaledPosY >= mCurrentCanvasHeight) {
+			// Wrap around
+			aScaledPosY -= mCurrentCanvasHeight;
+		}
+		mCanvas.drawText(aText, aScaledPosX, aScaledPosY, mTempTextPaint);
 	}
 
+	public void drawText(String aText, int aStart, int aEnd, float aScaledPosX, float aScaledPosY, float aScaledTextSize, int aColor) {
+		drawText(aText.substring(aStart, aEnd), aScaledPosX, aScaledPosY, aScaledTextSize, aColor);
+	}
+
+	/*
+	 * Not used yet
+	 */
 	public void drawTextWithBackground(float aPosX, float aPosY, String aText, float aTextSize, int aColor, int aBGColor) {
 		aPosX *= mScaleFactor;
 		aPosY *= mScaleFactor;
 		aTextSize *= mScaleFactor;
-		mTextPaint.setTextSize(aTextSize);
+		mTempTextPaint.setTextSize(aTextSize);
+		mTempTextPaint.setColor(aColor);
 
 		// draw background
 		// ascend for background color. + mScaleFactor for upper margin
 		float tAscend = (float) (aTextSize * TEXT_ASCEND_FACTOR) + mScaleFactor;
 		float tDecend = (float) (aTextSize * TEXT_DECEND_FACTOR);
-		float tTextLength = mTextPaint.measureText(aText);
+		float tTextLength = mTempTextPaint.measureText(aText);
 		mTextBackgroundPaint.setColor(aBGColor);
 		mCanvas.drawRect(aPosX, aPosY - tAscend, aPosX + tTextLength, aPosY + tDecend, mTextBackgroundPaint);
 
-		mTextPaint.setColor(aColor);
-		mCanvas.drawText(aText, aPosX, aPosY, mTextPaint);
+		mCanvas.drawText(aText, aPosX, aPosY, mTempTextPaint);
 	}
 
 	void initCharMappingArray() {
@@ -2120,7 +2147,6 @@ public class RPCView extends View {
 	}
 
 	private void setFlags(int aFlags) {
-		resetWaitMessage();
 		String tResetAllString = "";
 		if ((aFlags & BD_FLAG_FIRST_RESET_ALL) != 0) {
 			resetAll();
@@ -2230,7 +2256,7 @@ public class RPCView extends View {
 				tScaleDivisor);
 		testBDFunctions(5, tY, TEST_CANVAS_HEIGHT, false);
 
-		invalidate();
+		invalidate(); // Show the testpage
 	}
 
 	void testBDFunctions(int aStartX, int aStartY, int aCanvasHeight, boolean aCompatibilityMode) {

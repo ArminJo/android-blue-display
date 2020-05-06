@@ -143,7 +143,7 @@ public class SerialService {
 			}
 			if (mReceiveBufferInIndex >= SerialService.SIZE_OF_IN_BUFFER - SerialInputOutputManager.BUFSIZ) {
 				/*
-				 * buffer wrap around. Start new input at start of buffer and note new end of buffer in mInputBufferWrapAroundIndex
+				 * Buffer wrap around. Start new input at start of buffer and note new end of buffer in mInputBufferWrapAroundIndex
 				 */
 				mInputBufferWrapAroundIndex = mReceiveBufferInIndex;
 				mReceiveBufferInIndex = 0;
@@ -153,7 +153,7 @@ public class SerialService {
 					Log.v(LOG_TAG, "Buffer wrap around " + (mInputBufferWrapAroundIndex - tOutIndex) + " bytes unprocessed");
 				}
 				if (mReceiveBufferInIndex > tOutIndex) {
-					// after wrap bigger than out index
+					// After wrap bigger than out index
 					MyLog.e(LOG_TAG, "Buffer overflow! InIndex=" + mReceiveBufferInIndex);
 				}
 			}
@@ -735,11 +735,10 @@ public class SerialService {
 	}
 
 	/**
-	 * Search the input buffer for valid commands and call interpretCommand() as long as there is data available. Returns true if it
-	 * must be called again.
+	 * Search the input buffer for valid commands and call interpretCommand() as long as there is data available.
 	 * 
 	 * @param aRPCView
-	 * @return true if view should be updated, false if no view update needed (e.g. in case of error)
+	 * @return true if we have more data in the buffer but want to redraw now, e.g. after a FUNCTION_DRAW_CHART command.
 	 */
 	boolean searchCommand(RPCView aRPCView) {
 		if (inBufferReadingLock || (mReceiveBufferOutIndex == mReceiveBufferInIndex)) {
@@ -750,7 +749,7 @@ public class SerialService {
 			return false;
 		}
 		boolean tRetval = false;
-		long tStart = System.nanoTime();
+		long tStart = System.nanoTime(); // We require it as nanos, because we compute the mStatisticNanoTimeForCommands with it
 		long tNanosForChart = 0;
 		inBufferReadingLock = true;
 		byte tCommand = 0;
@@ -858,8 +857,6 @@ public class SerialService {
 					if (MyLog.isVERBOSE()) {
 						Log.v(LOG_TAG, "Not enough data in buffer for a complete command");
 					}
-					// break in order to draw the bitmap
-					tRetval = true;
 					break;
 				}
 			}
@@ -893,7 +890,7 @@ public class SerialService {
 					Log.v(LOG_TAG, tData.toString());
 				}
 				/*
-				 * now both command and data buffer filled
+				 * Now both command and data buffer filled
 				 */
 				searchStateInputLengthToWaitFor = MIN_COMMAND_SIZE;
 				aRPCView.interpretCommand(tCommand, mParameters, tParamsLength, mDataBuffer, null, tLengthReceived);
@@ -901,7 +898,7 @@ public class SerialService {
 					mStatisticNumberOfReceivedChartCommands++;
 					tNanosForChart += System.nanoTime() - tStart1;
 					if (tCommand == RPCView.FUNCTION_DRAW_CHART) {
-						// break in order to draw the bitmap
+						// break in order to draw a chart directly
 						tRetval = true;
 						break;
 					}
@@ -949,7 +946,7 @@ public class SerialService {
 					aRPCView.interpretCommand(tCommand, mParameters, tParamsLength, null, null, 0);
 					mStatisticNumberOfReceivedCommands++;
 					if (tCommand == RPCView.FUNCTION_DRAW_DISPLAY) {
-						// break in order to draw the bitmap
+						// break in order to draw the bitmap as requested by FUNCTION_DRAW_DISPLAY
 						tRetval = true;
 						break;
 					}

@@ -397,8 +397,15 @@ public class BluetoothSerialSocket {
 			while (true) {
 				try {
 					// Read block of bytes from InputStream
+//					long tStartTimestampMillis = System.currentTimeMillis();
 					tReadLength = mmInStream.read(mSerialService.mBigReceiveBuffer, mSerialService.mReceiveBufferInIndex, 256);
 					mSerialService.handleReceived(tReadLength);
+//					long tReadDuration = System.currentTimeMillis() - tStartTimestampMillis;
+//					if (tReadDuration > 100) {
+//						Log.e(LOG_TAG, "Read duration=" + tReadDuration + "ms, length=" + tReadLength);
+//					} else {
+//						Log.d(LOG_TAG, "Read duration=" + tReadDuration + "ms, length=" + tReadLength);
+//					}
 
 				} catch (IOException e) {
 					// end up here if cancel() / mmSocket.close() was called

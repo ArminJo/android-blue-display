@@ -55,6 +55,17 @@
  * - OnSizeChanged of BlueDisplay with current display size
  * - OnFocusChanged (true)
  * 
+ * Running
+ * - Bluetooth or USB socket receives data
+ * - It calls mSerialService.handleReceived(tReadLength), which puts data into big buffer.
+ * - If UI is not working (mNeedUpdateViewMessage) it sends a Message which calls invalidate().
+ * - invalidate() triggers OnDraw(), which first calls searchCommand().
+ *   - searchCommand() searches the buffer for a valid BlueDisplay command and calls interpretCommand().
+ *   - interpretCommand() dispatches Button and Slider commands and interprets all others by itself.
+ * - The bitmap of the canvas we use to draw is then copied into the canvas parameter provided by OnDraw().
+ * - mNeedUpdateViewMessage is set to true.
+ * 
+ * 
  * Deactivate
  * - OnPause
  * - OnFocusChanged (false)
@@ -123,7 +134,7 @@ public class BlueDisplay extends Activity {
 	public static final int MESSAGE_USB_CONNECT = 6;
 	public static final int MESSAGE_USB_DISCONNECT = 7;
 	public static final int MESSAGE_TOAST = 10;
-	public static final int MESSAGE_UPDATE_VIEW = 11;
+	public static final int MESSAGE_UPDATE_VIEW = 11; // call invalidate()
 	// Message sent by RPCView
 	public static final int REQUEST_INPUT_DATA = 20;
 
@@ -627,8 +638,7 @@ public class BlueDisplay extends Activity {
 			mWaitForDataAfterConnect = true;
 			/*
 			 * Send delayed message to handler, which in turn shows a toast if no data received. Flag is reset and message is
-			 * deleted on receiving FUNCTION_REQUEST_MAX_CANVAS_SIZE and SUBFUNCTION_GLOBAL_SET_FLAGS_AND_SIZE commands from the
-			 * client.
+			 * deleted on each call to RPCView.interpretCommand().
 			 */
 			if (MyLog.isINFO()) {
 				Log.i(LOG_TAG, "Start timeout waiting for commands");
@@ -764,7 +774,7 @@ public class BlueDisplay extends Activity {
 
 			case REQUEST_INPUT_DATA:
 				/*
-				 * shows input data dialog (requested by FUNCTION_GET_NUMBER, FUNCTION_GET_TEXT etc.)
+				 * Shows input data dialog (requested by FUNCTION_GET_NUMBER, FUNCTION_GET_TEXT etc.)
 				 */
 				if (MyLog.isVERBOSE()) {
 					Log.v(LOG_TAG, "REQUEST_INPUT_DATA");
