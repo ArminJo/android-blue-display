@@ -41,9 +41,14 @@ public class MyLog {
 	static boolean mStopLoggingSinceLogIsDisplayed = false;
 
 	// Debugging
-	static boolean isDevelopmentTesting = false;
+	static boolean isDevelopmentTesting = false; // set manually to true
+//	static boolean isDevelopmentTesting = true; // set manually to true
 	public static final String LOGLEVEL_KEY = "loglevel";
 	static int mLoglevel = Log.INFO; // 6=ERROR 5=WARN, 4=INFO, 3=DEBUG, 2=VERBOSE
+
+	public static boolean isDEVELOPMENT_TESTING() {
+		return (isDevelopmentTesting);
+	}
 
 	public static void setLoglevel(int aLoglevel) {
 		MyLog.mLoglevel = aLoglevel;
@@ -63,10 +68,6 @@ public class MyLog {
 
 	public static boolean isVERBOSE() {
 		return (mLoglevel <= Log.VERBOSE);
-	}
-
-	public static boolean isDEVELOPMENT_TESTING() {
-		return (isDevelopmentTesting);
 	}
 
 	public static void clear() {

@@ -41,6 +41,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
 import android.util.Log;
+import android.os.Process;
 
 /**
  * This class does all the work for setting up and managing Bluetooth connections with other devices. It has a thread for connecting
@@ -394,19 +395,24 @@ public class BluetoothSerialSocket {
 			 */
 			int tReadLength;
 			// Keep listening to the InputStream while connected
+			 Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO); // Maximum Priority - Does not work for my Nexus 6 :-(
 			while (true) {
 				try {
 					// Read block of bytes from InputStream
-//					long tStartTimestampMillis = System.currentTimeMillis();
-					tReadLength = mmInStream.read(mSerialService.mBigReceiveBuffer, mSerialService.mReceiveBufferInIndex, 256);
+					long tStartTimestampMillis = System.currentTimeMillis();
+					/*
+					 * In this call takes between 0ms, if data is available and randomly up to 550ms on my Nexus7/6.0.1 Increasing
+					 * the priority to maximum does not change the random high values. Waiting for 20 or 50 ms to ensure data is
+					 * still received, also does not change anything. What is strange that the amount of data received after the
+					 * long break is not the maximum. Only the next or even later reads then returns the maximum bytes. It is
+					 * independent from using secure or insecure connection.
+					 */
+					tReadLength = mmInStream.read(mSerialService.mBigReceiveBuffer, mSerialService.mReceiveBufferInIndex, 4096);
+					if (MyLog.isDEVELOPMENT_TESTING()) {
+						long tReadDuration = System.currentTimeMillis() - tStartTimestampMillis;
+						Log.d(LOG_TAG, "Read duration=" + tReadDuration + "ms, length=" + tReadLength);
+					}
 					mSerialService.handleReceived(tReadLength);
-//					long tReadDuration = System.currentTimeMillis() - tStartTimestampMillis;
-//					if (tReadDuration > 100) {
-//						Log.e(LOG_TAG, "Read duration=" + tReadDuration + "ms, length=" + tReadLength);
-//					} else {
-//						Log.d(LOG_TAG, "Read duration=" + tReadDuration + "ms, length=" + tReadLength);
-//					}
-
 				} catch (IOException e) {
 					// end up here if cancel() / mmSocket.close() was called
 					// before

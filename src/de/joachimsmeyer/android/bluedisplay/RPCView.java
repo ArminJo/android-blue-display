@@ -155,9 +155,8 @@ public class RPCView extends View {
 	protected int mShowTouchCoordinatesLastStringLength = 19;
 	private final float SWIPE_DETECTION_LOWER_LIMIT = mCurrentViewWidth / 100; // around 10 to 20 pixel. Detect swipe if move is
 																				// greater than
-	// SWIPE_DETECTION_LOWER_LIMIT.
-	// If swipe starts on a button then swipe must be greater 4 * SWIPE_DETECTION_LOWER_LIMIT.
-	private final float MICRO_MOVE_LIMIT_FOR_LONG_TOUCH_DOWN = SWIPE_DETECTION_LOWER_LIMIT; // 10 pixel to avoid killing of long
+	private final float MICRO_MOVE_LIMIT_FOR_LONG_TOUCH_DOWN = SWIPE_DETECTION_LOWER_LIMIT; // 10 to 20 pixel to avoid killing of
+																							// long
 																							// touch recognition
 
 	public static boolean mDeviceListActivityLaunched = false; // to prevent multiple launches of DeviceListActivity()
@@ -179,7 +178,7 @@ public class RPCView extends View {
 	private float mLastTouchPositionX[];
 	private float mLastTouchPositionY[];
 
-	int[] mTouchStartsOnButtonNumber; // number of button for last touch_down event
+	int[] mTouchStartsOnButtonNumber; // number of button for last touch_down event. -1 if touch does not start on a button
 	int[] mTouchStartsOnSliderNumber; // number of slider if touch starts on a slider, used to distinguish between slider and swipe
 										// moves
 	boolean[] mSkipProcessingUntilTouchUpForButton; // true if touch down already sends an event (eg. a button down event)
@@ -514,17 +513,50 @@ public class RPCView extends View {
 			Log.v(LOG_TAG, "+ ON Draw +");
 		}
 		if (mBlueDisplayContext.mBTSerialSocket != null || mBlueDisplayContext.mUSBSerialSocket != null) {
-			boolean tRedraw = mBlueDisplayContext.mSerialService.searchCommand(this);
-			canvas.drawBitmap(mBitmap, 0, 0, mBitmapPaint);
-			if (tRedraw) {
-				// We have more data in buffer, but want to show the bitmap now, so trigger next call of OnDraw
-				invalidate();
-				Log.v(LOG_TAG, "Call invalidate() to redraw again");
-			} else {
-				// Buffer is empty now, so call of invalidate() must be triggered by a message if new data was received.
-				mBlueDisplayContext.mSerialService.mNeedUpdateViewMessage = true;
-				Log.v(LOG_TAG, "Set mNeedUpdateViewMessage to true");
-			}
+			int tResult;
+			int tSumWaitDelay = 0;
+			do {
+				tResult = mBlueDisplayContext.mSerialService.searchCommand(this);
+				canvas.drawBitmap(mBitmap, 0, 0, mBitmapPaint); // must be done at every call
+				int tBytesInBuffer = mBlueDisplayContext.mSerialService.getBufferBytesAvailable();
+				if (tResult == SerialService.RPCVIEW_DO_DRAW_AND_CALL_AGAIN) {
+					// We have more data in buffer, but want to show the bitmap now (between 4 and 20 ms on my Nexus7/6.0.1),
+					// so trigger next call of OnDraw
+					invalidate();
+					if (MyLog.isDEVELOPMENT_TESTING()) {
+						Log.v(LOG_TAG, "Call invalidate() to redraw again");
+					}
+				} else {
+					if (tResult == SerialService.RPCVIEW_DO_WAIT) {
+						if (MyLog.isDEVELOPMENT_TESTING()) {
+							Log.v(LOG_TAG, "Wait for 20 ms"); // first wait, to avoid requesting a new trigger every time
+						}
+						try {
+							Thread.sleep(20);
+							tSumWaitDelay += 20;
+							if (tBytesInBuffer == mBlueDisplayContext.mSerialService.getBufferBytesAvailable()
+									&& tSumWaitDelay > 100) {
+								MyLog.e(LOG_TAG, "Read delay of more than 100 ms for missing bytes. Bytes in Buffer="
+										+ mBlueDisplayContext.mSerialService.getBufferBytesAvailable());
+								tResult = SerialService.RPCVIEW_DO_NOTHING; // Just request new trigger
+							}
+						} catch (InterruptedException e) {
+							// Just do nothing
+						}
+					}
+					// check again, we may have changed tResult
+					if (tResult != SerialService.RPCVIEW_DO_WAIT) {
+						/*
+						 * Request new trigger from BT or USB socket, if new data has arrived
+						 */
+						mBlueDisplayContext.mSerialService.mNeedUpdateViewMessage = true;
+						if (MyLog.isDEVELOPMENT_TESTING()) {
+							Log.v(LOG_TAG, "Set mNeedUpdateViewMessage to true. Bytes in Buffer="
+									+ mBlueDisplayContext.mSerialService.getBufferBytesAvailable());
+						}
+					}
+				}
+			} while (tResult == SerialService.RPCVIEW_DO_WAIT);
 		} else {
 			canvas.drawBitmap(mBitmap, 0, 0, mBitmapPaint);
 		}
@@ -677,18 +709,19 @@ public class RPCView extends View {
 					/*
 					 * Check SWIPE callback only if touch did not start on a slider
 					 */
-					tDistanceFromTouchDown = Math.max(Math.abs(mTouchDownPositionX[tActionIndex] - tCurrentX),
-							Math.abs(mTouchDownPositionY[tActionIndex] - tCurrentY));
+					float tDeltaX = tCurrentX - mTouchDownPositionX[tActionIndex];
+					float tDeltaY = tCurrentY - mTouchDownPositionY[tActionIndex];
+					tDistanceFromTouchDown = Math.max(Math.abs(tDeltaX), Math.abs(tDeltaY));
 					/*
-					 * SWIPE only if move is greater than SWIPE_DETECTION_LOWER_LIMIT. If SWIPE starts on a button then swipe must
-					 * be even greater.
+					 * SWIPE only if move is greater than SWIPE_DETECTION_LOWER_LIMIT. Otherwise log touches are often
+					 * interpreted as micro-swipes. If SWIPE starts on a button then swipe must be even greater.
 					 */
 					if ((mTouchStartsOnButtonNumber[tActionIndex] < 0 && tDistanceFromTouchDown > SWIPE_DETECTION_LOWER_LIMIT)
-							|| tDistanceFromTouchDown > 4 * SWIPE_DETECTION_LOWER_LIMIT) {
-						int tDeltaX = (int) ((tCurrentX - mTouchDownPositionX[tActionIndex]) / mScaleFactor);
-						int tDeltaY = (int) ((tCurrentY - mTouchDownPositionY[tActionIndex]) / mScaleFactor);
+							|| tDistanceFromTouchDown > (4 * SWIPE_DETECTION_LOWER_LIMIT)) {
+						int tDeltaXUnscaled = (int) (tDeltaX / mScaleFactor);
+						int tDeltaYUnscaled = (int) (tDeltaY / mScaleFactor);
 						int tIsXDirection = 0;
-						if (Math.abs(tDeltaX) >= Math.abs(tDeltaY)) {
+						if (Math.abs(tDeltaXUnscaled) >= Math.abs(tDeltaYUnscaled)) {
 							// horizontal swipe
 							tIsXDirection = 1;
 						}
@@ -699,10 +732,11 @@ public class RPCView extends View {
 						 */
 						if (MyLog.isDEBUG()) {
 							MyLog.d(LOG_TAG, "Fullscreen=" + (mCurrentViewWidth == mCurrentCanvasWidth) + " StartX="
-									+ mTouchDownPositionX[tActionIndex] + " DeltaX=" + tDeltaX + " DeltaY=" + tDeltaY);
+									+ mTouchDownPositionX[tActionIndex] + " DeltaX=" + tDeltaXUnscaled + " DeltaY="
+									+ tDeltaYUnscaled);
 						}
 						if (mCurrentViewWidth == mCurrentCanvasWidth && mTouchDownPositionX[tActionIndex] < mCurrentViewWidth / 100
-								&& tDeltaX > mCurrentViewWidth / 50 && tDeltaX > (5 * Math.abs(tDeltaY))) {
+								&& tDeltaXUnscaled > mCurrentViewWidth / 50 && tDeltaXUnscaled > (5 * Math.abs(tDeltaYUnscaled))) {
 							if (MyLog.isINFO()) {
 								Log.i(LOG_TAG, "Swipe from left border detected -> display option menue");
 							}
@@ -711,7 +745,7 @@ public class RPCView extends View {
 							// send swipe event and suppress UP-event sending
 							mBlueDisplayContext.mSerialService.writeSwipeCallbackEvent(SerialService.EVENT_SWIPE_CALLBACK,
 									tIsXDirection, (int) (mTouchDownPositionX[tActionIndex] / mScaleFactor),
-									(int) (mTouchDownPositionY[tActionIndex] / mScaleFactor), tDeltaX, tDeltaY);
+									(int) (mTouchDownPositionY[tActionIndex] / mScaleFactor), tDeltaXUnscaled, tDeltaYUnscaled);
 						}
 						// (ab)use mTouchStartsOnSliderNumber flag to suppress other checks on ACTION_UP and sending of UP-event
 						mTouchStartsOnSliderNumber[tActionIndex] = 999;
@@ -1041,7 +1075,7 @@ public class RPCView extends View {
 						+ " resulting factor=" + mScaleFactor);
 			}
 			invalidate(); // Show resized bitmap
-			
+
 			// send new size to client
 			if (mBlueDisplayContext.mSerialService != null && aSendToClient) {
 				mBlueDisplayContext.mSerialService.writeTwoIntegerEvent(SerialService.EVENT_REDRAW, mCurrentCanvasWidth,

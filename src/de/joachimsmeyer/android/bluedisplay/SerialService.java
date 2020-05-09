@@ -168,13 +168,13 @@ public class SerialService {
 			if (mNeedUpdateViewMessage) {
 				mHandler.sendEmptyMessage(BlueDisplay.MESSAGE_UPDATE_VIEW);
 				mNeedUpdateViewMessage = false;
-				if (MyLog.isVERBOSE()) {
+				if (MyLog.isDEVELOPMENT_TESTING()) {
 					// Output length
 					Log.v(LOG_TAG, "Send MESSAGE_UPDATE_VIEW. Bytes to process=" + tBytesInBufferToProcess);
 				}
 			} else {
-				if (MyLog.isDEVELOPMENT_TESTING()) {
-					Log.d(LOG_TAG, "skip update view message tBytesInBufferToProcess=" + tBytesInBufferToProcess);
+				if (MyLog.isDEVELOPMENT_TESTING() && MyLog.isVERBOSE()) {
+					Log.v(LOG_TAG, "skip update view message tBytesInBufferToProcess=" + tBytesInBufferToProcess);
 				}
 			}
 		}
@@ -734,21 +734,31 @@ public class SerialService {
 		return tByte;
 	}
 
+	public static final int RPCVIEW_DO_NOTHING = 0; // No data in buffer, no need for draw -> request trigger from socket.
+	public static final int RPCVIEW_DO_WAIT = 1; // We had data, but not a complete command, so rendering makes no sense, wait and
+													// call again.
+	public static final int RPCVIEW_DO_DRAW = 2; // The canvas should be rendered, and we have no more commands -> draw and request
+													// new trigger.
+	public static final int RPCVIEW_DO_DRAW_AND_CALL_AGAIN = 3; // The canvas should be rendered, but we may have more data, so try
+																// it again
+
+	// after rendering -> call invalidate().
+
 	/**
 	 * Search the input buffer for valid commands and call interpretCommand() as long as there is data available.
 	 * 
 	 * @param aRPCView
 	 * @return true if we have more data in the buffer but want to redraw now, e.g. after a FUNCTION_DRAW_CHART command.
 	 */
-	boolean searchCommand(RPCView aRPCView) {
+	int searchCommand(RPCView aRPCView) {
 		if (inBufferReadingLock || (mReceiveBufferOutIndex == mReceiveBufferInIndex)) {
 			if (MyLog.isVERBOSE()) {
 				Log.v(LOG_TAG, "searchCommand just returns. No buffer content. Lock=" + inBufferReadingLock + " BufferInIndex="
 						+ mReceiveBufferInIndex);
 			}
-			return false;
+			return RPCVIEW_DO_NOTHING;
 		}
-		boolean tRetval = false;
+		int tRetval = RPCVIEW_DO_WAIT;
 		long tStart = System.nanoTime(); // We require it as nanos, because we compute the mStatisticNanoTimeForCommands with it
 		long tNanosForChart = 0;
 		inBufferReadingLock = true;
@@ -801,7 +811,7 @@ public class SerialService {
 							inBufferReadingLock = false;
 							Log.e(LOG_TAG, "Sync Token not found util end of buffer. End searchCommand. Out=" + tStartOut + "->"
 									+ mReceiveBufferOutIndex + " In=" + tStartIn + "->" + mReceiveBufferInIndex);
-							return false;
+							return RPCVIEW_DO_NOTHING;
 						}
 						if (!MyLog.isVERBOSE()) {
 							/*
@@ -872,7 +882,7 @@ public class SerialService {
 				for (i = 0; i < tLengthReceived; i++) {
 					mDataBuffer[i] = getByteFromBuffer();
 				}
-				if (MyLog.isDEVELOPMENT_TESTING()) {
+				if (MyLog.isDEVELOPMENT_TESTING() && MyLog.isVERBOSE()) {
 					StringBuilder tData = new StringBuilder("Data=");
 					int tValue;
 					for (i = 0; i < tLengthReceived; i++) {
@@ -894,12 +904,16 @@ public class SerialService {
 				 */
 				searchStateInputLengthToWaitFor = MIN_COMMAND_SIZE;
 				aRPCView.interpretCommand(tCommand, mParameters, tParamsLength, mDataBuffer, null, tLengthReceived);
+				tRetval = RPCVIEW_DO_DRAW;
 				if (tCommand == RPCView.FUNCTION_DRAW_CHART || tCommand == RPCView.FUNCTION_DRAW_CHART_WITHOUT_DIRECT_RENDERING) {
 					mStatisticNumberOfReceivedChartCommands++;
 					tNanosForChart += System.nanoTime() - tStart1;
 					if (tCommand == RPCView.FUNCTION_DRAW_CHART) {
+						if (getBufferBytesAvailable() > 0) {
+							// We still have bytes in the buffer so call again
+							tRetval = RPCVIEW_DO_DRAW_AND_CALL_AGAIN;
+						}
 						// break in order to draw a chart directly
-						tRetval = true;
 						break;
 					}
 				} else {
@@ -912,7 +926,7 @@ public class SerialService {
 					}
 					Log.w(LOG_TAG, "Return searchCommand() prematurely after 0.5 seconds");
 					// break after 0.5 seconds to enable drawing of the bitmap
-					tRetval = true;
+					tRetval = RPCVIEW_DO_DRAW_AND_CALL_AGAIN;
 					break;
 				}
 
@@ -927,7 +941,7 @@ public class SerialService {
 					tByte = getByteFromBuffer();
 					mParameters[i] = convert2BytesToInt(tByte, getByteFromBuffer());
 				}
-				if (MyLog.isDEVELOPMENT_TESTING()) {
+				if (MyLog.isDEVELOPMENT_TESTING() && MyLog.isVERBOSE()) {
 					// Output parameter buffer as short hex values
 					StringBuilder tParamsHex = new StringBuilder("Params=");
 					int tValue;
@@ -946,14 +960,17 @@ public class SerialService {
 					aRPCView.interpretCommand(tCommand, mParameters, tParamsLength, null, null, 0);
 					mStatisticNumberOfReceivedCommands++;
 					if (tCommand == RPCView.FUNCTION_DRAW_DISPLAY) {
+						if (getBufferBytesAvailable() > 0) {
+							// We still have bytes in the buffer so call again
+							tRetval = RPCVIEW_DO_DRAW_AND_CALL_AGAIN;
+						}
 						// break in order to draw the bitmap as requested by FUNCTION_DRAW_DISPLAY
-						tRetval = true;
 						break;
 					}
 
 					if ((System.nanoTime() - tStart) > MAX_DRAW_INTERVAL_NANOS) {
 						Log.w(LOG_TAG, "Return searchCommand() prematurely after 0.5 seconds to enable display refresh");
-						tRetval = true;
+						tRetval = RPCVIEW_DO_DRAW_AND_CALL_AGAIN;
 						break;
 					}
 				} else {
