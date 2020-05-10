@@ -354,6 +354,7 @@ public:
     void setLongTouchDownTimeout(uint16_t aLongTouchDownTimeoutMillis);
 
     void clearDisplay(color16_t aColor = COLOR_WHITE);
+    void clearDisplayOptional(color16_t aColor = COLOR_WHITE);
     void drawDisplayDirect(void);
     void setScreenOrientationLock(uint8_t aLockMode);
 

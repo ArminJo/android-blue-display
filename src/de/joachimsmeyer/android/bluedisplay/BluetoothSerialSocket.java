@@ -5,7 +5,7 @@
  * 	It also implements basic GUI elements as buttons and sliders.
  * 	It sends touch or GUI callback events over Bluetooth back to Arduino.
  * 
- *  Copyright (C) 2014  Armin Joachimsmeyer
+ *  Copyright (C) 2014-2020  Armin Joachimsmeyer
  *  armin.joachimsmeyer@gmail.com
  *  
  * 	This file is part of BlueDisplay.
@@ -222,7 +222,11 @@ public class BluetoothSerialSocket {
 		// Send a failure message back to the Activity
 		Message msg = mHandler.obtainMessage(BlueDisplay.MESSAGE_TOAST);
 		Bundle bundle = new Bundle();
-		bundle.putString(BlueDisplay.TOAST, mBlueDisplayContext.getString(R.string.toast_unable_to_connect) + " " + aName);
+		if(aName != null) {
+			bundle.putString(BlueDisplay.TOAST, mBlueDisplayContext.getString(R.string.toast_unable_to_connect) + " " + aName);
+		} else {
+			bundle.putString(BlueDisplay.TOAST, mBlueDisplayContext.getString(R.string.toast_unable_to_connect));
+		}
 		msg.setData(bundle);
 		mHandler.sendMessage(msg);
 	}

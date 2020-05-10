@@ -5,7 +5,7 @@
     <string name="alert_dialog_ok">OK</string>
     <string name="alert_dialog_cancel">Abbruch</string>
     <string name="toast_connected_to">Verbunden zu</string>
-    <string name="toast_unable_to_connect">Verbindung nicht möglich zu</string>
+    <string name="toast_unable_to_connect">Verbindung nicht möglich zu Bluetooth device</string>
     <string name="toast_connection_lost">Verbindung abgebrochen zu</string>
 
     <!-- Options Menu -->

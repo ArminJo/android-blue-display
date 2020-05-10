@@ -2,9 +2,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="de.joachimsmeyer.android.bluedisplay"
     android:installLocation="auto"
-    android:versionCode="16"
+    android:versionCode="17"
     android:versionName="@string/app_version" >
 
+    <!-- versionCode="17" => Version 4.3 -->
     <!-- versionCode="16" => Version 4.2 -->
     <!-- versionCode="15" => Version 4.1 -->
     <!-- versionCode="14" => Version 4.0 -->

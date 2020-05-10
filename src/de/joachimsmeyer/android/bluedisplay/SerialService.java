@@ -5,7 +5,7 @@
  * 	It also implements basic GUI elements as buttons and sliders.
  * 	It sends touch or GUI callback events over Bluetooth back to Arduino.
  * 
- *  Copyright (C) 2014  Armin Joachimsmeyer
+ *  Copyright (C) 2014-2020  Armin Joachimsmeyer
  *  armin.joachimsmeyer@gmail.com
  *  
  * 	This file is part of BlueDisplay.
@@ -68,8 +68,7 @@ public class SerialService {
 	public static final int SIZE_OF_DEBUG_BUFFER = 16;
 	byte[] mHexOutputTempBuffer = new byte[SIZE_OF_DEBUG_BUFFER]; // holds one output line for verbose HEX output
 	int mHexOutputTempBufferCurrentIndex = 0;
-	// Forces the end of writing to bitmap after 0.5 seconds and thus allow
-	// bitmap to be displayed
+	// Forces the end of writing to bitmap after 0.5 seconds and thus allow bitmap to be displayed
 	private static final long MAX_DRAW_INTERVAL_NANOS = 500000000;
 
 	// Statistics
@@ -125,7 +124,7 @@ public class SerialService {
 	}
 
 	/*
-	 * Handle statistics, buffer overflow, buffer wrap around.
+	 * Called by BT or USB driver thread. Handle statistics, buffer overflow, buffer wrap around.
 	 */
 	void handleReceived(int aReadLength) {
 
@@ -136,7 +135,7 @@ public class SerialService {
 			int tOutIndex = mReceiveBufferOutIndex;
 			mStatisticNumberOfReceivedBytes += aReadLength;
 			mReceiveBufferInIndex += aReadLength;
-			int tBytesInBufferToProcess = getBufferBytesAvailable();
+			int tBytesInBuffer = getBufferBytesAvailable();
 			if (tOldInIndex < tOutIndex && mReceiveBufferInIndex > tOutIndex) {
 				// input index overtakes out index
 				MyLog.e(LOG_TAG, "Buffer overflow! InIndex=" + mReceiveBufferInIndex);
@@ -150,7 +149,7 @@ public class SerialService {
 				mStatisticNumberOfBufferWrapArounds++;
 				if (MyLog.isVERBOSE()) {
 					// Output length
-					Log.v(LOG_TAG, "Buffer wrap around " + (mInputBufferWrapAroundIndex - tOutIndex) + " bytes unprocessed");
+					Log.v(LOG_TAG, "Buffer wrap around. Bytes in buffer=" + (mInputBufferWrapAroundIndex - tOutIndex));
 				}
 				if (mReceiveBufferInIndex > tOutIndex) {
 					// After wrap bigger than out index
@@ -162,19 +161,15 @@ public class SerialService {
 				Log.v(LOG_TAG, "Read length=" + aReadLength + " BufferInIndex=" + mReceiveBufferInIndex);
 			}
 
-			/*
-			 * Do not send message if searchCommand is just running or will be running because of a former message.
-			 */
-			if (mNeedUpdateViewMessage) {
+			if (mRequireUpdateViewMessage) {
 				mHandler.sendEmptyMessage(BlueDisplay.MESSAGE_UPDATE_VIEW);
-				mNeedUpdateViewMessage = false;
+				mRequireUpdateViewMessage = false;
 				if (MyLog.isDEVELOPMENT_TESTING()) {
-					// Output length
-					Log.v(LOG_TAG, "Send MESSAGE_UPDATE_VIEW. Bytes to process=" + tBytesInBufferToProcess);
+					Log.v(LOG_TAG, "Send MESSAGE_UPDATE_VIEW. Bytes in buffer=" + tBytesInBuffer);
 				}
 			} else {
 				if (MyLog.isDEVELOPMENT_TESTING() && MyLog.isVERBOSE()) {
-					Log.v(LOG_TAG, "skip update view message tBytesInBufferToProcess=" + tBytesInBufferToProcess);
+					Log.v(LOG_TAG, "No required to send message MESSAGE_UPDATE_VIEW. Bytes in buffer=" + tBytesInBuffer);
 				}
 			}
 		}
@@ -209,22 +204,22 @@ public class SerialService {
 
 		tReturn += "Buffer wrap arounds=" + mStatisticNumberOfBufferWrapArounds + "\n";
 		int tInputBufferOutIndex = mReceiveBufferOutIndex;
-		int tBytes = getBufferBytesAvailable();
+		int tBytesInBuffer = getBufferBytesAvailable();
 		String tSearchStateDataLengthToWaitForString = "";
 		if (searchStateInputLengthToWaitFor > MIN_MESSAGE_SIZE) {
 			tSearchStateDataLengthToWaitForString = ", waited for " + searchStateInputLengthToWaitFor;
 		}
 		tReturn += "InputBuffer: size=" + SIZE_OF_IN_BUFFER + ", in=" + mReceiveBufferInIndex + ", out=" + tInputBufferOutIndex
-				+ ", not processed=" + tBytes + tSearchStateDataLengthToWaitForString + "\n";
+				+ ", not processed=" + tBytesInBuffer + tSearchStateDataLengthToWaitForString + "\n";
 		if (MyLog.isDEBUG()) {
-			if (tBytes > 0) {
-				if (tBytes > 20) {
-					tBytes = 20;
+			if (tBytesInBuffer > 0) {
+				if (tBytesInBuffer > 20) {
+					tBytesInBuffer = 20;
 				}
 				// output content but max. 20 bytes
 				StringBuilder tContent = new StringBuilder(5 * 24);
 				int tValue;
-				for (int i = 0; i < tBytes; i++) {
+				for (int i = 0; i < tBytesInBuffer; i++) {
 					tContent.append(" 0x");
 					tValue = mBigReceiveBuffer[tInputBufferOutIndex + i];
 					tContent.append(Integer.toHexString(tValue & 0xFF));
@@ -643,7 +638,7 @@ public class SerialService {
 	 * To signal BT receive thread, that invalidate() message should be sent on next read. If once sent it triggers invalidate(),
 	 * which triggers onDraw(), which sets it if not calling invalidate().
 	 */
-	volatile boolean mNeedUpdateViewMessage = true;
+	volatile boolean mRequireUpdateViewMessage = true;
 
 	/*
 	 * state between two searchCommand() calls
@@ -759,7 +754,8 @@ public class SerialService {
 			return RPCVIEW_DO_NOTHING;
 		}
 		int tRetval = RPCVIEW_DO_WAIT;
-		long tStart = System.nanoTime(); // We require it as nanos, because we compute the mStatisticNanoTimeForCommands with it
+		long tStartOfSearchCommand = System.nanoTime(); // We require it as nanos, because we compute the
+														// mStatisticNanoTimeForCommands with it
 		long tNanosForChart = 0;
 		inBufferReadingLock = true;
 		byte tCommand = 0;
@@ -772,12 +768,14 @@ public class SerialService {
 		int tStartOut = mReceiveBufferOutIndex;
 
 		/*
-		 * 2 seconds timeout for data messages which does not arrive (because of reprogramming the client and misinterpreting the
-		 * program data)
+		 * While reprogramming the client we also interpret this data, since it is sent over the same Serial line. But in this case
+		 * we tend to misinterpreting the data, since it is not meant for BlueDisplay. Sometimes we misinterpret it as a command
+		 * with a big chunk of data, but the data will of course not be delivered. So we introduced a 2 seconds timeout for data to
+		 * arrive. Otherwise we start a fresh scan.
 		 */
 		long tCurrentNanos = System.nanoTime();
 		if (searchStateInputLengthToWaitFor > MIN_MESSAGE_SIZE && getBufferBytesAvailable() < searchStateInputLengthToWaitFor) {
-			// here we wait for a bigger chunk of data, but it was not completely received yet
+			// Here we assume that we wait for a big chunk of data, but it was not completely received yet
 			if (sTimestampOfLastDataWait + 2000000000 < tCurrentNanos) {
 				// reset state and continue with searching for sync token
 				searchStateInputLengthToWaitFor = MIN_COMMAND_SIZE;
@@ -789,7 +787,8 @@ public class SerialService {
 		}
 
 		/*
-		 * Now the available bytes are more than the number we wait for (e.g. MIN_COMMAND_SIZE or MIN_MESSAGE_SIZE or data size)
+		 * Now the available bytes are more than the number we wait for (e.g. MIN_COMMAND_SIZE or MIN_MESSAGE_SIZE or data size) so
+		 * we have a chance, that we received a complete.
 		 */
 		while (getBufferBytesAvailable() >= searchStateInputLengthToWaitFor) {
 			if (searchStateMustBeLoaded) {
@@ -799,29 +798,17 @@ public class SerialService {
 				tCommand = searchStateCommand;
 				tParamsLength = searchStateParamsLength;
 				searchStateMustBeLoaded = false;
+				if (MyLog.isVERBOSE()) {
+					MyLog.v(LOG_TAG, "Restore previous state");
+				}
 			} else {
 
 				/*
-				 * check for SYNC Token
+				 * Scan for SYNC token. Here we expect the buffer to start with a sync token.
 				 */
-				do {
-					tByte = getByteFromBuffer();
-					if (tByte != SYNC_TOKEN) {
-						if (mReceiveBufferOutIndex == mReceiveBufferInIndex) {
-							inBufferReadingLock = false;
-							Log.e(LOG_TAG, "Sync Token not found util end of buffer. End searchCommand. Out=" + tStartOut + "->"
-									+ mReceiveBufferOutIndex + " In=" + tStartIn + "->" + mReceiveBufferInIndex);
-							return RPCVIEW_DO_NOTHING;
-						}
-						if (!MyLog.isVERBOSE()) {
-							/*
-							 * Do not output this at level verbose, since then RawData is output
-							 */
-							Log.w(LOG_TAG, "Byte=" + Integer.toHexString(tByte) + " at:" + mReceiveBufferOutIndex
-									+ " is no SYNC_TOKEN");
-						}
-					}
-				} while (tByte != SYNC_TOKEN);
+				if (!scanBufferForSyncToken(tStartIn, tStartOut)) {
+					return RPCVIEW_DO_NOTHING;
+				}
 
 				/*
 				 * Read command token from InputStream
@@ -829,33 +816,45 @@ public class SerialService {
 				tCommandReceived = getByteFromBuffer();
 
 				/*
-				 * read parameter length
+				 * Read parameter/data length
 				 */
 				tByte = getByteFromBuffer();
 				tLengthReceived = convert2BytesToInt(tByte, getByteFromBuffer());
 
-				if (MyLog.isVERBOSE()) {
-					if (tCommandReceived <= RPCView.INDEX_LAST_FUNCTION_DATAFIELD) {
+				if (tCommandReceived <= RPCView.INDEX_LAST_FUNCTION_DATAFIELD) {
+					/*
+					 * Data length received
+					 */
+					if (MyLog.isVERBOSE()) {
 						MyLog.v(LOG_TAG, "Data: length=" + tLengthReceived + " at ptr=" + (mReceiveBufferOutIndex - 1));
-					} else {
-						MyLog.v(LOG_TAG, "Command=0x" + Integer.toHexString(tCommandReceived) + " length=" + tLengthReceived
-								+ " at ptr=" + (mReceiveBufferOutIndex - 1));
+					}
+					// Plausi
+					if (tLengthReceived > mDataBuffer.length) {
+						MyLog.e(LOG_TAG,
+								"DataLength of " + tLengthReceived + " wrong. Command=0x" + Integer.toHexString(tCommandReceived)
+										+ " Out=" + mReceiveBufferOutIndex);
+						continue;
+					}
+
+				} else {
+					/*
+					 * Parameter length received
+					 */
+					if (MyLog.isVERBOSE()) {
+						MyLog.v(LOG_TAG, "Command=0x" + Integer.toHexString(tCommandReceived) + " ParameterLength="
+								+ tLengthReceived + " at ptr=" + (mReceiveBufferOutIndex - 1));
+					}
+					// Plausi
+					if (tLengthReceived > MAX_NUMBER_OF_PARAMS * 2) {
+						MyLog.e(LOG_TAG,
+								"ParameterLength of " + tLengthReceived + " wrong. Command=0x"
+										+ Integer.toHexString(tCommandReceived) + " Out=" + mReceiveBufferOutIndex);
+						continue;
 					}
 				}
 
 				/*
-				 * Plausi for tLengthReceived
-				 */
-				if ((tCommandReceived <= RPCView.INDEX_LAST_FUNCTION_DATAFIELD && tLengthReceived > mDataBuffer.length)
-						|| (tCommandReceived > RPCView.INDEX_LAST_FUNCTION_DATAFIELD && tLengthReceived > MAX_NUMBER_OF_PARAMS * 2)) {
-					MyLog.e(LOG_TAG,
-							"ParamsLength of " + tLengthReceived + " wrong. Command=0x" + Integer.toHexString(tCommandReceived)
-									+ " Out=" + mReceiveBufferOutIndex);
-					continue;
-				}
-
-				/*
-				 * Save state and return if not enough bytes are available in buffer
+				 * Save state and return if not enough bytes for data or command parameter are available in buffer
 				 */
 				if (getBufferBytesAvailable() < tLengthReceived) {
 					searchStateInputLengthToWaitFor = tLengthReceived;
@@ -865,20 +864,27 @@ public class SerialService {
 
 					searchStateMustBeLoaded = true;
 					if (MyLog.isVERBOSE()) {
-						Log.v(LOG_TAG, "Not enough data in buffer for a complete command");
+						if (tCommandReceived <= RPCView.INDEX_LAST_FUNCTION_DATAFIELD) {
+							Log.v(LOG_TAG, getBufferBytesAvailable() + "bytes in buffer, but " + tLengthReceived
+									+ " required for data field");
+						} else {
+							Log.v(LOG_TAG, getBufferBytesAvailable() + "bytes in buffer, but " + tLengthReceived
+									+ " required for command parameters");
+						}
 					}
 					break;
 				}
 			}
 
 			/*
-			 * All data available to interpret command or data
+			 * Now all bytes available to interpret command or data
 			 */
 			if (tCommandReceived <= RPCView.INDEX_LAST_FUNCTION_DATAFIELD) {
-				long tStart1 = System.nanoTime();
 				/*
 				 * Data buffer command
 				 */
+				long tStart1 = System.nanoTime();
+
 				for (i = 0; i < tLengthReceived; i++) {
 					mDataBuffer[i] = getByteFromBuffer();
 				}
@@ -900,18 +906,27 @@ public class SerialService {
 					Log.v(LOG_TAG, tData.toString());
 				}
 				/*
-				 * Now both command and data buffer filled
+				 * Now both command and data buffer filled -> interpret command.
 				 */
 				searchStateInputLengthToWaitFor = MIN_COMMAND_SIZE;
 				aRPCView.interpretCommand(tCommand, mParameters, tParamsLength, mDataBuffer, null, tLengthReceived);
 				tRetval = RPCVIEW_DO_DRAW;
 				if (tCommand == RPCView.FUNCTION_DRAW_CHART || tCommand == RPCView.FUNCTION_DRAW_CHART_WITHOUT_DIRECT_RENDERING) {
+					// do statistics
 					mStatisticNumberOfReceivedChartCommands++;
 					tNanosForChart += System.nanoTime() - tStart1;
+
 					if (tCommand == RPCView.FUNCTION_DRAW_CHART) {
-						if (getBufferBytesAvailable() > 0) {
-							// We still have bytes in the buffer so call again
+						int tBufferBytesAvailable = getBufferBytesAvailable();
+						if (tBufferBytesAvailable > 0) {
+							// We still have bytes in the buffer, so call again
 							tRetval = RPCVIEW_DO_DRAW_AND_CALL_AGAIN;
+							if (tBufferBytesAvailable > 2000) {
+								/*
+								 * Scan for clear screen command and skip content until it
+								 */
+								scanBufferForClearDisplayOptionalCommandAndSkip(tBufferBytesAvailable);
+							}
 						}
 						// break in order to draw a chart directly
 						break;
@@ -919,11 +934,9 @@ public class SerialService {
 				} else {
 					mStatisticNumberOfReceivedCommands++;
 				}
-				if ((System.nanoTime() - tStart) > MAX_DRAW_INTERVAL_NANOS) {
-					if (getBufferBytesAvailable() > SIZE_OF_IN_BUFFER / 2) {
-						// TODO skip requests
 
-					}
+				if ((System.nanoTime() - tStartOfSearchCommand) > MAX_DRAW_INTERVAL_NANOS) {
+					// Safety net, never seen this.
 					Log.w(LOG_TAG, "Return searchCommand() prematurely after 0.5 seconds");
 					// break after 0.5 seconds to enable drawing of the bitmap
 					tRetval = RPCVIEW_DO_DRAW_AND_CALL_AGAIN;
@@ -931,11 +944,11 @@ public class SerialService {
 				}
 
 			} else /* Data buffer command */{
+				/*
+				 * Command parameters here
+				 */
 				tParamsLength = tLengthReceived / 2;
 				tCommand = tCommandReceived;
-				/*
-				 * Parameters here
-				 */
 
 				for (i = 0; i < tParamsLength; i++) {
 					tByte = getByteFromBuffer();
@@ -968,7 +981,7 @@ public class SerialService {
 						break;
 					}
 
-					if ((System.nanoTime() - tStart) > MAX_DRAW_INTERVAL_NANOS) {
+					if ((System.nanoTime() - tStartOfSearchCommand) > MAX_DRAW_INTERVAL_NANOS) {
 						Log.w(LOG_TAG, "Return searchCommand() prematurely after 0.5 seconds to enable display refresh");
 						tRetval = RPCVIEW_DO_DRAW_AND_CALL_AGAIN;
 						break;
@@ -999,14 +1012,78 @@ public class SerialService {
 			}
 		} /* while */
 		if (MyLog.isVERBOSE()) {
-			Log.v(LOG_TAG, "End searchCommand. Out=" + tStartOut + "->" + mReceiveBufferOutIndex + " = "
-					+ (mReceiveBufferOutIndex - tStartOut) + "  In=" + tStartIn + "->" + mReceiveBufferInIndex + " = "
-					+ (mReceiveBufferInIndex - tStartIn) + " | " + (mReceiveBufferInIndex - mReceiveBufferOutIndex));
+			Log.v(LOG_TAG, "End searchCommand. Out=" + tStartOut + "->" + mReceiveBufferOutIndex + "="
+					+ (mReceiveBufferOutIndex - tStartOut) + " In=" + tStartIn + "->" + mReceiveBufferInIndex + "="
+					+ (mReceiveBufferInIndex - tStartIn) + " bytes in buffer=" + (mReceiveBufferInIndex - mReceiveBufferOutIndex));
 		}
 		inBufferReadingLock = false;
-		mStatisticNanoTimeForCommands += System.nanoTime() - tStart - tNanosForChart;
+		mStatisticNanoTimeForCommands += System.nanoTime() - tStartOfSearchCommand - tNanosForChart;
 		mStatisticNanoTimeForChart += tNanosForChart;
 		return tRetval;
+	}
+
+	/*
+	 * Scan for SYNC token. Here we expect the buffer to start with a sync token.
+	 */
+	private boolean scanBufferForSyncToken(int aStartIn, int aStartOut) {
+		byte tByte;
+		do {
+			tByte = getByteFromBuffer();
+			if (tByte != SYNC_TOKEN) {
+				if (mReceiveBufferOutIndex == mReceiveBufferInIndex) {
+					inBufferReadingLock = false;
+					Log.e(LOG_TAG, "Sync Token not found util end of buffer. End searchCommand. Out=" + aStartOut + "->"
+							+ mReceiveBufferOutIndex + " In=" + aStartIn + "->" + mReceiveBufferInIndex);
+					return false;
+				}
+				if (!MyLog.isVERBOSE()) {
+					/*
+					 * Do not output this at level verbose, since at this level RawData is output
+					 */
+					Log.w(LOG_TAG, "Byte=" + Integer.toHexString(tByte) + " at:" + mReceiveBufferOutIndex + " is no SYNC_TOKEN");
+				}
+			}
+		} while (tByte != SYNC_TOKEN);
+		return true;
+	}
+
+	/*
+	 * Scan for next clear screen command. return true if found
+	 */
+	private void scanBufferForClearDisplayOptionalCommandAndSkip(int aBytesToScan) {
+		int tByteCount = 0;
+		int tBufferIndex = mReceiveBufferOutIndex;
+		byte tByte;
+		while (tByteCount < (aBytesToScan - 1)) {
+			int tSyncIndex = tBufferIndex;
+			tByte = mBigReceiveBuffer[tBufferIndex];
+			tBufferIndex++;
+			tByteCount++;
+			// wrap around
+			if (mReceiveBufferInIndex >= SIZE_OF_IN_BUFFER) {
+				tBufferIndex = 0;
+			}
+			if (tByte == SYNC_TOKEN) {
+				tByte = mBigReceiveBuffer[tBufferIndex];
+				if (tByte == RPCView.FUNCTION_CLEAR_DISPLAY_OPTIONAL) {
+					/*
+					 * Found clear display optional -> skip buffer content and change command to clear buffer.
+					 */
+					mBigReceiveBuffer[tBufferIndex] = RPCView.FUNCTION_CLEAR_DISPLAY;
+					mReceiveBufferOutIndex = tSyncIndex;
+					Log.w(LOG_TAG, "Skip " + (tByteCount - 2)
+							+ " bytes until next CLEAR_DISPLAY_OPTIONAL command. Bytes in buffer==" + aBytesToScan + "->"
+							+ getBufferBytesAvailable());
+					break;
+				}
+				tBufferIndex++;
+				tByteCount++;
+				// wrap around
+				if (mReceiveBufferInIndex >= SIZE_OF_IN_BUFFER) {
+					tBufferIndex = 0;
+				}
+			}
+		}
 	}
 
 	public static int convert2BytesToInt(byte aLSB, byte aMSB) {

@@ -40,6 +40,10 @@ For this, change the example baudrate by deactivating the line `#define HC_05_BA
 AND change the BT-Module baudrate e.g. by using the BTModuleProgrammer.ino example.
 
 # Revision History
+### Version 4.3
+- New command FUNCTION_CLEAR_DISPLAY_OPTIONAL to enable resynchronization of slow displays.
+- Bluetooth random delay detection.
+
 ### Version 4.2
 - Swipe from the left border in application full screen mode opens the options menu.
 - Removed unnecessary message on no data received under certain circumstances.

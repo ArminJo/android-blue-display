@@ -289,8 +289,9 @@ public class RPCView extends View {
 	/*
 	 * Display functions
 	 */
-	private final static int FUNCTION_CLEAR_DISPLAY = 0x10;
+	public final static int FUNCTION_CLEAR_DISPLAY = 0x10;
 	public final static int FUNCTION_DRAW_DISPLAY = 0x11;
+	public final static int FUNCTION_CLEAR_DISPLAY_OPTIONAL = 0x12; // used for skipping commands in buffer
 	// with 3 parameter
 	private final static int FUNCTION_DRAW_PIXEL = 0x14;
 	// 6 parameter
@@ -524,7 +525,7 @@ public class RPCView extends View {
 					// so trigger next call of OnDraw
 					invalidate();
 					if (MyLog.isDEVELOPMENT_TESTING()) {
-						Log.v(LOG_TAG, "Call invalidate() to redraw again");
+						Log.v(LOG_TAG, "Call invalidate() to redraw again. Bytes in buffer=" + tBytesInBuffer);
 					}
 				} else {
 					if (tResult == SerialService.RPCVIEW_DO_WAIT) {
@@ -536,7 +537,7 @@ public class RPCView extends View {
 							tSumWaitDelay += 20;
 							if (tBytesInBuffer == mBlueDisplayContext.mSerialService.getBufferBytesAvailable()
 									&& tSumWaitDelay > 100) {
-								MyLog.e(LOG_TAG, "Read delay of more than 100 ms for missing bytes. Bytes in Buffer="
+								MyLog.e(LOG_TAG, "Read delay of more than 100 ms for missing bytes. Bytes in buffer="
 										+ mBlueDisplayContext.mSerialService.getBufferBytesAvailable());
 								tResult = SerialService.RPCVIEW_DO_NOTHING; // Just request new trigger
 							}
@@ -549,9 +550,9 @@ public class RPCView extends View {
 						/*
 						 * Request new trigger from BT or USB socket, if new data has arrived
 						 */
-						mBlueDisplayContext.mSerialService.mNeedUpdateViewMessage = true;
+						mBlueDisplayContext.mSerialService.mRequireUpdateViewMessage = true;
 						if (MyLog.isDEVELOPMENT_TESTING()) {
-							Log.v(LOG_TAG, "Set mNeedUpdateViewMessage to true. Bytes in Buffer="
+							Log.v(LOG_TAG, "Set mRequireUpdateViewMessage to true. Bytes in buffer="
 									+ mBlueDisplayContext.mSerialService.getBufferBytesAvailable());
 						}
 					}
@@ -713,8 +714,8 @@ public class RPCView extends View {
 					float tDeltaY = tCurrentY - mTouchDownPositionY[tActionIndex];
 					tDistanceFromTouchDown = Math.max(Math.abs(tDeltaX), Math.abs(tDeltaY));
 					/*
-					 * SWIPE only if move is greater than SWIPE_DETECTION_LOWER_LIMIT. Otherwise log touches are often
-					 * interpreted as micro-swipes. If SWIPE starts on a button then swipe must be even greater.
+					 * SWIPE only if move is greater than SWIPE_DETECTION_LOWER_LIMIT. Otherwise log touches are often interpreted
+					 * as micro-swipes. If SWIPE starts on a button then swipe must be even greater.
 					 */
 					if ((mTouchStartsOnButtonNumber[tActionIndex] < 0 && tDistanceFromTouchDown > SWIPE_DETECTION_LOWER_LIMIT)
 							|| tDistanceFromTouchDown > (4 * SWIPE_DETECTION_LOWER_LIMIT)) {
@@ -1536,6 +1537,10 @@ public class RPCView extends View {
 					tFilterFlag = aParameters[3];
 				}
 				mBlueDisplayContext.mSensorEventListener.setSensor(aParameters[0], tDoActivate, aParameters[2], tFilterFlag);
+				break;
+
+			case FUNCTION_CLEAR_DISPLAY_OPTIONAL:
+				// Do nothing, it is interpreted directly at SearchCommand as sync point for skipping command buffer
 				break;
 
 			case FUNCTION_CLEAR_DISPLAY:

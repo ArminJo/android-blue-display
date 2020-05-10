@@ -58,12 +58,12 @@
  * Running
  * - Bluetooth or USB socket receives data
  * - It calls mSerialService.handleReceived(tReadLength), which puts data into big buffer.
- * - If UI is not working (mNeedUpdateViewMessage) it sends a Message which calls invalidate().
+ * - If UI is not working (mRequireUpdateViewMessage) it sends a Message which calls invalidate().
  * - invalidate() triggers OnDraw(), which first calls searchCommand().
  *   - searchCommand() searches the buffer for a valid BlueDisplay command and calls interpretCommand().
  *   - interpretCommand() dispatches Button and Slider commands and interprets all others by itself.
  * - The bitmap of the canvas we use to draw is then copied into the canvas parameter provided by OnDraw().
- * - mNeedUpdateViewMessage is set to true.
+ * - mRequireUpdateViewMessage is set to true.
  * 
  * 
  * Deactivate
