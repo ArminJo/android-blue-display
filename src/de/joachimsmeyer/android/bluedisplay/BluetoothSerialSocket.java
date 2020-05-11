@@ -53,6 +53,7 @@ public class BluetoothSerialSocket {
 
 	private static final UUID SerialPortServiceClass_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
 
+	public static final int BT_READ_MAX_SIZE = 4096;
 	// Member fields
 	private final BluetoothAdapter mAdapter;
 	private final Handler mHandler;
@@ -411,7 +412,7 @@ public class BluetoothSerialSocket {
 					 * long break is not the maximum. Only the next or even later reads then returns the maximum bytes. It is
 					 * independent from using secure or insecure connection.
 					 */
-					tReadLength = mmInStream.read(mSerialService.mBigReceiveBuffer, mSerialService.mReceiveBufferInIndex, 4096);
+					tReadLength = mmInStream.read(mSerialService.mBigReceiveBuffer, mSerialService.mReceiveBufferInIndex, BT_READ_MAX_SIZE);
 					if (MyLog.isDEVELOPMENT_TESTING()) {
 						long tReadDuration = System.currentTimeMillis() - tStartTimestampMillis;
 						Log.d(LOG_TAG, "Read duration=" + tReadDuration + "ms, length=" + tReadLength);

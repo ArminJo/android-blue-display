@@ -153,11 +153,6 @@ public class RPCView extends View {
 	 */
 	protected boolean mShowTouchCoordinates = false;
 	protected int mShowTouchCoordinatesLastStringLength = 19;
-	private final float SWIPE_DETECTION_LOWER_LIMIT = mCurrentViewWidth / 100; // around 10 to 20 pixel. Detect swipe if move is
-																				// greater than
-	private final float MICRO_MOVE_LIMIT_FOR_LONG_TOUCH_DOWN = SWIPE_DETECTION_LOWER_LIMIT; // 10 to 20 pixel to avoid killing of
-																							// long
-																							// touch recognition
 
 	public static boolean mDeviceListActivityLaunched = false; // to prevent multiple launches of DeviceListActivity()
 	private ScaleGestureDetector mScaleDetector;
@@ -651,7 +646,7 @@ public class RPCView extends View {
 			tDistanceFromTouchDown = Math.max(Math.abs(mTouchDownPositionX[tActionIndex] - tCurrentX),
 					Math.abs(mTouchDownPositionY[tActionIndex] - tCurrentY));
 			// Do not accept pseudo or micro moves as an event to disable long touch down recognition
-			if (tDistanceFromTouchDown < MICRO_MOVE_LIMIT_FOR_LONG_TOUCH_DOWN) {
+			if (tDistanceFromTouchDown < mCurrentViewWidth / 100) { // (mCurrentViewWidth / 100) -> around 10 to 20 pixel.
 				tMicroMoveDetected = true;
 			}
 			if (mSkipProcessingUntilTouchUpForButton[tActionIndex]) {
@@ -716,9 +711,10 @@ public class RPCView extends View {
 					/*
 					 * SWIPE only if move is greater than SWIPE_DETECTION_LOWER_LIMIT. Otherwise log touches are often interpreted
 					 * as micro-swipes. If SWIPE starts on a button then swipe must be even greater.
+					 * (mCurrentViewWidth / 100) -> around 10 to 20 pixel.
 					 */
-					if ((mTouchStartsOnButtonNumber[tActionIndex] < 0 && tDistanceFromTouchDown > SWIPE_DETECTION_LOWER_LIMIT)
-							|| tDistanceFromTouchDown > (4 * SWIPE_DETECTION_LOWER_LIMIT)) {
+					if ((mTouchStartsOnButtonNumber[tActionIndex] < 0 && tDistanceFromTouchDown > mCurrentViewWidth / 100)
+							|| tDistanceFromTouchDown > (mCurrentViewWidth / 25)) {
 						int tDeltaXUnscaled = (int) (tDeltaX / mScaleFactor);
 						int tDeltaYUnscaled = (int) (tDeltaY / mScaleFactor);
 						int tIsXDirection = 0;

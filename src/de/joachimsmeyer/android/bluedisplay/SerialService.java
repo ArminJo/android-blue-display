@@ -55,9 +55,12 @@ public class SerialService {
 	public static final int MIN_COMMAND_SIZE = 4; // command message with no parameter
 
 	public volatile byte[] mBigReceiveBuffer = new byte[SIZE_OF_IN_BUFFER];
-	volatile int mInputBufferWrapAroundIndex = 0; // first free byte
-													// after last byte in
-													// buffer
+	/*
+	 * Current end of buffer content. Last content byte + 1. Ranges from SIZE_OF_IN_BUFFER -
+	 * max(BluetoothSerialSocket.BT_READ_MAX_SIZE,SerialInputOutputManager.BUFSIZ) to SIZE_OF_IN_BUFFER
+	 */
+	volatile int mInputBufferWrapAroundIndex = SIZE_OF_IN_BUFFER;
+
 	volatile int mReceiveBufferInIndex; // first free byte
 	volatile int mReceiveBufferOutIndex; // first unprocessed byte
 
@@ -140,9 +143,13 @@ public class SerialService {
 				// input index overtakes out index
 				MyLog.e(LOG_TAG, "Buffer overflow! InIndex=" + mReceiveBufferInIndex);
 			}
-			if (mReceiveBufferInIndex >= SerialService.SIZE_OF_IN_BUFFER - SerialInputOutputManager.BUFSIZ) {
+
+			// check for wrap around
+			if (mReceiveBufferInIndex >= SerialService.SIZE_OF_IN_BUFFER
+					- Math.max(BluetoothSerialSocket.BT_READ_MAX_SIZE, SerialInputOutputManager.BUFSIZ)) {
 				/*
-				 * Buffer wrap around. Start new input at start of buffer and note new end of buffer in mInputBufferWrapAroundIndex
+				 * Not enough space after current mReceiveBufferInIndex for a complete reading of 4096 bytes from driver. Buffer
+				 * wrap around. Start new input at start of buffer and note new end of buffer in mInputBufferWrapAroundIndex
 				 */
 				mInputBufferWrapAroundIndex = mReceiveBufferInIndex;
 				mReceiveBufferInIndex = 0;
@@ -722,8 +729,9 @@ public class SerialService {
 		// clear processed content
 		mBigReceiveBuffer[mReceiveBufferOutIndex] = 0x00;
 		mReceiveBufferOutIndex++;
-		if (mInputBufferWrapAroundIndex > 0 && mReceiveBufferOutIndex >= mInputBufferWrapAroundIndex) {
-			mInputBufferWrapAroundIndex = 0;
+		if (mReceiveBufferOutIndex >= mInputBufferWrapAroundIndex) {
+			// do output wrap around and reset mInputBufferWrapAroundIndex
+			mInputBufferWrapAroundIndex = SIZE_OF_IN_BUFFER;
 			mReceiveBufferOutIndex = 0;
 		}
 		return tByte;
@@ -1052,17 +1060,29 @@ public class SerialService {
 	 */
 	private void scanBufferForClearDisplayOptionalCommandAndSkip(int aBytesToScan) {
 		int tByteCount = 0;
+		// initialize
 		int tBufferIndex = mReceiveBufferOutIndex;
-		byte tByte;
+		int tSyncInputBufferWrapAroundIndex = mInputBufferWrapAroundIndex;
+
 		while (tByteCount < (aBytesToScan - 1)) {
-			int tSyncIndex = tBufferIndex;
-			tByte = mBigReceiveBuffer[tBufferIndex];
-			tBufferIndex++;
+			// store sync values
+			int tIndexOfSyncToken = tBufferIndex;
+			int tWrapAroundIndexOfSyncToken = tSyncInputBufferWrapAroundIndex;
+
+			// get byte
+			byte tByte = mBigReceiveBuffer[tBufferIndex];
+
+			// advance pointers for next byte
 			tByteCount++;
+			tBufferIndex++;
 			// wrap around
-			if (mReceiveBufferInIndex >= SIZE_OF_IN_BUFFER) {
+			if (tBufferIndex >= mInputBufferWrapAroundIndex) {
 				tBufferIndex = 0;
+				// not totally threadsafe ;-)
+				tSyncInputBufferWrapAroundIndex = SIZE_OF_IN_BUFFER;
 			}
+			
+			// double check
 			if (tByte == SYNC_TOKEN) {
 				tByte = mBigReceiveBuffer[tBufferIndex];
 				if (tByte == RPCView.FUNCTION_CLEAR_DISPLAY_OPTIONAL) {
@@ -1070,17 +1090,22 @@ public class SerialService {
 					 * Found clear display optional -> skip buffer content and change command to clear buffer.
 					 */
 					mBigReceiveBuffer[tBufferIndex] = RPCView.FUNCTION_CLEAR_DISPLAY;
-					mReceiveBufferOutIndex = tSyncIndex;
+					mReceiveBufferOutIndex = tIndexOfSyncToken;
+					mInputBufferWrapAroundIndex = tWrapAroundIndexOfSyncToken;
 					Log.w(LOG_TAG, "Skip " + (tByteCount - 2)
 							+ " bytes until next CLEAR_DISPLAY_OPTIONAL command. Bytes in buffer==" + aBytesToScan + "->"
 							+ getBufferBytesAvailable());
 					break;
 				}
+				
+				// not the right command -> advance pointers for next byte
 				tBufferIndex++;
 				tByteCount++;
 				// wrap around
-				if (mReceiveBufferInIndex >= SIZE_OF_IN_BUFFER) {
+				if (tBufferIndex >= mInputBufferWrapAroundIndex) {
 					tBufferIndex = 0;
+					// not totally threadsafe ;-)
+					tSyncInputBufferWrapAroundIndex = SIZE_OF_IN_BUFFER;
 				}
 			}
 		}

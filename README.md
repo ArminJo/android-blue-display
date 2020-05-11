@@ -43,6 +43,7 @@ AND change the BT-Module baudrate e.g. by using the BTModuleProgrammer.ino examp
 ### Version 4.3
 - New command FUNCTION_CLEAR_DISPLAY_OPTIONAL to enable resynchronization of slow displays.
 - Bluetooth random delay detection.
+- Fixed bug for micro-swipe suppressing.
 
 ### Version 4.2
 - Swipe from the left border in application full screen mode opens the options menu.
