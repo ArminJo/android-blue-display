@@ -39,11 +39,21 @@ All examples initially use the baudrate of 9600. Especially the SimpleTouchScree
 For this, change the example baudrate by deactivating the line `#define HC_05_BAUD_RATE BAUD_9600` and activating `#define HC_05_BAUD_RATE BAUD_115200`.
 AND change the BT-Module baudrate e.g. by using the BTModuleProgrammer.ino example.
 
+# Sensor axis for an Arduino application
+Android axis are [defined for **natural screen orientation**](https://source.android.com/devices/sensors/sensor-types), which is portrait for my devices:
+- When the device lies flat on a table and its left side is down and right side is up or pushed on its left side toward the right, the X acceleration value is positive.
+- When the device lies flat on a table and its bottom side is down and top side is up or pushed on its bottom side toward the top, the Y acceleration value is positive.
+- When the device lies flat on a table, the acceleration value along Z is +9.81 (m/s^2).
+
+**The BlueDisplay application converts the axis, so that this definition holds for each screen orientation.**
+
 # Revision History
-### Version 4.3
+### Version 4.3 - work in progress
 - New command FUNCTION_CLEAR_DISPLAY_OPTIONAL to enable resynchronization of slow displays.
 - Bluetooth random delay detection.
 - Fixed bug for micro-swipe suppressing.
+- Added function SET_DEFAULT_COLOR_THRESHOLD.
+- Opening options menu by swipe now not restricted on full screen and connected.  
 
 ### Version 4.2
 - Swipe from the left border in application full screen mode opens the options menu.

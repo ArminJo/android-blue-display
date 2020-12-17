@@ -74,46 +74,10 @@
 #include "BDSlider.h" // for BDSliderHandle_t
 #endif
 
-#define VERSION_BLUE_DISPLAY "2.0.0"
+#define VERSION_BLUE_DISPLAY "2.2.0"
 #define VERSION_BLUE_DISPLAY_MAJOR 2
-#define VERSION_BLUE_DISPLAY_MINOR 0
-/*
- * Version 2.1.0
- * - Improved initCommunication and late connection handling.
- *
- * Version 2.0.0
- * - ESP32 and ESP8266 support added. External BT module needed for ESP8266.
- *
- * Version 1.3.0
- * - Added `sMillisOfLastReceivedBDEvent` for user timeout detection.
- * - Fixed bug in `debug(const char* aMessage, float aFloat)`.
- * - Added `*LOCK_SENSOR_LANDSCAPE` and `*LOCK_SENSOR_LANDSCAPE` in function `setScreenOrientationLock()`. Needs BD app version 4.2.
- * - Removed unused `mCurrentDisplayHeight` and `mCurrentDisplayWidth` member variables.
- * - Fixed bug in draw function from `drawByte` to `drawLong`.
- * - Added short `drawText` functions. Needs BD app version 4.2.
- *
- * Version 1.2.0
- * - Use type `Print *` instead of `Stream *`.
- * - New function `initSerial()`
- * - Changed parameter aTextSize to uint16_t also for AVR specific functions.
- *
- * This old version numbers corresponds to the version of the BlueDisplay app
- * Version 3.7
- * - Handling of no input for getNumber.
- * - Slider setScaleFactor() does not scale the current value, mostly delivered as initial value at init().
- * Version 3.6 connect, reconnect and autoconnect improved/added. Improved debug() command. Simplified Red/Green button handling.
- * Version 3.5 Slider scaling changed and unit value added.
- * Version 3.4
- *  - Timeout for data messages. Get number initial value fixed.
- *  - Bug autorepeat button in conjunction with UseUpEventForButtons fixed.
- * Version 3.3
- *  - Fixed silent tone bug for Android Lollipop and other bugs. Multiline text /r /n handling.
- *  - Android time accessible on Arduino. Debug messages as toasts. Changed create button.
- *  - Slider values scalable. GUI multi touch.Hex and ASCII output of received Bluetooth data at log level verbose.
- * Version 3.2 Improved tone and fullscreen handling. Internal refactoring. Bugfixes and minor improvements.
- * Version 3.1 Local display of received and sent commands for debug purposes.
- * Version 3.0 Android sensor accessible by Arduino.
- */
+#define VERSION_BLUE_DISPLAY_MINOR 2
+// The change log is at the bottom of the file
 
 /***************************
  * Origin 0.0 is upper left
@@ -125,19 +89,21 @@
 #define DISPLAY_DEFAULT_HEIGHT  DISPLAY_HALF_VGA_HEIGHT // value to use if not connected
 #define DISPLAY_DEFAULT_WIDTH   DISPLAY_HALF_VGA_WIDTH
 #define STRING_BUFFER_STACK_SIZE 32 // Size for buffer allocated on stack with "char tStringBuffer[STRING_BUFFER_STACK_SIZE]" for ...PGM() functions.
-#define STRING_BUFFER_STACK_SIZE_FOR_DEBUG_WITH_MESSAGE 34 // Size for buffer allocated on stack with "char tStringBuffer[STRING_BUFFER_STACK_SIZE_FOR_DEBUG]" for debug(const char* aMessage,...) functions.
+#define STRING_BUFFER_STACK_SIZE_FOR_DEBUG_WITH_MESSAGE 34 // Size for buffer allocated on stack with "char tStringBuffer[STRING_BUFFER_STACK_SIZE_FOR_DEBUG]" for debug(const char *aMessage,...) functions.
 
 /*
  * Some useful text sizes constants
  */
+#define TEXT_SIZE_8   8
+#define TEXT_SIZE_9   9
+#define TEXT_SIZE_10 10
 #define TEXT_SIZE_11 11
+#define TEXT_SIZE_12 12
 #define TEXT_SIZE_13 13
 #define TEXT_SIZE_14 14
 #define TEXT_SIZE_16 16
 #define TEXT_SIZE_18 18
-#define TEXT_SIZE_11 11
-#define TEXT_SIZE_12 12
-// for factor 2 of 8*12 font
+#define TEXT_SIZE_20 20
 #define TEXT_SIZE_22 22
 #define TEXT_SIZE_26 26
 // for factor 3 of 8*12 font
@@ -166,6 +132,10 @@
 #define TEXT_SIZE_10_HEIGHT 11
 #define TEXT_SIZE_11_HEIGHT 12
 #define TEXT_SIZE_12_HEIGHT 13
+#define TEXT_SIZE_14_HEIGHT 15
+#define TEXT_SIZE_16_HEIGHT 18
+#define TEXT_SIZE_18_HEIGHT 20
+#define TEXT_SIZE_20_HEIGHT 22
 #define TEXT_SIZE_22_HEIGHT 24
 #define TEXT_SIZE_33_HEIGHT 36
 #define TEXT_SIZE_44_HEIGHT 48
@@ -221,7 +191,7 @@ static const int BD_FLAG_FIRST_RESET_ALL = 0x01;
 //
 static const int BD_FLAG_TOUCH_BASIC_DISABLE = 0x02; // Do not send plain touch events (UP, DOWN, MOVE) if no button or slider was touched, send only button and slider events. -> Disables also touch moves.
 static const int BD_FLAG_ONLY_TOUCH_MOVE_DISABLE = 0x04; // Do not send MOVE, only UP and DOWN.
-static const int BD_FLAG_LONG_TOUCH_ENABLE = 0x08; // If long touch detection is needed. This delays the sending of plain DOWN Events.
+static const int BD_FLAG_LONG_TOUCH_ENABLE = 0x08; // If long touch detection is required. This delays the sending of plain DOWN Events.
 static const int BD_FLAG_USE_MAX_SIZE = 0x10;      // Use maximum display size for given geometry. -> Scale automatically to screen.
 
 /****************************************
@@ -238,59 +208,16 @@ static const int FLAG_SCREEN_ORIENTATION_LOCK_REVERSE_LANDSCAPE = 0x08;
 static const int FLAG_SCREEN_ORIENTATION_LOCK_REVERSE_PORTRAIT = 0x09;
 
 /**********************
- * Button
- *********************/
-// Flags for BUTTON_GLOBAL_SETTINGS
-static const int FLAG_BUTTON_GLOBAL_USE_DOWN_EVENTS_FOR_BUTTONS = 0x00; // Default
-static const int FLAG_BUTTON_GLOBAL_USE_UP_EVENTS_FOR_BUTTONS = 0x01;   // If swipe can start on a button, you need this.
-static const int FLAG_BUTTON_GLOBAL_SET_BEEP_TONE = 0x02;   // Beep on button touch
-
-// Flags for init
-static const int FLAG_BUTTON_NO_BEEP_ON_TOUCH = 0x00;
-static const int FLAG_BUTTON_DO_BEEP_ON_TOUCH = 0x01;  // Beep on this button touch
-static const int FLAG_BUTTON_TYPE_TOGGLE_RED_GREEN = 0x02; // Value true -> green, false -> red
-static const int FLAG_BUTTON_TYPE_AUTOREPEAT = 0x04;
-static const int FLAG_BUTTON_TYPE_TOGGLE_RED_GREEN_MANUAL_REFRESH = 0x0A; // Button must be manually drawn after event to show new caption/color
-
-#ifdef USE_BUTTON_POOL
-#define INTERNAL_FLAG_MASK 0x80
-#define FLAG_IS_ALLOCATED 0x80 // For use with get and releaseButton
-#endif
-
-/**********************
- * Slider
- *********************/
-// Flags for slider options
-static const int FLAG_SLIDER_VERTICAL = 0x00;
-static const int FLAG_SLIDER_VERTICAL_SHOW_NOTHING = 0x00;
-static const int FLAG_SLIDER_SHOW_BORDER = 0x01;
-// If set, ASCII value is printed along with change of bar value
-static const int FLAG_SLIDER_SHOW_VALUE = 0x02;
-static const int FLAG_SLIDER_IS_HORIZONTAL = 0x04;
-static const int FLAG_SLIDER_IS_INVERSE = 0x08;
-// If set,  bar (+ ASCII) value will be set by callback handler, not by touch
-static const int FLAG_SLIDER_VALUE_BY_CALLBACK = 0x10;
-static const int FLAG_SLIDER_IS_ONLY_OUTPUT = 0x20;
-
-// Flags for slider caption position
-static const int FLAG_SLIDER_CAPTION_ALIGN_LEFT_BELOW = 0x00;
-static const int FLAG_SLIDER_CAPTION_ALIGN_LEFT = 0x00;
-static const int FLAG_SLIDER_CAPTION_ALIGN_RIGHT = 0x01;
-static const int FLAG_SLIDER_CAPTION_ALIGN_MIDDLE = 0x02;
-static const int FLAG_SLIDER_CAPTION_BELOW = 0x00;
-static const int FLAG_SLIDER_CAPTION_ABOVE = 0x04;
-
-/**********************
  * Tone
  *********************/
 // Android system tones
 // Codes start with 0 - 15 for DTMF tones and ends with code TONE_CDMA_SIGNAL_OFF=98 for silent tone (which does not work on lollipop)
 #define TONE_CDMA_KEYPAD_VOLUME_KEY_LITE 89
 #define TONE_PROP_BEEP_OK TONE_CDMA_KEYPAD_VOLUME_KEY_LITE // 120 ms 941 + 1477 Hz - normal tone for OK Feedback
-#define TONE_PROP_BEEP_ERROR 28 // 2* 35/200 ms 400 + 1200 Hz - normal tone for ERROR Feedback
+#define TONE_PROP_BEEP_ERROR 28      // 2* 35/200 ms 400 + 1200 Hz - normal tone for ERROR Feedback
 #define TONE_PROP_BEEP_ERROR_HIGH 25 // 2* 100/100 ms 1200 Hz - high tone for ERROR Feedback
 #define TONE_PROP_BEEP_ERROR_LONG 26 // 2* 35/200 ms 400 + 1200 Hz - normal tone for ERROR Feedback
-#define TONE_SILENCE 50 // Since 98 does not work on Android Lollipop
+#define TONE_SILENCE 50              // Since 98 does not work on Android Lollipop
 #define TONE_CDMA_ONE_MIN_BEEP 88
 #define TONE_DEFAULT TONE_CDMA_KEYPAD_VOLUME_KEY_LITE
 #define TONE_LAST_VALID_TONE_INDEX 98
@@ -337,9 +264,8 @@ class BlueDisplay {
 public:
     BlueDisplay();
     void resetLocal(void);
-    void initCommunication(void (*aConnectCallback)(void), void (*aReorientationCallback)(void), void (*aRedrawCallback)(void));
-    // With combined callbacks
-    void initCommunication(void (*aConnectAndReorientationCallback)(void), void (*aRedrawCallback)(void));
+    void initCommunication(void (*aConnectCallback)(void), void (*aRedrawCallback)(void),
+            void (*aReorientationCallback)(void) = NULL);
     // The result of initCommunication
     bool isConnectionEstablished();
     void sendSync(void);
@@ -381,28 +307,28 @@ public:
     uint16_t drawLong(uint16_t aPosX, uint16_t aPosY, int32_t aLong, uint16_t aTextSize = TEXT_SIZE_11, color16_t aFGColor =
     COLOR_BLACK, color16_t aBGColor = COLOR_WHITE);
 
-    void setPrintfSizeAndColorAndFlag(uint16_t aPrintSize, color16_t aPrintColor, color16_t aPrintBackgroundColor,
+    void setWriteStringSizeAndColorAndFlag(uint16_t aPrintSize, color16_t aPrintColor, color16_t aPrintBackgroundColor,
             bool aClearOnNewScreen);
-    void setPrintfPosition(uint16_t aPosX, uint16_t aPosY);
-    void setPrintfPositionColumnLine(uint16_t aColumnNumber, uint16_t aLineNumber);
+    void setWriteStringPosition(uint16_t aPosX, uint16_t aPosY);
+    void setWriteStringPositionColumnLine(uint16_t aColumnNumber, uint16_t aLineNumber);
     void writeString(const char *aStringPtr, uint8_t aStringLength);
 
     void debugMessage(const char *aStringPtr);
     void debug(const char *aStringPtr);
     void debug(uint8_t aByte);
-    void debug(const char* aMessage, uint8_t aByte);
-    void debug(const char* aMessage, int8_t aByte);
+    void debug(const char *aMessage, uint8_t aByte);
+    void debug(const char *aMessage, int8_t aByte);
     void debug(int8_t aByte);
     void debug(uint16_t aShort);
-    void debug(const char* aMessage, uint16_t aShort);
+    void debug(const char *aMessage, uint16_t aShort);
     void debug(int16_t aShort);
-    void debug(const char* aMessage, int16_t aShort);
+    void debug(const char *aMessage, int16_t aShort);
     void debug(uint32_t aLong);
-    void debug(const char* aMessage, uint32_t aLong);
+    void debug(const char *aMessage, uint32_t aLong);
     void debug(int32_t aLong);
-    void debug(const char* aMessage, int32_t aLong);
+    void debug(const char *aMessage, int32_t aLong);
     void debug(float aDouble);
-    void debug(const char* aMessage, float aDouble);
+    void debug(const char *aMessage, float aDouble);
     void debug(double aDouble);
 
     void drawLine(uint16_t aXStart, uint16_t aYStart, uint16_t aXEnd, uint16_t aYEnd, color16_t aColor);
@@ -422,20 +348,20 @@ public:
     void drawChartByteBuffer(uint16_t aXOffset, uint16_t aYOffset, color16_t aColor, color16_t aClearBeforeColor,
             uint8_t aChartIndex, bool aDoDrawDirect, uint8_t *aByteBuffer, size_t aByteBufferLength);
 
-    struct XYSize * getMaxDisplaySize(void);
+    struct XYSize* getMaxDisplaySize(void);
     uint16_t getMaxDisplayWidth(void);
     uint16_t getMaxDisplayHeight(void);
-    struct XYSize * getCurrentDisplaySize(void);
+    struct XYSize* getCurrentDisplaySize(void);
     uint16_t getCurrentDisplayWidth(void);
     uint16_t getCurrentDisplayHeight(void);
     // returns requested size
-    struct XYSize * getReferenceDisplaySize(void);
+    struct XYSize* getRequestedDisplaySize(void);
     uint16_t getDisplayWidth(void);
     uint16_t getDisplayHeight(void);
     // Implemented by event handler
     bool isDisplayOrientationLandscape(void);
 
-    void refreshVector(struct ThickLine * aLine, int16_t aNewRelEndX, int16_t aNewRelEndY);
+    void refreshVector(struct ThickLine *aLine, int16_t aNewRelEndX, int16_t aNewRelEndY);
 
     void getNumber(void (*aNumberHandler)(float));
     void getNumberWithShortPrompt(void (*aNumberHandler)(float), const char *aShortPromptString);
@@ -455,15 +381,15 @@ public:
 #endif
 
 #ifdef AVR
-    uint16_t drawTextPGM(uint16_t aXStart, uint16_t aYStart, const char * aPGMString, uint16_t aTextSize, color16_t aFGColor,
+    uint16_t drawTextPGM(uint16_t aXStart, uint16_t aYStart, const char *aPGMString, uint16_t aTextSize, color16_t aFGColor,
             color16_t aBGColor);
-    void drawTextPGM(uint16_t aXStart, uint16_t aYStart, const char * aPGMString);
+    void drawTextPGM(uint16_t aXStart, uint16_t aYStart, const char *aPGMString);
     void getNumberWithShortPromptPGM(void (*aNumberHandler)(float), const char *aPGMShortPromptString);
     void getNumberWithShortPromptPGM(void (*aNumberHandler)(float), const char *aPGMShortPromptString, float aInitialValue);
 
-    uint16_t drawText(uint16_t aXStart, uint16_t aYStart, const __FlashStringHelper * aPGMString, uint16_t aTextSize,
+    uint16_t drawText(uint16_t aXStart, uint16_t aYStart, const __FlashStringHelper *aPGMString, uint16_t aTextSize,
             color16_t aFGColor, color16_t aBGColor);
-    void drawText(uint16_t aXStart, uint16_t aYStart, const __FlashStringHelper * aPGMString);
+    void drawText(uint16_t aXStart, uint16_t aYStart, const __FlashStringHelper *aPGMString);
     void getNumberWithShortPrompt(void (*aNumberHandler)(float), const __FlashStringHelper *aPGMShortPromptString);
     void getNumberWithShortPrompt(void (*aNumberHandler)(float), const __FlashStringHelper *aPGMShortPromptString,
             float aInitialValue);
@@ -476,12 +402,12 @@ public:
      * Button stuff
      */
     BDButtonHandle_t createButton(uint16_t aPositionX, uint16_t aPositionY, uint16_t aWidthX, uint16_t aHeightY,
-            color16_t aButtonColor, const char * aCaption, uint8_t aCaptionSize, uint8_t aFlags, int16_t aValue,
-            void (*aOnTouchHandler)(BDButton *, int16_t));
+            color16_t aButtonColor, const char *aCaption, uint8_t aCaptionSize, uint8_t aFlags, int16_t aValue,
+            void (*aOnTouchHandler)(BDButton*, int16_t));
     void drawButton(BDButtonHandle_t aButtonNumber);
     void removeButton(BDButtonHandle_t aButtonNumber, color16_t aBackgroundColor);
     void drawButtonCaption(BDButtonHandle_t aButtonNumber);
-    void setButtonCaption(BDButtonHandle_t aButtonNumber, const char * aCaption, bool doDrawButton);
+    void setButtonCaption(BDButtonHandle_t aButtonNumber, const char *aCaption, bool doDrawButton);
     void setButtonValue(BDButtonHandle_t aButtonNumber, int16_t aValue);
     void setButtonValueAndDraw(BDButtonHandle_t aButtonNumber, int16_t aValue);
     void setButtonColor(BDButtonHandle_t aButtonNumber, color16_t aButtonColor);
@@ -499,9 +425,9 @@ public:
 
 #ifdef AVR
     BDButtonHandle_t createButtonPGM(uint16_t aPositionX, uint16_t aPositionY, uint16_t aWidthX, uint16_t aHeightY,
-            color16_t aButtonColor, const char * aPGMCaption, uint8_t aCaptionSize, uint8_t aFlags, int16_t aValue,
-            void (*aOnTouchHandler)(BDButton *, int16_t));
-    void setButtonCaptionPGM(BDButtonHandle_t aButtonNumber, const char * aPGMCaption, bool doDrawButton);
+            color16_t aButtonColor, const char *aPGMCaption, uint8_t aCaptionSize, uint8_t aFlags, int16_t aValue,
+            void (*aOnTouchHandler)(BDButton*, int16_t));
+    void setButtonCaptionPGM(BDButtonHandle_t aButtonNumber, const char *aPGMCaption, bool doDrawButton);
 #endif
 
     /*
@@ -509,7 +435,7 @@ public:
      */
     BDSliderHandle_t createSlider(uint16_t aPositionX, uint16_t aPositionY, uint8_t aBarWidth, int16_t aBarLength,
             int16_t aThresholdValue, int16_t aInitalValue, color16_t aSliderColor, color16_t aBarColor, uint8_t aFlags,
-            void (*aOnChangeHandler)(BDSliderHandle_t *, int16_t));
+            void (*aOnChangeHandler)(BDSliderHandle_t*, int16_t));
     void drawSlider(BDSliderHandle_t aSliderNumber);
     void drawSliderBorder(BDSliderHandle_t aSliderNumber);
     void setSliderValueAndDrawBar(BDSliderHandle_t aSliderNumber, int16_t aCurrentValue);
@@ -518,20 +444,20 @@ public:
 
     void setSliderCaptionProperties(BDSliderHandle_t aSliderNumber, uint8_t aCaptionSize, uint8_t aCaptionPosition,
             uint8_t aCaptionMargin, color16_t aCaptionColor, color16_t aCaptionBackgroundColor);
-    void setSliderCaption(BDSliderHandle_t aSliderNumber, const char * aCaption);
+    void setSliderCaption(BDSliderHandle_t aSliderNumber, const char *aCaption);
 
     void activateSlider(BDSliderHandle_t aSliderNumber);
     void deactivateSlider(BDSliderHandle_t aSliderNumber);
     void activateAllSliders(void);
     void deactivateAllSliders(void);
 
-    struct XYSize mReferenceDisplaySize; // contains requested display size
+    struct XYSize mRequestedDisplaySize; // contains requested display size
     struct XYSize mCurrentDisplaySize; // contains real host display size. Is initialized at connection build up and updated at reorientation and redraw event.
     struct XYSize mMaxDisplaySize; // contains max display size.  Is initialized at connection build up and updated at reorientation event.
     uint32_t mHostUnixTimestamp;
 
-    volatile bool mConnectionEstablished;
-    volatile bool mOrientationIsLandscape;
+    bool mConnectionEstablished;
+    bool mOrientationIsLandscape;
 
     /* For tests */
     void drawGreyscale(uint16_t aXPos, uint16_t tYPos, uint16_t aHeight);
@@ -544,6 +470,7 @@ public:
 // The instance provided by the class itself
 extern BlueDisplay BlueDisplay1;
 
+void clearDisplayAndDisableButtonsAndSliders();
 void clearDisplayAndDisableButtonsAndSliders(color16_t aColor);
 
 #ifdef LOCAL_DISPLAY_EXISTS
@@ -589,5 +516,59 @@ float getTemperature(void);
 #include "BlueSerial.h"
 #include "EventHandler.h"
 
+/*
+ * Version 2.2.0
+ * - Changed default serial for AVR from `USE_SIMPLE_SERIAL` to standard Arduino Serial.
+ * - Added ShowSensorValues example.
+ * - Renamed mReferenceDisplaySize to mRequestedDisplaySize and renamed related function to getRequestedDisplaySize().
+ * - New function `setBarThresholdDefaultColor`. Requires BlueDisplay app version 4.3.
+ * - New function `setPositiveNegativeSliders(..., aValue,  aSliderDeadBand)`.
+ * - Renamed setPrintf* functions to setWriteString*.
+ * - Switched last 2 parameters in `initCommunication()` and the 3. parameter is now optional.
+ * - Compatible with MegaCore supported CPU's.
+ *
+ * Version 2.1.1
+ * - New function `setCaptionFromStringArrayPGM()`.
+ * - Added flag `sBDEventJustReceived`.
+ *
+ * Version 2.1.0
+ * - Improved initCommunication and late connection handling.
+ * - Arduino Due support added.
+ *
+ * Version 2.0.0
+ * - ESP32 and ESP8266 support added. External BT module required for ESP8266.
+ *
+ * Version 1.3.0
+ * - Added `sMillisOfLastReceivedBDEvent` for user timeout detection.
+ * - Fixed bug in `debug(const char *aMessage, float aFloat)`.
+ * - Added `*LOCK_SENSOR_LANDSCAPE` and `*LOCK_SENSOR_LANDSCAPE` in function `setScreenOrientationLock()`. Requires BD app version 4.2.
+ * - Removed unused `mCurrentDisplayHeight` and `mCurrentDisplayWidth` member variables.
+ * - Fixed bug in draw function from `drawByte` to `drawLong`.
+ * - Added short `drawText` functions. Requires BD app version 4.2.
+ *
+ * Version 1.2.0
+ * - Use type `Print *` instead of `Stream *`.
+ * - New function `initSerial()`
+ * - Changed parameter aTextSize to uint16_t also for AVR specific functions.
+ *
+ * This old version numbers corresponds to the version of the BlueDisplay app
+ * Version 3.7
+ * - Handling of no input for getNumber.
+ * - Slider setScaleFactor() does not scale the current value, mostly delivered as initial value at init().
+ * Version 3.6 connect, reconnect and autoconnect improved/added. Improved debug() command. Simplified Red/Green button handling.
+ * Version 3.5 Slider scaling changed and unit value added.
+ * Version 3.4
+ *  - Timeout for data messages. Get number initial value fixed.
+ *  - Bug autorepeat button in conjunction with UseUpEventForButtons fixed.
+ * Version 3.3
+ *  - Fixed silent tone bug for Android Lollipop and other bugs. Multiline text /r /n handling.
+ *  - Android time accessible on Arduino. Debug messages as toasts. Changed create button.
+ *  - Slider values scalable. GUI multi touch.Hex and ASCII output of received Bluetooth data at log level verbose.
+ * Version 3.2 Improved tone and fullscreen handling. Internal refactoring. Bugfixes and minor improvements.
+ * Version 3.1 Local display of received and sent commands for debug purposes.
+ * Version 3.0 Android sensor accessible by Arduino.
+ */
+
 #endif /* BLUEDISPLAY_H_ */
 
+#pragma once

@@ -52,239 +52,239 @@ import com.hoho.android.usbserial.util.SerialInputOutputManager;
 @TargetApi(Build.VERSION_CODES.HONEYCOMB_MR1)
 public class USBSerialSocket implements SerialInputOutputManager.Listener {
 
-	private static final String LOG_TAG = "USBSerialSocket";
+    private static final String LOG_TAG = "USBSerialSocket";
 
-	public static final String ACTION_USB_ATTACHED = "android.hardware.usb.action.USB_DEVICE_ATTACHED";
-	public static final String ACTION_USB_DETACHED = "android.hardware.usb.action.USB_DEVICE_DETACHED";
-	private static final String ACTION_USB_PERMISSION = "com.android.example.USB_PERMISSION";
+    public static final String ACTION_USB_ATTACHED = "android.hardware.usb.action.USB_DEVICE_ATTACHED";
+    public static final String ACTION_USB_DETACHED = "android.hardware.usb.action.USB_DEVICE_DETACHED";
+    private static final String ACTION_USB_PERMISSION = "com.android.example.USB_PERMISSION";
 
-	UsbManager mUsbManager = null;
+    UsbManager mUsbManager = null;
 
-	private static final int WRITE_WAIT_MILLIS = 2000; // 0 blocked infinitely on unprogrammed arduino
+    private static final int WRITE_WAIT_MILLIS = 2000; // 0 blocked infinitely on unprogrammed arduino
 
-	private BlueDisplay mBlueDisplayContext;
-	SerialService mSerialService;
-	private final Handler mHandler;
-	UsbSerialDriver mUsbSerialDriver;
-	UsbDevice mUSBDevice;
-	UsbDeviceConnection mUSBDeviceConnection;
-	UsbSerialPort mUSBSerialPort;
-	SerialInputOutputManager mIoManager;
-	BroadcastReceiver mUSBPermissionReceiver;
+    private BlueDisplay mBlueDisplayContext;
+    SerialService mSerialService;
+    private final Handler mHandler;
+    UsbSerialDriver mUsbSerialDriver;
+    UsbDevice mUSBDevice;
+    UsbDeviceConnection mUSBDeviceConnection;
+    UsbSerialPort mUSBSerialPort;
+    SerialInputOutputManager mIoManager;
+    BroadcastReceiver mUSBPermissionReceiver;
 
-	boolean mIsConnected;
+    boolean mIsConnected;
 
-	Object mWriteLock = new Object();
+    Object mWriteLock = new Object();
 
-	USBSerialSocket(BlueDisplay aContext, SerialService aSerialService, Handler aHandler, UsbManager aUsbManager) {
+    USBSerialSocket(BlueDisplay aContext, SerialService aSerialService, Handler aHandler, UsbManager aUsbManager) {
 
-		mBlueDisplayContext = aContext;
-		mSerialService = aSerialService;
-		mHandler = aHandler;
-		mUsbManager = aUsbManager;
-		setFilterAndRegisterUSBReceiver();
-	}
+        mBlueDisplayContext = aContext;
+        mSerialService = aSerialService;
+        mHandler = aHandler;
+        mUsbManager = aUsbManager;
+        setFilterAndRegisterUSBReceiver();
+    }
 
-	private void setFilterAndRegisterUSBReceiver() {
-		IntentFilter tFilter = new IntentFilter();
-		tFilter.addAction(ACTION_USB_PERMISSION);
-		tFilter.addAction(ACTION_USB_DETACHED);
-		tFilter.addAction(ACTION_USB_ATTACHED);
-		mBlueDisplayContext.registerReceiver(mUSBReceiver, tFilter);
-	}
+    private void setFilterAndRegisterUSBReceiver() {
+        IntentFilter tFilter = new IntentFilter();
+        tFilter.addAction(ACTION_USB_PERMISSION);
+        tFilter.addAction(ACTION_USB_DETACHED);
+        tFilter.addAction(ACTION_USB_ATTACHED);
+        mBlueDisplayContext.registerReceiver(mUSBReceiver, tFilter);
+    }
 
-	/*
-	 * Different notifications will be received here (USB attached, detached, permission response)
-	 */
-	final BroadcastReceiver mUSBReceiver = new BroadcastReceiver() {
-		@Override
-		public void onReceive(Context aContext, Intent aIntent) {
-			if (aIntent.getAction().equals(ACTION_USB_PERMISSION)) {
-				boolean granted = aIntent.getExtras().getBoolean(UsbManager.EXTRA_PERMISSION_GRANTED);
-				if (granted) {
-					// User accepted our USB connection. Try to open the device as a serial port
-					MyLog.i(LOG_TAG, "Got user USB permission -> open device now.");
-					openUSBDevice();
-				} else {
-					MyLog.i(LOG_TAG, "Got no user USB permission :-(");
-					disconnect();
-				}
-			} else if (aIntent.getAction().equals(ACTION_USB_ATTACHED)) {
-				MyLog.d(LOG_TAG, "USB attached received");
-				// Not needed to connect since the application is restarted (BlueDisplay OnCreate is called)
-				// MyLog.i(LOG_TAG, "USB attached received -> call connect()");
-				// connect(); // this leads to a read error
-			} else if (aIntent.getAction().equals(ACTION_USB_DETACHED)) {
-				MyLog.d(LOG_TAG, "USB detached received");
-				// The driver get the detached info faster ( by IOException ), so this is redundant.
-				// MyLog.i(LOG_TAG, "USB detached received -> call disconnect()");
-				// disconnect();
-			}
-		}
-	};
+    /*
+     * Different notifications will be received here (USB attached, detached, permission response)
+     */
+    final BroadcastReceiver mUSBReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context aContext, Intent aIntent) {
+            if (aIntent.getAction().equals(ACTION_USB_PERMISSION)) {
+                boolean granted = aIntent.getExtras().getBoolean(UsbManager.EXTRA_PERMISSION_GRANTED);
+                if (granted) {
+                    // User accepted our USB connection. Try to open the device as a serial port
+                    MyLog.i(LOG_TAG, "Got user USB permission -> open device now.");
+                    openUSBDevice();
+                } else {
+                    MyLog.i(LOG_TAG, "Got no user USB permission :-(");
+                    disconnect();
+                }
+            } else if (aIntent.getAction().equals(ACTION_USB_ATTACHED)) {
+                MyLog.d(LOG_TAG, "USB attached received");
+                // Not needed to connect since the application is restarted (BlueDisplay OnCreate is called)
+                // MyLog.i(LOG_TAG, "USB attached received -> call connect()");
+                // connect(); // this leads to a read error
+            } else if (aIntent.getAction().equals(ACTION_USB_DETACHED)) {
+                MyLog.d(LOG_TAG, "USB detached received");
+                // The driver get the detached info faster ( by IOException ), so this is redundant.
+                // MyLog.i(LOG_TAG, "USB detached received -> call disconnect()");
+                // disconnect();
+            }
+        }
+    };
 
-	/*
-	 * Gets USB devices and ...
-	 */
-	void connect() {
-		MyLog.i(LOG_TAG, "In connect()");
+    /*
+     * Gets USB devices and ...
+     */
+    void connect() {
+        MyLog.i(LOG_TAG, "In connect()");
 
-		List<UsbSerialDriver> availableDrivers = UsbSerialProber.getDefaultProber().findAllDrivers(mUsbManager);
-		if (!availableDrivers.isEmpty()) {
-			// Set this flag here, since it is used below for signalBlueDisplayConnection()
-			mBlueDisplayContext.mUSBDeviceAttached = true;
-			// Open a connection to the first available driver.
-			mUsbSerialDriver = availableDrivers.get(0);
-			mUSBDevice = mUsbSerialDriver.getDevice();
-			if (mUsbManager.hasPermission(mUSBDevice)) {
-				/*
-				 * Open device if permission still granted
-				 */
-				openUSBDevice();
-			} else {
-				/*
-				 * Request user permission
-				 */
-				MyLog.i(LOG_TAG,
-						"Request user USB permission for VID=" + mUSBDevice.getVendorId() + " ProductId="
-								+ mUSBDevice.getProductId());
-				PendingIntent tUSBPermissionIntent = PendingIntent.getBroadcast(mBlueDisplayContext, 0, new Intent(
-						ACTION_USB_PERMISSION), 0);
-				mUsbManager.requestPermission(mUSBDevice, tUSBPermissionIntent);
-			}
-		}
-	}
+        List<UsbSerialDriver> availableDrivers = UsbSerialProber.getDefaultProber().findAllDrivers(mUsbManager);
+        if (!availableDrivers.isEmpty()) {
+            // Set this flag here, since it is used below for signalBlueDisplayConnection()
+            mBlueDisplayContext.mUSBDeviceAttached = true;
+            // Open a connection to the first available driver.
+            mUsbSerialDriver = availableDrivers.get(0);
+            mUSBDevice = mUsbSerialDriver.getDevice();
+            if (mUsbManager.hasPermission(mUSBDevice)) {
+                /*
+                 * Open device if permission still granted
+                 */
+                openUSBDevice();
+            } else {
+                /*
+                 * Request user permission
+                 */
+                MyLog.i(LOG_TAG,
+                        "Request user USB permission for VID=" + mUSBDevice.getVendorId() + " ProductId="
+                                + mUSBDevice.getProductId());
+                PendingIntent tUSBPermissionIntent = PendingIntent.getBroadcast(mBlueDisplayContext, 0, new Intent(
+                        ACTION_USB_PERMISSION), 0);
+                mUsbManager.requestPermission(mUSBDevice, tUSBPermissionIntent);
+            }
+        }
+    }
 
-	/*
-	 * Open USB device and port. Assume that permission is granted.
-	 */
-	void openUSBDevice() {
-		MyLog.i(LOG_TAG, "In openUSBDevice()");
+    /*
+     * Open USB device and port. Assume that permission is granted.
+     */
+    void openUSBDevice() {
+        MyLog.i(LOG_TAG, "In openUSBDevice()");
 
-		mUSBDeviceConnection = mUsbManager.openDevice(mUSBDevice);
-		if (mUSBDeviceConnection == null) {
-			MyLog.e(LOG_TAG, "UsbDeviceConnection result of openDevice() is null");
-			mIsConnected = false;
-		} else {
-			/*
-			 * Open USB port
-			 */
-			mUSBSerialPort = mUsbSerialDriver.getPorts().get(0);
-			try {
-				mUSBSerialPort.open(mUSBDeviceConnection);
-				mUSBSerialPort.setParameters(115200, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
+        mUSBDeviceConnection = mUsbManager.openDevice(mUSBDevice);
+        if (mUSBDeviceConnection == null) {
+            MyLog.e(LOG_TAG, "UsbDeviceConnection result of openDevice() is null");
+            mIsConnected = false;
+        } else {
+            /*
+             * Open USB port
+             */
+            mUSBSerialPort = mUsbSerialDriver.getPorts().get(0);
+            try {
+                mUSBSerialPort.open(mUSBDeviceConnection);
+                mUSBSerialPort.setParameters(115200, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
 
-				mUSBSerialPort.setDTR(true); // Reset for arduino
-				mUSBSerialPort.setRTS(true); // Channel readiness on some boards
-				mIoManager = new SerialInputOutputManager(mUSBSerialPort, this);
-				Executors.newSingleThreadExecutor().submit(mIoManager);
-				/*
-				 * Successful :-)
-				 */
-				mIsConnected = true;
+                mUSBSerialPort.setDTR(true); // Reset for arduino
+                mUSBSerialPort.setRTS(true); // Channel readiness on some boards
+                mIoManager = new SerialInputOutputManager(mUSBSerialPort, this);
+                Executors.newSingleThreadExecutor().submit(mIoManager);
+                /*
+                 * Successful :-)
+                 */
+                mIsConnected = true;
 
-				// reset flags, buttons, sliders and sensors (and log this :-))
-				mBlueDisplayContext.mRPCView.resetAll();
-				try {
-					// 50 is to little, 100 works sometimes, 200 works reliable.
-					Thread.sleep(200);
-				} catch (InterruptedException e) {
-					// Just do nothing
-				}
+                // reset flags, buttons, sliders and sensors (and log this :-))
+                mBlueDisplayContext.mRPCView.resetAll();
+                try {
+                    // 50 is to little, 100 works sometimes, 200 works reliable.
+                    Thread.sleep(200);
+                } catch (InterruptedException e) {
+                    // Just do nothing
+                }
 
-//				// reset flags, buttons, sliders and sensors (and log this :-))
-//				mBlueDisplayContext.mRPCView.resetAll();
-				/*
-				 * Now we have read all old bytes from input stream. Start and initialize big ring buffer.
-				 */
-				mSerialService.resetReceiveBuffer();
-				mSerialService.resetStatistics();
-				// signal connection to Client
-				mSerialService.signalBlueDisplayConnection();
-				/*
-				 * Send the event to the UI Activity, which in turn shows the connected toast and sets window to always on
-				 */
-				mHandler.sendEmptyMessage(BlueDisplay.MESSAGE_USB_CONNECT);
+                // // reset flags, buttons, sliders and sensors (and log this :-))
+                // mBlueDisplayContext.mRPCView.resetAll();
+                /*
+                 * Now we have read all old bytes from input stream. Start and initialize big ring buffer.
+                 */
+                mSerialService.resetReceiveBuffer();
+                mSerialService.resetStatistics();
+                // signal connection to Client
+                mSerialService.signalBlueDisplayConnection();
+                /*
+                 * Send the event to the UI Activity, which in turn shows the connected toast and sets window to always on
+                 */
+                mHandler.sendEmptyMessage(BlueDisplay.MESSAGE_USB_CONNECT);
 
-			} catch (IOException e) {
-				disconnect();
-				MyLog.e(LOG_TAG, "USB open() failed: " + e);
-			}
-		}
+            } catch (IOException e) {
+                disconnect();
+                MyLog.e(LOG_TAG, "USB open() failed: " + e);
+            }
+        }
 
-	}
+    }
 
-	/*
-	 * Stop IOManager and disconnect listener Set RTS + DTR to false Close Port and Connection
-	 */
-	void disconnect() {
+    /*
+     * Stop IOManager and disconnect listener Set RTS + DTR to false Close Port and Connection
+     */
+    void disconnect() {
 
-		MyLog.i(LOG_TAG, "In disconnect()");
+        MyLog.i(LOG_TAG, "In disconnect()");
 
-		// listener = null; // ignore remaining data and errors
-		if (mIoManager != null) {
-			mIoManager.setListener(null);
-			mIoManager.stop();
-			mIoManager = null;
-		}
-		if (mUSBSerialPort != null) {
-			try {
-				mUSBSerialPort.setDTR(false);
-				mUSBSerialPort.setRTS(false);
-			} catch (Exception ignored) {
-			}
-			try {
-				mUSBSerialPort.close();
-			} catch (Exception ignored) {
-			}
-			mUSBSerialPort = null;
-		}
-		if (mUSBDeviceConnection != null) {
-			mUSBDeviceConnection.close();
-			mUSBDeviceConnection = null;
+        // listener = null; // ignore remaining data and errors
+        if (mIoManager != null) {
+            mIoManager.setListener(null);
+            mIoManager.stop();
+            mIoManager = null;
+        }
+        if (mUSBSerialPort != null) {
+            try {
+                mUSBSerialPort.setDTR(false);
+                mUSBSerialPort.setRTS(false);
+            } catch (Exception ignored) {
+            }
+            try {
+                mUSBSerialPort.close();
+            } catch (Exception ignored) {
+            }
+            mUSBSerialPort = null;
+        }
+        if (mUSBDeviceConnection != null) {
+            mUSBDeviceConnection.close();
+            mUSBDeviceConnection = null;
 
-			// Indicate that the connection was lost and notify the UI Activity.
-			// do not do it twice so do it here
-			mIsConnected = false;
-			mBlueDisplayContext.mUSBDeviceAttached = false;
-			// Send a disconnect message back to the Activity, which resets mUSBDeviceAttached flag
-			mHandler.sendEmptyMessage(BlueDisplay.MESSAGE_USB_DISCONNECT);
-		}
+            // Indicate that the connection was lost and notify the UI Activity.
+            // do not do it twice so do it here
+            mIsConnected = false;
+            mBlueDisplayContext.mUSBDeviceAttached = false;
+            // Send a disconnect message back to the Activity, which resets mUSBDeviceAttached flag
+            mHandler.sendEmptyMessage(BlueDisplay.MESSAGE_USB_DISCONNECT);
+        }
 
-		// try {
-		// context.unregisterReceiver(disconnectBroadcastReceiver);
-		// } catch (Exception ignored) {
-		// }
-	}
+        // try {
+        // context.unregisterReceiver(disconnectBroadcastReceiver);
+        // } catch (Exception ignored) {
+        // }
+    }
 
-	@Override
-	public void onNewData(byte[] aUSBInputData) {
-		// Copy block of bytes from InputData to big receive array
-		System.arraycopy(aUSBInputData, 0, mSerialService.mBigReceiveBuffer, mSerialService.mReceiveBufferInIndex,
-				aUSBInputData.length);
-		if (MyLog.isDEVELOPMENT_TESTING()) {
-			MyLog.v(LOG_TAG, "Hex=" + SerialService.convertByteArrayToHexString(aUSBInputData) + "\n");
-		}
-		mSerialService.handleReceived(aUSBInputData.length);
-	}
+    @Override
+    public void onNewData(byte[] aUSBInputData) {
+        // Copy block of bytes from InputData to big receive array
+        System.arraycopy(aUSBInputData, 0, mSerialService.mBigReceiveBuffer, mSerialService.mReceiveBufferInIndex,
+                aUSBInputData.length);
+        if (MyLog.isDEVELOPMENT_TESTING()) {
+            MyLog.v(LOG_TAG, "Hex=" + SerialService.convertByteArrayToHexString(aUSBInputData) + "\n");
+        }
+        mSerialService.handleReceived(aUSBInputData.length);
+    }
 
-	public void writeEvent(byte[] aEventDataBuffer, int aEventDataLength) {
-		// use synchronized to get synchronous behavior
-		synchronized (mWriteLock) {
-			// must create a new byte array here, since length of byte array is important :-(
-			byte[] tEventDataBufferForUSBDriver = new byte[aEventDataLength];
-			System.arraycopy(aEventDataBuffer, 0, tEventDataBufferForUSBDriver, 0, aEventDataLength);
-			try {
-				mUSBSerialPort.write(tEventDataBufferForUSBDriver, WRITE_WAIT_MILLIS);
-			} catch (IOException e) {
-				MyLog.e(LOG_TAG, "writeEvent() of " + aEventDataLength + " byte of data failed: " + e);
-			}
-		}
-	}
+    public void writeEvent(byte[] aEventDataBuffer, int aEventDataLength) {
+        // use synchronized to get synchronous behavior
+        synchronized (mWriteLock) {
+            // must create a new byte array here, since length of byte array is important :-(
+            byte[] tEventDataBufferForUSBDriver = new byte[aEventDataLength];
+            System.arraycopy(aEventDataBuffer, 0, tEventDataBufferForUSBDriver, 0, aEventDataLength);
+            try {
+                mUSBSerialPort.write(tEventDataBufferForUSBDriver, WRITE_WAIT_MILLIS);
+            } catch (IOException e) {
+                MyLog.e(LOG_TAG, "writeEvent() of " + aEventDataLength + " byte of data failed: " + e);
+            }
+        }
+    }
 
-	@Override
-	public void onRunError(Exception e) {
-		MyLog.e(LOG_TAG, " Got error on run: " + e);
-		disconnect();
-	}
+    @Override
+    public void onRunError(Exception e) {
+        MyLog.e(LOG_TAG, " Got error on run: " + e);
+        disconnect();
+    }
 }
