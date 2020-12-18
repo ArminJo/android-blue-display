@@ -1848,17 +1848,8 @@ public class RPCView extends View {
 
             case FUNCTION_DEBUG_STRING:
                 tStringParameter = new String(aDataBytes, 0, aDataLength);
-                // show new Values as toast every 500 ms
-                long tMillis = System.currentTimeMillis();
-                if (tMillis > (mLastDebugToastMillis + DEBUG_TOAST_REFRESH_MILLIS)) {
-                    mLastDebugToastMillis = tMillis;
-                    if (mBlueDisplayContext.mMyToast != null) {
-                        mBlueDisplayContext.mMyToast.cancel();
-                    }
-                    mBlueDisplayContext.mMyToast = Toast.makeText(mBlueDisplayContext, tStringParameter, Toast.LENGTH_SHORT);
-                    mBlueDisplayContext.mMyToast.show();
-                }
-
+                // Show new values as toast every 500 ms
+                showAsDebugToast(tStringParameter);
                 // Output as warning in order to enable easier finding and filtering the message in log
                 MyLog.w(LOG_TAG, "DebugString=\"" + tStringParameter + "\"");
                 break;
@@ -2114,6 +2105,21 @@ public class RPCView extends View {
         }
         // long tEnd = System.nanoTime();
         // Log.i(LOG_TAG, "Interpret=" + (tEnd - tStart));
+    }
+
+    /*
+     * Show new values as toast only every 500 ms
+     */
+    public void showAsDebugToast(String tStringParameter) {
+        long tMillis = System.currentTimeMillis();
+        if (tMillis > (mLastDebugToastMillis + DEBUG_TOAST_REFRESH_MILLIS)) {
+            mLastDebugToastMillis = tMillis;
+            if (mBlueDisplayContext.mMyToast != null) {
+                mBlueDisplayContext.mMyToast.cancel();
+            }
+            mBlueDisplayContext.mMyToast = Toast.makeText(mBlueDisplayContext, tStringParameter, Toast.LENGTH_SHORT);
+            mBlueDisplayContext.mMyToast.show();
+        }
     }
 
     /*

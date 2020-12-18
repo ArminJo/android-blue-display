@@ -1059,8 +1059,10 @@ public class SerialService {
                 } else if ((tByte == '\n' || tByte == '\r')) {
                     if (mSerialPrintBufferInIndex > 0) {
                         // print string buffer as warning to be contained in the log
-                        MyLog.w("Serial.print", new String(mSerialPrintBuffer, 0, mSerialPrintBufferInIndex));
+                        String tStringFromSerial = new String(mSerialPrintBuffer, 0, mSerialPrintBufferInIndex);
+                        MyLog.w("Serial.print", tStringFromSerial);
                         mSerialPrintBufferInIndex = 0;
+                        mBlueDisplayContext.mRPCView.showAsDebugToast(tStringFromSerial);
                     }
                 } else {
                     // reset string buffer
@@ -1086,9 +1088,11 @@ public class SerialService {
                 if (mSerialPrintBufferInIndex > 0) {
                     // print if \n or \r are missing
                     // print string buffer as warning to be contained in the log
-                    MyLog.w("Serial.print", new String(mSerialPrintBuffer, 0, mSerialPrintBufferInIndex));
+                    String tStringFromSerial = new String(mSerialPrintBuffer, 0, mSerialPrintBufferInIndex);
+                    MyLog.w("Serial.print", tStringFromSerial);
                     mSerialPrintBufferInIndex = 0;
-                }
+                    mBlueDisplayContext.mRPCView.showAsDebugToast(tStringFromSerial);
+}
             }
         } while (tByte != SYNC_TOKEN);
         return true;

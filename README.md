@@ -49,11 +49,12 @@ Android axis are [defined for **natural screen orientation**](https://source.and
 
 # Revision History
 ### Version 4.3 - work in progress
-- New command FUNCTION_CLEAR_DISPLAY_OPTIONAL to enable resynchronization of slow displays.
+- New command `FUNCTION_CLEAR_DISPLAY_OPTIONAL` to enable resynchronization of slow displays.
 - Bluetooth random delay detection.
 - Fixed bug for micro-swipe suppressing.
-- Added function SET_DEFAULT_COLOR_THRESHOLD.
-- Opening options menu by swipe now not restricted on full screen and connected.  
+- Added Slider command `SUBFUNCTION_SLIDER_SET_DEFAULT_COLOR_THRESHOLD`.
+- Opening options menu by swipe now not restricted on full screen and connected.
+- Strings printed with Serial.print() are not interpreted, but stored in the log for debug purposes.
 
 ### Version 4.2
 - Swipe from the left border in application full screen mode opens the options menu.
