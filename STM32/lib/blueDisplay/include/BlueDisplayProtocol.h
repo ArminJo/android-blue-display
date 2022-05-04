@@ -25,20 +25,20 @@
  *  GNU General Public License for more details.
  *
  *  You should have received a copy of the GNU General Public License
- *  along with this program.  If not, see <http://www.gnu.org/licenses/gpl.html>.
+ *  along with this program. If not, see <http://www.gnu.org/licenses/gpl.html>.
  *
  *
  *
  * SEND PROTOCOL USED:
  * Message:
  * 1. Sync byte A5
- * 2. Byte function token
+ * 2. byte function token
  * 3. Short length (in bytes units -> always multiple of 2) of parameters
  * 4. Short n parameters
  *
  * Data (expected for messages with function code >= 0x60):
- * 1. Sync Byte A5
- * 2. Byte Data_Size_Type token (byte, short etc.) - only byte used now
+ * 1. Sync byte A5
+ * 2. byte Data_Size_Type token (byte, short etc.) - only byte used now
  * 3. Short length of data in byte units
  * 4. (Length) items of data values
  *
@@ -66,8 +66,8 @@
  *
  */
 
-#ifndef BLUEDISPLAYPROTOCOL_H_
-#define BLUEDISPLAYPROTOCOL_H_
+#ifndef _BLUEDISPLAYPROTOCOL_H
+#define _BLUEDISPLAYPROTOCOL_H
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -170,7 +170,7 @@ union ByteShortLongFloatUnion {
 struct GuiCallback {
     uint16_t ObjectIndex;
     uint16_t Free;
-#ifdef AVR
+#if defined(AVR)
     void * Handler;
     void * Handler_upperWord; // not used on  <= 17 bit address cpu, since pointer to functions are address_of_function >> 1
 #else
@@ -192,7 +192,7 @@ struct IntegerInfoCallback {
     uint8_t SubFunction;
     uint8_t ByteInfo;
     uint16_t ShortInfo;
-#ifdef AVR
+#if defined(AVR)
     void * Handler;
     void * Handler_upperWord; // not used on  <= 17 bit address cpu, since pointer to functions are address_of_function >> 1
 #else
@@ -238,7 +238,7 @@ static const int SUBFUNCTION_GLOBAL_SET_FLAGS_AND_SIZE = 0x00;
 static const int SUBFUNCTION_GLOBAL_SET_CODEPAGE = 0x01;
 static const int SUBFUNCTION_GLOBAL_SET_CHARACTER_CODE_MAPPING = 0x02;
 static const int SUBFUNCTION_GLOBAL_SET_LONG_TOUCH_DOWN_TIMEOUT = 0x08;
-static const int SUBFUNCTION_GLOBAL_SET_SCREEN_ORIENTATION_LOCKATION_LOCK = 0x0C;
+static const int SUBFUNCTION_GLOBAL_SET_SCREEN_ORIENTATION_LOCK = 0x0C;
 
 // results in a reorientation (+redraw) callback
 static const int FUNCTION_REQUEST_MAX_CANVAS_SIZE = 0x09;
@@ -381,4 +381,6 @@ const int FUNCTION_SLIDER_PRINT_VALUE = 0x79;
 const int FUNCTION_SLIDER_SET_VALUE_UNIT_STRING = 0x7A;
 const int FUNCTION_SLIDER_SET_VALUE_FORMAT_STRING = 0x7B;
 
-#endif /* BLUEDISPLAYPROTOCOL_H_ */
+#endif // _BLUEDISPLAYPROTOCOL_H
+#pragma once
+

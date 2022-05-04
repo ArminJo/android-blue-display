@@ -55,6 +55,7 @@ Android axis are [defined for **natural screen orientation**](https://source.and
 - Added Slider command `SUBFUNCTION_SLIDER_SET_DEFAULT_COLOR_THRESHOLD`.
 - Opening options menu by swipe now not restricted on full screen and connected.
 - Strings printed with Serial.print() are not interpreted, but stored in the log for debug purposes.
+- Fixed error in FUNCTION_BUTTON_REMOVE.
 
 ### Version 4.2
 - Swipe from the left border in application full screen mode opens the options menu.

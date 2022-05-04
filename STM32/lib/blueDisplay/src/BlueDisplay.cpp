@@ -1,5 +1,5 @@
 /*
- * BlueDisplay.cpp
+ * BlueDisplay.hpp
  *
  * C stub for Android BlueDisplay app (and the local MI0283QT2 Display from Watterott).
  * It implements a few display test functions.
@@ -10,7 +10,7 @@
  *  It also implements basic GUI elements as buttons and sliders.
  *  GUI callback, touch and sensor events are sent back to Arduino.
  *
- *  Copyright (C) 2014-2020  Armin Joachimsmeyer
+ *  Copyright (C) 2014-2022  Armin Joachimsmeyer
  *  armin.joachimsmeyer@gmail.com
  *
  *  This file is part of BlueDisplay https://github.com/ArminJo/android-blue-display.
@@ -26,13 +26,20 @@
  *  GNU General Public License for more details.
  *
  *  You should have received a copy of the GNU General Public License
- *  along with this program.  If not, see <http://www.gnu.org/licenses/gpl.html>.
+ *  along with this program. If not, see <http://www.gnu.org/licenses/gpl.html>.
  *
  */
+#ifndef _BLUEDISPLAY_HPP
+#define _BLUEDISPLAY_HPP
 
 #include "BlueDisplay.h"
 
-#ifdef LOCAL_DISPLAY_EXISTS
+#include "BlueSerial.hpp"
+#include "EventHandler.hpp"
+#include "BDButton.hpp"
+#include "BDSlider.hpp"
+
+#if defined(SUPPORT_LOCAL_DISPLAY)
 #include "thickLine.h"
 #include "tinyPrint.h"
 #endif
@@ -47,7 +54,7 @@
 BlueDisplay::BlueDisplay(void) { // @suppress("Class members should be properly initialized")
     mRequestedDisplaySize.XWidth = DISPLAY_DEFAULT_WIDTH;
     mRequestedDisplaySize.YHeight = DISPLAY_DEFAULT_HEIGHT;
-    mConnectionEstablished = false;
+    mBlueDisplayConnectionEstablished = false;
 }
 
 // One instance of BlueDisplay called BlueDisplay1
@@ -66,7 +73,7 @@ void BlueDisplay::resetLocal(void) {
  * This results in a EVENT_REQUESTED_DATA_CANVAS_SIZE callback event, which sends display size and local timestamp.
  * This event calls the ConnectCallback as well as the RedrawCallback.
  *
- * Waits for 300 ms for connection to be established -> bool BlueDisplay1.mConnectionEstablished
+ * Waits for 300 ms for connection to be established -> bool BlueDisplay1.mBlueDisplayConnectionEstablished
  *
  * Reorientation callback function is only required if we have a responsive layout,
  * since connect and reorientation event also calls the redraw callback.
@@ -77,20 +84,20 @@ void BlueDisplay::initCommunication(void (*aConnectCallback)(void), void (*aRedr
     registerReorientationCallback(aReorientationCallback);
     registerRedrawCallback(aRedrawCallback);
 
-    mConnectionEstablished = false;
+    mBlueDisplayConnectionEstablished = false;
     // consume up old received data
     checkAndHandleEvents();
 
 // This results in a data event, which sends size and timestamp
     requestMaxCanvasSize();
 
-    for (uint8_t i = 0; i < 30; ++i) {
+    for (uint_fast8_t i = 0; i < 30; ++i) {
         /*
          * Wait 300 ms for size to be sent back by a canvas size event.
          * Time measured is between 50 and 150 ms (or 80 and 120) for Bluetooth.
          */
         delayMillisWithCheckAndHandleEvents(10);
-        if (mConnectionEstablished) { // is set by delayMillisWithCheckAndHandleEvents()
+        if (mBlueDisplayConnectionEstablished) { // is set by delayMillisWithCheckAndHandleEvents()
 #if defined(TRACE) && defined(USE_SERIAL1)
             Serial.println("Connection established");
 #endif
@@ -101,7 +108,7 @@ void BlueDisplay::initCommunication(void (*aConnectCallback)(void), void (*aRedr
 }
 
 bool BlueDisplay::isConnectionEstablished() {
-    return mConnectionEstablished;
+    return mBlueDisplayConnectionEstablished;
 }
 // sends 4 byte function and 24 byte data message
 void BlueDisplay::sendSync(void) {
@@ -159,7 +166,7 @@ void BlueDisplay::setLongTouchDownTimeout(uint16_t aLongTouchDownTimeoutMillis) 
  */
 void BlueDisplay::setScreenOrientationLock(uint8_t aLockMode) {
     if (USART_isBluetoothPaired()) {
-        sendUSARTArgs(FUNCTION_GLOBAL_SETTINGS, 2, SUBFUNCTION_GLOBAL_SET_SCREEN_ORIENTATION_LOCKATION_LOCK, aLockMode);
+        sendUSARTArgs(FUNCTION_GLOBAL_SETTINGS, 2, SUBFUNCTION_GLOBAL_SET_SCREEN_ORIENTATION_LOCK, aLockMode);
     }
 }
 
@@ -212,7 +219,7 @@ void BlueDisplay::playFeedbackTone(uint8_t aToneType) {
 }
 
 void BlueDisplay::clearDisplay(color16_t aColor) {
-#ifdef LOCAL_DISPLAY_EXISTS
+#if defined(SUPPORT_LOCAL_DISPLAY)
     LocalDisplay.clearDisplay(aColor);
 #endif
     if (USART_isBluetoothPaired()) {
@@ -251,7 +258,7 @@ void BlueDisplay::drawDisplayDirect(void) {
 }
 
 void BlueDisplay::drawPixel(uint16_t aXPos, uint16_t aYPos, color16_t aColor) {
-#ifdef LOCAL_DISPLAY_EXISTS
+#if defined(SUPPORT_LOCAL_DISPLAY)
     LocalDisplay.drawPixel(aXPos, aYPos, aColor);
 #endif
     if (USART_isBluetoothPaired()) {
@@ -260,7 +267,7 @@ void BlueDisplay::drawPixel(uint16_t aXPos, uint16_t aYPos, color16_t aColor) {
 }
 
 void BlueDisplay::drawLine(uint16_t aXStart, uint16_t aYStart, uint16_t aXEnd, uint16_t aYEnd, color16_t aColor) {
-#ifdef LOCAL_DISPLAY_EXISTS
+#if defined(SUPPORT_LOCAL_DISPLAY)
     LocalDisplay.drawLine(aXStart, aYStart, aXEnd, aYEnd, aColor);
 #endif
     if (USART_isBluetoothPaired()) {
@@ -269,7 +276,7 @@ void BlueDisplay::drawLine(uint16_t aXStart, uint16_t aYStart, uint16_t aXEnd, u
 }
 
 void BlueDisplay::drawLineRel(uint16_t aXStart, uint16_t aYStart, uint16_t aXDelta, uint16_t aYDelta, color16_t aColor) {
-#ifdef LOCAL_DISPLAY_EXISTS
+#if defined(SUPPORT_LOCAL_DISPLAY)
     LocalDisplay.drawLine(aXStart, aYStart, aXStart + aXDelta, aYStart + aYDelta, aColor);
 #endif
     if (USART_isBluetoothPaired()) {
@@ -284,7 +291,7 @@ void BlueDisplay::drawLineRel(uint16_t aXStart, uint16_t aYStart, uint16_t aXDel
  * uses setArea instead if drawPixel to speed up drawing
  */
 void BlueDisplay::drawLineFastOneX(uint16_t aXStart, uint16_t aYStart, uint16_t aYEnd, color16_t aColor) {
-#ifdef LOCAL_DISPLAY_EXISTS
+#if defined(SUPPORT_LOCAL_DISPLAY)
     LocalDisplay.drawLineFastOneX(aXStart, aYStart, aYEnd, aColor);
 #endif
     if (USART_isBluetoothPaired()) {
@@ -323,7 +330,7 @@ void BlueDisplay::drawVectorRadian(uint16_t aXStart, uint16_t aYStart, uint16_t 
 
 void BlueDisplay::drawLineWithThickness(uint16_t aXStart, uint16_t aYStart, uint16_t aXEnd, uint16_t aYEnd, int16_t aThickness,
         color16_t aColor) {
-#ifdef LOCAL_DISPLAY_EXISTS
+#if defined(SUPPORT_LOCAL_DISPLAY)
     drawThickLine(aXStart, aYStart, aXEnd, aYEnd, aThickness, LINE_THICKNESS_MIDDLE, aColor);
 #endif
     if (USART_isBluetoothPaired()) {
@@ -333,7 +340,7 @@ void BlueDisplay::drawLineWithThickness(uint16_t aXStart, uint16_t aYStart, uint
 
 void BlueDisplay::drawLineRelWithThickness(uint16_t aXStart, uint16_t aYStart, uint16_t aXDelta, uint16_t aYDelta,
         int16_t aThickness, color16_t aColor) {
-#ifdef LOCAL_DISPLAY_EXISTS
+#if defined(SUPPORT_LOCAL_DISPLAY)
     drawThickLine(aXStart, aYStart, aXDelta, aYDelta, aThickness, LINE_THICKNESS_MIDDLE, aColor);
 #endif
     if (USART_isBluetoothPaired()) {
@@ -343,7 +350,7 @@ void BlueDisplay::drawLineRelWithThickness(uint16_t aXStart, uint16_t aYStart, u
 
 void BlueDisplay::drawRect(uint16_t aXStart, uint16_t aYStart, uint16_t aXEnd, uint16_t aYEnd, color16_t aColor,
         uint16_t aStrokeWidth) {
-#ifdef LOCAL_DISPLAY_EXISTS
+#if defined(SUPPORT_LOCAL_DISPLAY)
     LocalDisplay.drawRect(aXStart, aYStart, aXEnd - 1, aYEnd - 1, aColor);
 #endif
     if (USART_isBluetoothPaired()) {
@@ -353,7 +360,7 @@ void BlueDisplay::drawRect(uint16_t aXStart, uint16_t aYStart, uint16_t aXEnd, u
 
 void BlueDisplay::drawRectRel(uint16_t aXStart, uint16_t aYStart, uint16_t aWidth, uint16_t aHeight, color16_t aColor,
         uint16_t aStrokeWidth) {
-#ifdef LOCAL_DISPLAY_EXISTS
+#if defined(SUPPORT_LOCAL_DISPLAY)
     LocalDisplay.drawRect(aXStart, aYStart, aXStart + aWidth - 1, aYStart + aHeight - 1, aColor);
 #endif
     if (USART_isBluetoothPaired()) {
@@ -362,7 +369,7 @@ void BlueDisplay::drawRectRel(uint16_t aXStart, uint16_t aYStart, uint16_t aWidt
 }
 
 void BlueDisplay::fillRect(uint16_t aXStart, uint16_t aYStart, uint16_t aXEnd, uint16_t aYEnd, color16_t aColor) {
-#ifdef LOCAL_DISPLAY_EXISTS
+#if defined(SUPPORT_LOCAL_DISPLAY)
     LocalDisplay.fillRect(aXStart, aYStart, aXEnd, aYEnd, aColor);
 #endif
     if (USART_isBluetoothPaired()) {
@@ -371,7 +378,7 @@ void BlueDisplay::fillRect(uint16_t aXStart, uint16_t aYStart, uint16_t aXEnd, u
 }
 
 void BlueDisplay::fillRectRel(uint16_t aXStart, uint16_t aYStart, uint16_t aWidth, uint16_t aHeight, color16_t aColor) {
-#ifdef LOCAL_DISPLAY_EXISTS
+#if defined(SUPPORT_LOCAL_DISPLAY)
     LocalDisplay.fillRect(aXStart, aYStart, aXStart + aWidth - 1, aYStart + aHeight - 1, aColor);
 #endif
     if (USART_isBluetoothPaired()) {
@@ -380,7 +387,7 @@ void BlueDisplay::fillRectRel(uint16_t aXStart, uint16_t aYStart, uint16_t aWidt
 }
 
 void BlueDisplay::drawCircle(uint16_t aXCenter, uint16_t aYCenter, uint16_t aRadius, color16_t aColor, uint16_t aStrokeWidth) {
-#ifdef LOCAL_DISPLAY_EXISTS
+#if defined(SUPPORT_LOCAL_DISPLAY)
     LocalDisplay.drawCircle(aXCenter, aYCenter, aRadius, aColor);
 #endif
     if (USART_isBluetoothPaired()) {
@@ -389,7 +396,7 @@ void BlueDisplay::drawCircle(uint16_t aXCenter, uint16_t aYCenter, uint16_t aRad
 }
 
 void BlueDisplay::fillCircle(uint16_t aXCenter, uint16_t aYCenter, uint16_t aRadius, color16_t aColor) {
-#ifdef LOCAL_DISPLAY_EXISTS
+#if defined(SUPPORT_LOCAL_DISPLAY)
     LocalDisplay.fillCircle(aXCenter, aYCenter, aRadius, aColor);
 #endif
     if (USART_isBluetoothPaired()) {
@@ -398,12 +405,14 @@ void BlueDisplay::fillCircle(uint16_t aXCenter, uint16_t aYCenter, uint16_t aRad
 }
 
 /**
+ * @param aPosX left position
+ * @param aPosY baseline position - use (upper_position + getTextAscend(<aTextSize>))
  * @return start x for next character / x + (TEXT_SIZE_11_WIDTH * size)
  */
 uint16_t BlueDisplay::drawChar(uint16_t aPosX, uint16_t aPosY, char aChar, uint16_t aCharSize, color16_t aFGColor,
         color16_t aBGColor) {
     uint16_t tRetValue = 0;
-#ifdef LOCAL_DISPLAY_EXISTS
+#if defined(SUPPORT_LOCAL_DISPLAY)
     tRetValue = LocalDisplay.drawChar(aPosX, aPosY - getTextAscend(aCharSize), aChar, getLocalTextSize(aCharSize), aFGColor,
             aBGColor);
 #endif
@@ -420,13 +429,13 @@ uint16_t BlueDisplay::drawChar(uint16_t aPosX, uint16_t aPosY, char aChar, uint1
  * @param aStringPtr  If /r is used as newline character, rest of line will be cleared, if /n is used, rest of line will not be cleared.
  * @param aTextSize FontSize of text
  * @param aFGColor Foreground/text color
- * @param aBGColor if COLOR_NO_BACKGROUND, then the background will not filled
+ * @param aBGColor if COLOR16_NO_BACKGROUND, then the background will not filled
  * @return uint16_t start x for next character - next x Parameter
  */
 uint16_t BlueDisplay::drawText(uint16_t aPosX, uint16_t aPosY, const char *aStringPtr, uint16_t aTextSize, color16_t aFGColor,
         color16_t aBGColor) {
     uint16_t tRetValue = 0;
-#ifdef LOCAL_DISPLAY_EXISTS
+#if defined(SUPPORT_LOCAL_DISPLAY)
     tRetValue = LocalDisplay.drawText(aPosX, aPosY - getTextAscend(aTextSize), (char *) aStringPtr, getLocalTextSize(aTextSize),
             aFGColor, aBGColor);
 #endif
@@ -451,12 +460,12 @@ uint16_t BlueDisplay::drawByte(uint16_t aPosX, uint16_t aPosY, int8_t aByte, uin
         color16_t aBGColor) {
     uint16_t tRetValue = 0;
     char tStringBuffer[5];
-#ifdef AVR
+#if defined(AVR)
     sprintf_P(tStringBuffer, PSTR("%4hhd"), aByte);
 #else
     sprintf(tStringBuffer, "%4hhd", aByte);
 #endif
-#ifdef LOCAL_DISPLAY_EXISTS
+#if defined(SUPPORT_LOCAL_DISPLAY)
     tRetValue = LocalDisplay.drawText(aPosX, aPosY - getTextAscend(aTextSize), tStringBuffer, getLocalTextSize(aTextSize), aFGColor,
             aBGColor);
 #endif
@@ -472,12 +481,12 @@ uint16_t BlueDisplay::drawUnsignedByte(uint16_t aPosX, uint16_t aPosY, uint8_t a
         color16_t aFGColor, color16_t aBGColor) {
     uint16_t tRetValue = 0;
     char tStringBuffer[4];
-#ifdef AVR
+#if defined(AVR)
     sprintf_P(tStringBuffer, PSTR("%3u"), aUnsignedByte);
 #else
     sprintf(tStringBuffer, "%3u", aUnsignedByte);
 #endif
-#ifdef LOCAL_DISPLAY_EXISTS
+#if defined(SUPPORT_LOCAL_DISPLAY)
     tRetValue = LocalDisplay.drawText(aPosX, aPosY - getTextAscend(aTextSize), tStringBuffer, getLocalTextSize(aTextSize), aFGColor,
             aBGColor);
 #endif
@@ -493,12 +502,12 @@ uint16_t BlueDisplay::drawShort(uint16_t aPosX, uint16_t aPosY, int16_t aShort, 
         color16_t aBGColor) {
     uint16_t tRetValue = 0;
     char tStringBuffer[7];
-#ifdef AVR
+#if defined(AVR)
     sprintf_P(tStringBuffer, PSTR("%6hd"), aShort);
 #else
     sprintf(tStringBuffer, "%6hd", aShort);
 #endif
-#ifdef LOCAL_DISPLAY_EXISTS
+#if defined(SUPPORT_LOCAL_DISPLAY)
     tRetValue = LocalDisplay.drawText(aPosX, aPosY - getTextAscend(aTextSize), tStringBuffer, getLocalTextSize(aTextSize), aFGColor,
             aBGColor);
 #endif
@@ -514,14 +523,14 @@ uint16_t BlueDisplay::drawLong(uint16_t aPosX, uint16_t aPosY, int32_t aLong, ui
         color16_t aBGColor) {
     uint16_t tRetValue = 0;
     char tStringBuffer[12];
-#ifdef AVR
+#if defined(AVR)
     sprintf_P(tStringBuffer, PSTR("%11ld"), aLong);
 #elif defined(__XTENSA__)
     sprintf(tStringBuffer, "%11ld", (long)aLong);
 #else
     sprintf(tStringBuffer, "%11ld", aLong);
 #endif
-#ifdef LOCAL_DISPLAY_EXISTS
+#if defined(SUPPORT_LOCAL_DISPLAY)
     tRetValue = LocalDisplay.drawText(aPosX, aPosY - getTextAscend(aTextSize), tStringBuffer, getLocalTextSize(aTextSize), aFGColor,
             aBGColor);
 #endif
@@ -537,8 +546,8 @@ uint16_t BlueDisplay::drawLong(uint16_t aPosX, uint16_t aPosY, int32_t aLong, ui
  * for writeString implementation
  */
 void BlueDisplay::setWriteStringSizeAndColorAndFlag(uint16_t aPrintSize, color16_t aPrintColor, color16_t aPrintBackgroundColor,
-bool aClearOnNewScreen) {
-#ifdef LOCAL_DISPLAY_EXISTS
+        bool aClearOnNewScreen) {
+#if defined(SUPPORT_LOCAL_DISPLAY)
     printSetOptions(getLocalTextSize(aPrintSize), aPrintColor, aPrintBackgroundColor, aClearOnNewScreen);
 #endif
     if (USART_isBluetoothPaired()) {
@@ -548,7 +557,7 @@ bool aClearOnNewScreen) {
 }
 
 void BlueDisplay::setWriteStringPosition(uint16_t aPosX, uint16_t aPosY) {
-#ifdef LOCAL_DISPLAY_EXISTS
+#if defined(SUPPORT_LOCAL_DISPLAY)
     printSetPosition(aPosX, aPosY);
 #endif
     if (USART_isBluetoothPaired()) {
@@ -557,7 +566,7 @@ void BlueDisplay::setWriteStringPosition(uint16_t aPosX, uint16_t aPosY) {
 }
 
 void BlueDisplay::setWriteStringPositionColumnLine(uint16_t aColumnNumber, uint16_t aLineNumber) {
-#ifdef LOCAL_DISPLAY_EXISTS
+#if defined(SUPPORT_LOCAL_DISPLAY)
     printSetPositionColumnLine(aColumnNumber, aLineNumber);
 #endif
     if (USART_isBluetoothPaired()) {
@@ -566,7 +575,7 @@ void BlueDisplay::setWriteStringPositionColumnLine(uint16_t aColumnNumber, uint1
 }
 
 void BlueDisplay::writeString(const char *aStringPtr, uint8_t aStringLength) {
-#ifdef LOCAL_DISPLAY_EXISTS
+#if defined(SUPPORT_LOCAL_DISPLAY)
     myPrint(aStringPtr, aStringLength);
 #endif
     if (USART_isBluetoothPaired()) {
@@ -576,7 +585,7 @@ void BlueDisplay::writeString(const char *aStringPtr, uint8_t aStringLength) {
 
 // for use in syscalls.c
 extern "C" void writeStringC(const char *aStringPtr, uint8_t aStringLength) {
-#ifdef LOCAL_DISPLAY_EXISTS
+#if defined(SUPPORT_LOCAL_DISPLAY)
     myPrint(aStringPtr, aStringLength);
 #endif
     if (USART_isBluetoothPaired()) {
@@ -605,7 +614,7 @@ void BlueDisplay::debug(const char *aStringPtr) {
 void BlueDisplay::debug(uint8_t aByte) {
     char tStringBuffer[9];
 // hhu -> unsigned char instead of unsigned int with u
-#ifdef AVR
+#if defined(AVR)
     sprintf_P(tStringBuffer, PSTR("%3hhu 0x%2.2hhX"), aByte, aByte);
 #else
     sprintf(tStringBuffer, "%3hhu 0x%2.2hhX", aByte, aByte);
@@ -621,7 +630,7 @@ void BlueDisplay::debug(uint8_t aByte) {
 void BlueDisplay::debug(const char *aMessage, uint8_t aByte) {
     char tStringBuffer[STRING_BUFFER_STACK_SIZE_FOR_DEBUG_WITH_MESSAGE];
 // hhu -> unsigned char instead of unsigned int with u
-#ifdef AVR
+#if defined(AVR)
     snprintf_P(tStringBuffer, STRING_BUFFER_STACK_SIZE_FOR_DEBUG_WITH_MESSAGE, PSTR("%s%3hhu 0x%2.2hhX"), aMessage, aByte, aByte);
 #else
     snprintf(tStringBuffer, STRING_BUFFER_STACK_SIZE_FOR_DEBUG_WITH_MESSAGE, "%s%3hhu 0x%2.2hhX", aMessage, aByte, aByte);
@@ -637,7 +646,7 @@ void BlueDisplay::debug(const char *aMessage, uint8_t aByte) {
 void BlueDisplay::debug(const char *aMessage, int8_t aByte) {
     char tStringBuffer[STRING_BUFFER_STACK_SIZE_FOR_DEBUG_WITH_MESSAGE];
 // hhd -> signed char instead of signed int with d
-#ifdef AVR
+#if defined(AVR)
     snprintf_P(tStringBuffer, STRING_BUFFER_STACK_SIZE_FOR_DEBUG_WITH_MESSAGE, PSTR("%s%4hhd 0x%2.2hhX"), aMessage, aByte, aByte);
 #else
     snprintf(tStringBuffer, STRING_BUFFER_STACK_SIZE_FOR_DEBUG_WITH_MESSAGE, "%s%4hhd 0x%2.2hhX", aMessage, aByte, aByte);
@@ -650,7 +659,7 @@ void BlueDisplay::debug(const char *aMessage, int8_t aByte) {
 void BlueDisplay::debug(int8_t aByte) {
     char tStringBuffer[10];
 // hhd -> signed char instead of int with d
-#ifdef AVR
+#if defined(AVR)
     sprintf_P(tStringBuffer, PSTR("%4hhd 0x%2.2hhX"), aByte, aByte);
 #else
     sprintf(tStringBuffer, "%4hhd 0x%2.2hhX", aByte, aByte);
@@ -663,7 +672,7 @@ void BlueDisplay::debug(int8_t aByte) {
 void BlueDisplay::debug(uint16_t aShort) {
     char tStringBuffer[13]; //5 decimal + 3 " 0x" + 4 hex +1
 // hu -> unsigned short int instead of unsigned int with u
-#ifdef AVR
+#if defined(AVR)
     sprintf_P(tStringBuffer, PSTR("%5u 0x%4.4X"), aShort, aShort);
 #else
     sprintf(tStringBuffer, "%5hu 0x%4.4X", aShort, aShort);
@@ -676,7 +685,7 @@ void BlueDisplay::debug(uint16_t aShort) {
 void BlueDisplay::debug(int16_t aShort) {
     char tStringBuffer[14]; //6 decimal + 3 " 0x" + 4 hex +1
 // hd -> short int instead of int with d
-#ifdef AVR
+#if defined(AVR)
     sprintf_P(tStringBuffer, PSTR("%6d 0x%4.4X"), aShort, aShort);
 #else
     sprintf(tStringBuffer, "%6hd 0x%4.4X", aShort, aShort);
@@ -692,7 +701,7 @@ void BlueDisplay::debug(int16_t aShort) {
 void BlueDisplay::debug(const char *aMessage, uint16_t aShort) {
     char tStringBuffer[STRING_BUFFER_STACK_SIZE_FOR_DEBUG_WITH_MESSAGE];
 // hd -> short int instead of int with d
-#ifdef AVR
+#if defined(AVR)
     snprintf_P(tStringBuffer, STRING_BUFFER_STACK_SIZE_FOR_DEBUG_WITH_MESSAGE, PSTR("%s%5u 0x%4.4X"), aMessage, aShort, aShort);
 #else
     snprintf(tStringBuffer, STRING_BUFFER_STACK_SIZE_FOR_DEBUG_WITH_MESSAGE, "%s%5hu 0x%4.4X", aMessage, aShort, aShort);
@@ -708,7 +717,7 @@ void BlueDisplay::debug(const char *aMessage, uint16_t aShort) {
 void BlueDisplay::debug(const char *aMessage, int16_t aShort) {
     char tStringBuffer[STRING_BUFFER_STACK_SIZE_FOR_DEBUG_WITH_MESSAGE];
 // hd -> short int instead of int with d
-#ifdef AVR
+#if defined(AVR)
     snprintf_P(tStringBuffer, STRING_BUFFER_STACK_SIZE_FOR_DEBUG_WITH_MESSAGE, PSTR("%s%6d 0x%4.4X"), aMessage, aShort, aShort);
 #else
     snprintf(tStringBuffer, STRING_BUFFER_STACK_SIZE_FOR_DEBUG_WITH_MESSAGE, "%s%6hd 0x%4.4X", aMessage, aShort, aShort);
@@ -720,7 +729,7 @@ void BlueDisplay::debug(const char *aMessage, int16_t aShort) {
 
 void BlueDisplay::debug(uint32_t aLong) {
     char tStringBuffer[22]; //10 decimal + 3 " 0x" + 8 hex +1
-#ifdef AVR
+#if defined(AVR)
     sprintf_P(tStringBuffer, PSTR("%10lu 0x%lX"), aLong, aLong);
 #elif defined(__XTENSA__)
     sprintf(tStringBuffer, "%10lu 0x%lX", (long)aLong, (long)aLong);
@@ -734,7 +743,7 @@ void BlueDisplay::debug(uint32_t aLong) {
 
 void BlueDisplay::debug(int32_t aLong) {
     char tStringBuffer[23]; //11 decimal + 3 " 0x" + 8 hex +1
-#ifdef AVR
+#if defined(AVR)
     sprintf_P(tStringBuffer, PSTR("%11ld 0x%lX"), aLong, aLong);
 #elif defined(__XTENSA__)
     sprintf(tStringBuffer, "%11ld 0x%lX", (long)aLong, (long)aLong);
@@ -751,7 +760,7 @@ void BlueDisplay::debug(int32_t aLong) {
  */
 void BlueDisplay::debug(const char *aMessage, uint32_t aLong) {
     char tStringBuffer[STRING_BUFFER_STACK_SIZE_FOR_DEBUG_WITH_MESSAGE];
-#ifdef AVR
+#if defined(AVR)
     snprintf_P(tStringBuffer, STRING_BUFFER_STACK_SIZE_FOR_DEBUG_WITH_MESSAGE, PSTR("%s%10lu 0x%lX"), aMessage, aLong, aLong);
 #elif defined(__XTENSA__)
     snprintf(tStringBuffer, STRING_BUFFER_STACK_SIZE_FOR_DEBUG_WITH_MESSAGE, "%s%10lu 0x%lX", aMessage, (long)aLong, (long)aLong);
@@ -768,7 +777,7 @@ void BlueDisplay::debug(const char *aMessage, uint32_t aLong) {
  */
 void BlueDisplay::debug(const char *aMessage, int32_t aLong) {
     char tStringBuffer[STRING_BUFFER_STACK_SIZE_FOR_DEBUG_WITH_MESSAGE];
-#ifdef AVR
+#if defined(AVR)
     snprintf_P(tStringBuffer, STRING_BUFFER_STACK_SIZE_FOR_DEBUG_WITH_MESSAGE, PSTR("%s%11ld 0x%lX"), aMessage, aLong, aLong);
 #elif defined(__XTENSA__)
     snprintf(tStringBuffer, STRING_BUFFER_STACK_SIZE_FOR_DEBUG_WITH_MESSAGE, "%s%11ld 0x%lX", aMessage, (long)aLong, (long)aLong);
@@ -782,7 +791,7 @@ void BlueDisplay::debug(const char *aMessage, int32_t aLong) {
 
 void BlueDisplay::debug(float aFloat) {
     char tStringBuffer[22];
-#ifdef AVR
+#if defined(AVR)
     dtostrf(aFloat, 16, 7, tStringBuffer);
 #else
     sprintf(tStringBuffer, "%f", aFloat);
@@ -797,10 +806,10 @@ void BlueDisplay::debug(float aFloat) {
  */
 void BlueDisplay::debug(const char *aMessage, float aFloat) {
     char tStringBuffer[STRING_BUFFER_STACK_SIZE_FOR_DEBUG_WITH_MESSAGE];
-#ifdef AVR
+#if defined(AVR)
     strncpy(tStringBuffer, aMessage, (STRING_BUFFER_STACK_SIZE_FOR_DEBUG_WITH_MESSAGE - 22));
     dtostrf(aFloat, 16, 7, &tStringBuffer[strlen(tStringBuffer)]);
-//    snprintf(tStringBuffer, STRING_BUFFER_STACK_SIZE_FOR_DEBUG_WITH_MESSAGE, "%s%f", aMessage, (double)aFloat); // requires ca. 800 Bytes more
+//    snprintf(tStringBuffer, STRING_BUFFER_STACK_SIZE_FOR_DEBUG_WITH_MESSAGE, "%s%f", aMessage, (double)aFloat); // requires ca. 800 bytes more
 #else
     snprintf(tStringBuffer, STRING_BUFFER_STACK_SIZE_FOR_DEBUG_WITH_MESSAGE, "%s%f", aMessage, aFloat);
 #endif
@@ -811,7 +820,7 @@ void BlueDisplay::debug(const char *aMessage, float aFloat) {
 
 void BlueDisplay::debug(double aDouble) {
     char tStringBuffer[22];
-#ifdef AVR
+#if defined(AVR)
     dtostrf(aDouble, 16, 7, tStringBuffer);
 #else
     sprintf(tStringBuffer, "%f", aDouble);
@@ -937,9 +946,9 @@ extern "C" uint16_t drawTextC(uint16_t aXStart, uint16_t aYStart, const char *aS
     return tRetValue;
 }
 
-#ifdef LOCAL_DISPLAY_EXISTS
+#if defined(SUPPORT_LOCAL_DISPLAY)
 /**
- * @param aBGColor if COLOR_NO_BACKGROUND, then do not clear rest of line
+ * @param aBGColor if COLOR16_NO_BACKGROUND, then do not clear rest of line
  */
 void BlueDisplay::drawMLText(uint16_t aPosX, uint16_t aPosY, const char *aStringPtr, uint16_t aTextSize, color16_t aFGColor,
         color16_t aBGColor) {
@@ -953,7 +962,6 @@ void BlueDisplay::drawMLText(uint16_t aPosX, uint16_t aPosY, const char *aString
 }
 #endif
 
-#ifdef AVR
 uint16_t BlueDisplay::drawTextPGM(uint16_t aPosX, uint16_t aPosY, const char *aPGMString, uint16_t aTextSize, color16_t aFGColor,
         color16_t aBGColor) {
     uint16_t tRetValue = 0;
@@ -963,7 +971,7 @@ uint16_t BlueDisplay::drawTextPGM(uint16_t aPosX, uint16_t aPosY, const char *aP
     }
     char tStringBuffer[STRING_BUFFER_STACK_SIZE];
     strncpy_P(tStringBuffer, aPGMString, tTextLength);
-#ifdef LOCAL_DISPLAY_EXISTS
+#if defined(SUPPORT_LOCAL_DISPLAY)
     tRetValue = LocalDisplay.drawTextPGM(aPosX, aPosY - getTextAscend(aTextSize), aPGMString, getLocalTextSize(aTextSize), aFGColor,
             aBGColor);
 #endif
@@ -998,7 +1006,7 @@ uint16_t BlueDisplay::drawText(uint16_t aPosX, uint16_t aPosY, const __FlashStri
     }
     char tStringBuffer[STRING_BUFFER_STACK_SIZE];
     strncpy_P(tStringBuffer, tPGMString, tTextLength);
-#ifdef LOCAL_DISPLAY_EXISTS
+#if defined(SUPPORT_LOCAL_DISPLAY)
     tRetValue = LocalDisplay.drawTextPGM(aPosX, aPosY - getTextAscend(aTextSize), tPGMString, getLocalTextSize(aTextSize), aFGColor,
             aBGColor);
 #endif
@@ -1023,7 +1031,6 @@ void BlueDisplay::drawText(uint16_t aPosX, uint16_t aPosY, const __FlashStringHe
         sendUSARTArgsAndByteBuffer(FUNCTION_DRAW_STRING, 2, aPosX, aPosY, tTextLength, (uint8_t*) tStringBuffer);
     }
 }
-#endif
 
 /***************************************************************************************************************************************************
  *
@@ -1110,7 +1117,7 @@ void BlueDisplay::requestMaxCanvasSize(void) {
     sendUSARTArgs(FUNCTION_REQUEST_MAX_CANVAS_SIZE, 0);
 }
 
-#ifdef AVR
+#if defined(AVR)
 void BlueDisplay::getNumberWithShortPromptPGM(void (*aNumberHandler)(float), const char *aPGMShortPromptString) {
     if (USART_isBluetoothPaired()) {
         uint8_t tShortPromptLength = strlen_P(aPGMShortPromptString);
@@ -1172,7 +1179,7 @@ void BlueDisplay::getNumberWithShortPrompt(void (*aNumberHandler)(float), const 
         union {
             float floatValue;
             uint16_t shortArray[2];
-        }floatToShortArray;
+        } floatToShortArray;
         floatToShortArray.floatValue = aInitialValue;
         sendUSARTArgsAndByteBuffer(FUNCTION_GET_NUMBER_WITH_SHORT_PROMPT, 3, aNumberHandler, floatToShortArray.shortArray[0],
                 floatToShortArray.shortArray[1], tShortPromptLength, (uint8_t*) tStringBuffer);
@@ -1345,10 +1352,10 @@ void BlueDisplay::deactivateAllButtons(void) {
     }
 }
 
-#ifdef AVR
+#if defined(AVR)
 BDButtonHandle_t BlueDisplay::createButtonPGM(uint16_t aPositionX, uint16_t aPositionY, uint16_t aWidthX, uint16_t aHeightY,
         color16_t aButtonColor, const char *aPGMCaption, uint8_t aCaptionSize, uint8_t aFlags, int16_t aValue,
-        void (*aOnTouchHandler)(BDButton *, int16_t)) {
+        void (*aOnTouchHandler)(BDButton*, int16_t)) {
     BDButtonHandle_t tButtonNumber = sLocalButtonIndex++;
     if (USART_isBluetoothPaired()) {
         uint8_t tCaptionLength = strlen_P(aPGMCaption);
@@ -1505,125 +1512,15 @@ void clearDisplayAndDisableButtonsAndSliders(color16_t aColor) {
     BDSlider::deactivateAllSliders();
 }
 
+#if defined(ARDUINO)
 #include <Arduino.h>
+#endif
+
 #if defined(AVR) && defined(ADCSRA) && defined(ADATE)
-
 /*
- * The next definitions and weak functions are copied from ADCUtils to avoid delivering two additional files
- * for just one BlueDisplay function printVCCAndTemperaturePeriodically().
+ * The next include is for just one BlueDisplay function printVCCAndTemperaturePeriodically().
  */
-//#include "ADCUtils.h"
-/***************************************
- * ADC Section for VCC and temperature
- ***************************************/
-#define ADC_PRESCALE8    3 // 104 microseconds per ADC conversion at 1 MHz
-#define ADC_PRESCALE16   4 // 208 microseconds per ADC conversion at 1 MHz
-#define ADC_PRESCALE32   5 // 416 microseconds per ADC conversion at 1 MHz
-#define ADC_PRESCALE64   6 // 52 microseconds per ADC conversion at 16 MHz
-#define ADC_PRESCALE128  7 // 104 microseconds per ADC conversion at 16 MHz
-// definitions for 0.1 ms conversion time
-#if (F_CPU == 1000000)
-#define ADC_PRESCALE ADC_PRESCALE8
-#elif (F_CPU == 8000000)
-#define ADC_PRESCALE ADC_PRESCALE64
-#elif (F_CPU == 16000000)
-#define ADC_PRESCALE ADC_PRESCALE128
-#endif
-
-#define ADC_TEMPERATURE_CHANNEL_MUX 8
-#define ADC_1_1_VOLT_CHANNEL_MUX 14
-
-#define SHIFT_VALUE_FOR_REFERENCE REFS0
-
-uint16_t __attribute__((weak)) readADCChannelWithReferenceOversample(uint8_t aChannelNumber, uint8_t aReference,
-        uint8_t aOversampleExponent) {
-    uint16_t tSumValue = 0;
-    ADMUX = aChannelNumber | (aReference << SHIFT_VALUE_FOR_REFERENCE);
-
-// ADCSRB = 0; // free running mode if ADATE is 1 - is default
-// ADSC-StartConversion ADATE-AutoTriggerEnable ADIF-Reset Interrupt Flag
-    ADCSRA = (_BV(ADEN) | _BV(ADSC) | _BV(ADATE) | _BV(ADIF) | ADC_PRESCALE);
-
-    for (uint8_t i = 0; i < _BV(aOversampleExponent); i++) {
-        /*
-         * wait for free running conversion to finish.
-         * Do not wait for ADSC here, since ADSC is only low for 1 ADC Clock cycle on free running conversion.
-         */
-        loop_until_bit_is_set(ADCSRA, ADIF);
-
-        ADCSRA |= _BV(ADIF); // clear bit to recognize next conversion has finished
-        // Add value
-        tSumValue += ADCL | (ADCH << 8);        // using myWord does not save space here
-        // tSumValue += (ADCH << 8) | ADCL; // this does NOT work!
-    }
-    ADCSRA &= ~_BV(ADATE); // Disable auto-triggering (free running mode)
-    return (tSumValue >> aOversampleExponent);
-}
-
-// old name
-float getVCCValue(void) {
-    return getVCCVoltage();
-}
-
-#ifdef INTERNAL1V1
-// workaround for MEGA 2560
-#define INTERNAL INTERNAL1V1
-#endif
-
-/*
- * New name
- * Version which restore the ADC Channel and handle reference switching.
- */
-float __attribute__((weak)) getVCCVoltage(void) {
-// use AVCC with external capacitor at AREF pin as reference
-    uint8_t tOldADMUX = ADMUX;
-    /*
-     * Must wait >= 200 us if reference has to be switched to VSS
-     * Must wait >= 400 us if channel has to be switched to 1.1 volt internal channel from channel with 5 volt input
-     */
-    if ((ADMUX & (INTERNAL << SHIFT_VALUE_FOR_REFERENCE)) || ((ADMUX & 0x0F) != ADC_1_1_VOLT_CHANNEL_MUX)) {
-        // Switch to 1.1 volt channel and AREF to VCC
-        ADMUX = ADC_1_1_VOLT_CHANNEL_MUX | (DEFAULT << SHIFT_VALUE_FOR_REFERENCE);
-        // and wait for settling
-        delayMicroseconds(400); // experimental value is >= 400 us
-    }
-    uint16_t tVCC = readADCChannelWithReferenceOversample(ADC_1_1_VOLT_CHANNEL_MUX, DEFAULT, 2);
-    ADMUX = tOldADMUX;
-    /*
-     * Do not wait for reference to settle here, since it may not be necessary
-     */
-    return ((1023 * 1.1) / tVCC);
-}
-
-/*
- * Version which restore the ADC Channel and handle reference switching.
- */
-float __attribute__((weak)) getTemperature(void) {
-#if defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__)
-    return 0.0;
-#else
-// use internal 1.1 volt as reference
-    uint8_t tOldADMUX;
-
-    bool tReferenceMustBeChanged = (ADMUX & (DEFAULT << SHIFT_VALUE_FOR_REFERENCE));
-    if (tReferenceMustBeChanged) {
-        tOldADMUX = ADMUX;
-        // set AREF  to 1.1 volt and wait for settling
-        ADMUX = ADC_TEMPERATURE_CHANNEL_MUX | (INTERNAL << SHIFT_VALUE_FOR_REFERENCE);
-        delayMicroseconds(4000); // measured value is 3500 us
-    }
-
-    float tTemp = (readADCChannelWithReferenceOversample(ADC_TEMPERATURE_CHANNEL_MUX, INTERNAL, 2) - 317);
-
-    if (tReferenceMustBeChanged) {
-        ADMUX = tOldADMUX;
-        // wait for settling back to VCC
-        delayMicroseconds(400); // experimental value is > 200 us
-    }
-    return (tTemp / 1.22);
-#endif
-}
-
+#include "ADCUtils.hpp"
 /*
  * Show temperature and VCC voltage
  */
@@ -1645,11 +1542,11 @@ void BlueDisplay::printVCCAndTemperaturePeriodically(uint16_t aXPos, uint16_t aY
         dtostrf(tVCCvoltage, 4, 2, tVCCString);
 
         sprintf_P(tDataBuffer, PSTR("%s volt %s\xB0" "C"), tVCCString, tTempString); // \xB0 is degree character
-        drawText(aXPos, aYPos, tDataBuffer, aTextSize, COLOR_BLACK, COLOR_WHITE);
+        drawText(aXPos, aYPos, tDataBuffer, aTextSize, COLOR16_BLACK, COLOR16_WHITE);
     }
 }
-#else
-// dummy functions for examples
+#else // defined(AVR) && defined(ADCSRA) && defined(ADATE)
+// dummy functions to compile examples without errors
 uint16_t __attribute__((weak)) readADCChannelWithReferenceOversample(uint8_t aChannelNumber, uint8_t aReference,
         uint8_t aOversampleExponent) {
     return 0;
@@ -1660,7 +1557,7 @@ float __attribute__((weak)) getTemperature(void) {
 float __attribute__((weak)) getVCCVoltage(void) {
     return 0.0;
 }
-#  ifdef AVR
+#  if defined(AVR)
 void BlueDisplay::printVCCAndTemperaturePeriodically(uint16_t aXPos, uint16_t aYPos, uint16_t aTextSize, uint16_t aPeriodMillis) {
 }
 #  endif
@@ -1693,7 +1590,7 @@ uint16_t getTextWidth(uint16_t aTextSize) {
     if (aTextSize == 11) {
         return TEXT_SIZE_11_WIDTH;
     }
-#ifdef PGMSPACE_MATTERS
+#if defined(PGMSPACE_MATTERS)
     return TEXT_SIZE_22_WIDTH;
 #else
     if (aTextSize == 22) {
@@ -1712,7 +1609,7 @@ uint16_t getTextAscend(uint16_t aTextSize) {
     if (aTextSize == TEXT_SIZE_11) {
         return TEXT_SIZE_11_ASCEND;
     }
-#ifdef PGMSPACE_MATTERS
+#if defined(PGMSPACE_MATTERS)
     return TEXT_SIZE_22_ASCEND;
 #else
     if (aTextSize == TEXT_SIZE_22) {
@@ -1733,7 +1630,7 @@ uint16_t getTextDecend(uint16_t aTextSize) {
     if (aTextSize == TEXT_SIZE_11) {
         return TEXT_SIZE_11_ASCEND;
     }
-#ifdef PGMSPACE_MATTERS
+#if defined(PGMSPACE_MATTERS)
     return TEXT_SIZE_22_ASCEND;
 #else
 
@@ -1755,7 +1652,7 @@ uint16_t getTextAscendMinusDescend(uint16_t aTextSize) {
     if (aTextSize == TEXT_SIZE_11) {
         return TEXT_SIZE_11_ASCEND - TEXT_SIZE_11_DECEND;
     }
-#ifdef PGMSPACE_MATTERS
+#if defined(PGMSPACE_MATTERS)
     return TEXT_SIZE_22_ASCEND - TEXT_SIZE_22_DECEND;
 #else
     if (aTextSize == TEXT_SIZE_22) {
@@ -1774,7 +1671,7 @@ uint16_t getTextMiddle(uint16_t aTextSize) {
     if (aTextSize == TEXT_SIZE_11) {
         return (TEXT_SIZE_11_ASCEND - TEXT_SIZE_11_DECEND) / 2;
     }
-#ifdef PGMSPACE_MATTERS
+#if defined(PGMSPACE_MATTERS)
     return (TEXT_SIZE_22_ASCEND - TEXT_SIZE_22_DECEND) / 2;
 #else
     if (aTextSize == TEXT_SIZE_22) {
@@ -1826,7 +1723,7 @@ void BlueDisplay::drawStar(int aXPos, int aYPos, int tOffsetCenter, int tLength,
         tLength = -tLength;
     }
 
-    drawPixel(aXPos, aYPos, COLOR_BLUE);
+    drawPixel(aXPos, aYPos, COLOR16_BLUE);
 }
 
 /**
@@ -1836,16 +1733,16 @@ void BlueDisplay::drawGreyscale(uint16_t aXPos, uint16_t tYPos, uint16_t aHeight
     uint16_t tY;
     for (int i = 0; i < 256; ++i) {
         tY = tYPos;
-        drawLineRel(aXPos, tY, 0, aHeight, RGB(i, i, i));
+        drawLineRel(aXPos, tY, 0, aHeight, COLOR16(i, i, i));
         tY += aHeight;
-        drawLineRel(aXPos, tY, 0, aHeight, RGB((0xFF - i), (0xFF - i), (0xFF - i)));
+        drawLineRel(aXPos, tY, 0, aHeight, COLOR16((0xFF - i), (0xFF - i), (0xFF - i)));
         tY += aHeight;
-        drawLineRel(aXPos, tY, 0, aHeight, RGB(i, 0, 0));
+        drawLineRel(aXPos, tY, 0, aHeight, COLOR16(i, 0, 0));
         tY += aHeight;
-        drawLineRel(aXPos, tY, 0, aHeight, RGB(0, i, 0));
+        drawLineRel(aXPos, tY, 0, aHeight, COLOR16(0, i, 0));
         tY += aHeight;
         // For Test purposes: fillRectRel instead of drawLineRel gives missing pixel on different scale factors
-        fillRectRel(aXPos, tY, 1, aHeight, RGB(0, 0, i));
+        fillRectRel(aXPos, tY, 1, aHeight, COLOR16(0, 0, i));
         aXPos++;
     }
 }
@@ -1856,77 +1753,77 @@ void BlueDisplay::drawGreyscale(uint16_t aXPos, uint16_t tYPos, uint16_t aHeight
 void BlueDisplay::testDisplay(void) {
     clearDisplay();
 
-    fillRectRel(0, 0, 2, 2, COLOR_RED);
-    fillRectRel(mRequestedDisplaySize.XWidth - 3, 0, 3, 3, COLOR_GREEN);
-    fillRectRel(0, mRequestedDisplaySize.YHeight - 4, 4, 4, COLOR_BLUE);
-    fillRectRel(mRequestedDisplaySize.XWidth - 3, mRequestedDisplaySize.YHeight - 3, 3, 3, COLOR_BLACK);
+    fillRectRel(0, 0, 2, 2, COLOR16_RED);
+    fillRectRel(mRequestedDisplaySize.XWidth - 3, 0, 3, 3, COLOR16_GREEN);
+    fillRectRel(0, mRequestedDisplaySize.YHeight - 4, 4, 4, COLOR16_BLUE);
+    fillRectRel(mRequestedDisplaySize.XWidth - 3, mRequestedDisplaySize.YHeight - 3, 3, 3, COLOR16_BLACK);
 
-    fillRectRel(2, 2, 4, 4, COLOR_RED);
-    fillRectRel(10, 20, 10, 20, COLOR_RED);
-    drawRectRel(8, 18, 14, 24, COLOR_BLUE, 1);
-    drawCircle(15, 30, 5, COLOR_BLUE, 1);
-    fillCircle(20, 10, 10, COLOR_BLUE);
+    fillRectRel(2, 2, 4, 4, COLOR16_RED);
+    fillRectRel(10, 20, 10, 20, COLOR16_RED);
+    drawRectRel(8, 18, 14, 24, COLOR16_BLUE, 1);
+    drawCircle(15, 30, 5, COLOR16_BLUE, 1);
+    fillCircle(20, 10, 10, COLOR16_BLUE);
 
     drawLineRel(0, mRequestedDisplaySize.YHeight - 1, mRequestedDisplaySize.XWidth, -mRequestedDisplaySize.YHeight,
-    COLOR_GREEN);
-    drawLineRel(6, 6, mRequestedDisplaySize.XWidth - 9, mRequestedDisplaySize.YHeight - 9, COLOR_BLUE);
-    drawChar(50, TEXT_SIZE_11_ASCEND, 'y', TEXT_SIZE_11, COLOR_GREEN, COLOR_YELLOW);
-    drawText(0, 50 + TEXT_SIZE_11_ASCEND, "Calibration", TEXT_SIZE_11, COLOR_BLACK, COLOR_WHITE);
-    drawText(0, 50 + TEXT_SIZE_11_HEIGHT + TEXT_SIZE_11_ASCEND, "Calibration", TEXT_SIZE_11, COLOR_WHITE,
-    COLOR_BLACK);
+    COLOR16_GREEN);
+    drawLineRel(6, 6, mRequestedDisplaySize.XWidth - 9, mRequestedDisplaySize.YHeight - 9, COLOR16_BLUE);
+    drawChar(50, TEXT_SIZE_11_ASCEND, 'y', TEXT_SIZE_11, COLOR16_GREEN, COLOR16_YELLOW);
+    drawText(0, 50 + TEXT_SIZE_11_ASCEND, "Calibration", TEXT_SIZE_11, COLOR16_BLACK, COLOR16_WHITE);
+    drawText(0, 50 + TEXT_SIZE_11_HEIGHT + TEXT_SIZE_11_ASCEND, "Calibration", TEXT_SIZE_11, COLOR16_WHITE,
+    COLOR16_BLACK);
 
-#ifdef LOCAL_DISPLAY_EXISTS
-    drawLineOverlap(120, 140, 180, 125, LINE_OVERLAP_MAJOR, COLOR_RED);
-    drawLineOverlap(120, 143, 180, 128, LINE_OVERLAP_MINOR, COLOR_RED);
-    drawLineOverlap(120, 146, 180, 131, LINE_OVERLAP_BOTH, COLOR_RED);
+#if defined(SUPPORT_LOCAL_DISPLAY)
+    drawLineOverlap(120, 140, 180, 125, LINE_OVERLAP_MAJOR, COLOR16_RED);
+    drawLineOverlap(120, 143, 180, 128, LINE_OVERLAP_MINOR, COLOR16_RED);
+    drawLineOverlap(120, 146, 180, 131, LINE_OVERLAP_BOTH, COLOR16_RED);
 #endif
 
-    fillRectRel(100, 100, 10, 5, COLOR_RED);
-    fillRectRel(90, 95, 10, 5, COLOR_RED);
-    fillRectRel(100, 90, 10, 10, COLOR_BLACK);
-    fillRectRel(95, 100, 5, 5, COLOR_BLACK);
+    fillRectRel(100, 100, 10, 5, COLOR16_RED);
+    fillRectRel(90, 95, 10, 5, COLOR16_RED);
+    fillRectRel(100, 90, 10, 10, COLOR16_BLACK);
+    fillRectRel(95, 100, 5, 5, COLOR16_BLACK);
 
-    drawStar(200, 120, 4, 6, 2, 2, COLOR_BLACK);
-    drawStar(250, 120, 8, 12, 4, 4, COLOR_BLACK);
+    drawStar(200, 120, 4, 6, 2, 2, COLOR16_BLACK);
+    drawStar(250, 120, 8, 12, 4, 4, COLOR16_BLACK);
 
     uint16_t DeltaSmall = 20;
     uint16_t DeltaBig = 100;
     uint16_t tYPos = 30;
 
     tYPos += 45;
-    drawLineWithThickness(10, tYPos, 10 + DeltaSmall, tYPos + DeltaBig, 4, COLOR_GREEN);
-    drawPixel(10, tYPos, COLOR_BLUE);
+    drawLineWithThickness(10, tYPos, 10 + DeltaSmall, tYPos + DeltaBig, 4, COLOR16_GREEN);
+    drawPixel(10, tYPos, COLOR16_BLUE);
 
-    drawLineWithThickness(70, tYPos, 70 - DeltaSmall, tYPos + DeltaBig, 4, COLOR_GREEN);
-    drawPixel(70, tYPos, COLOR_BLUE);
+    drawLineWithThickness(70, tYPos, 70 - DeltaSmall, tYPos + DeltaBig, 4, COLOR16_GREEN);
+    drawPixel(70, tYPos, COLOR16_BLUE);
 
     tYPos += 10;
-    drawLineWithThickness(140, tYPos, 140 - DeltaSmall, tYPos - DeltaSmall, 3, COLOR_GREEN);
-    drawPixel(140, tYPos, COLOR_BLUE);
+    drawLineWithThickness(140, tYPos, 140 - DeltaSmall, tYPos - DeltaSmall, 3, COLOR16_GREEN);
+    drawPixel(140, tYPos, COLOR16_BLUE);
 
-    drawLineWithThickness(150, tYPos, 150 + DeltaSmall, tYPos - DeltaSmall, 3, COLOR_GREEN);
-    drawPixel(150, tYPos, COLOR_BLUE);
+    drawLineWithThickness(150, tYPos, 150 + DeltaSmall, tYPos - DeltaSmall, 3, COLOR16_GREEN);
+    drawPixel(150, tYPos, COLOR16_BLUE);
 
-#ifdef LOCAL_DISPLAY_EXISTS
-    drawThickLine(190, tYPos, 190 - DeltaSmall, tYPos - DeltaSmall, 3, LINE_THICKNESS_DRAW_CLOCKWISE, COLOR_GREEN);
-    drawPixel(190, tYPos, COLOR_BLUE);
+#if defined(SUPPORT_LOCAL_DISPLAY)
+    drawThickLine(190, tYPos, 190 - DeltaSmall, tYPos - DeltaSmall, 3, LINE_THICKNESS_DRAW_CLOCKWISE, COLOR16_GREEN);
+    drawPixel(190, tYPos, COLOR16_BLUE);
 
-    drawThickLine(200, tYPos, 200 + DeltaSmall, tYPos - DeltaSmall, 3, LINE_THICKNESS_DRAW_CLOCKWISE, COLOR_GREEN);
-    drawPixel(200, tYPos, COLOR_BLUE);
+    drawThickLine(200, tYPos, 200 + DeltaSmall, tYPos - DeltaSmall, 3, LINE_THICKNESS_DRAW_CLOCKWISE, COLOR16_GREEN);
+    drawPixel(200, tYPos, COLOR16_BLUE);
 
     tYPos -= 55;
-    drawThickLine(140, tYPos, 140 + DeltaBig, tYPos - DeltaSmall, 9, LINE_THICKNESS_DRAW_CLOCKWISE, COLOR_GREEN);
-    drawPixel(140, tYPos, COLOR_BLUE);
+    drawThickLine(140, tYPos, 140 + DeltaBig, tYPos - DeltaSmall, 9, LINE_THICKNESS_DRAW_CLOCKWISE, COLOR16_GREEN);
+    drawPixel(140, tYPos, COLOR16_BLUE);
 
     tYPos += 5;
-    drawThickLine(60, tYPos, 60 + DeltaBig, tYPos + DeltaSmall, 9, LINE_THICKNESS_DRAW_CLOCKWISE, COLOR_GREEN);
-    drawPixel(100, tYPos + 5, COLOR_BLUE);
+    drawThickLine(60, tYPos, 60 + DeltaBig, tYPos + DeltaSmall, 9, LINE_THICKNESS_DRAW_CLOCKWISE, COLOR16_GREEN);
+    drawPixel(100, tYPos + 5, COLOR16_BLUE);
 #endif
     drawGreyscale(5, 180, 10);
 }
 
 #define COLOR_SPECTRUM_SEGMENTS 6 // red->yellow, yellow-> green, green-> cyan, cyan-> blue, blue-> magent, magenta-> red
-#define COLOR_RESOLUTION 32 // 5 bit for 16 bit color (green really has 6 bit, but don't use it)
+#define COLOR_RESOLUTION 32 // 32 (5 bit) different red colors for 16 bit color (green really has 6 bit, but we don't use 6 bit)
 const uint16_t colorIncrement[COLOR_SPECTRUM_SEGMENTS] = { 1 << 6, 0x1FU << 11, 1, 0x3FFU << 6, 1 << 11, 0xFFFFU };
 
 /**
@@ -1944,7 +1841,7 @@ void BlueDisplay::generateColorSpectrum(void) {
     uint16_t tColorChangeAmount;
     uint16_t tYpos = mRequestedDisplaySize.YHeight;
     uint16_t tColorLine;
-    for (uint16_t line = 4; line < mRequestedDisplaySize.YHeight + 4; ++line) {
+    for (unsigned int line = 4; line < mRequestedDisplaySize.YHeight + 4; ++line) {
         tColorLine = line / 4;
         // colors for line 31 and 32 are identical
         if (tColorLine >= COLOR_RESOLUTION) {
@@ -1958,7 +1855,7 @@ void BlueDisplay::generateColorSpectrum(void) {
         }
         tXPos = 0;
         tYpos--;
-        for (int i = 0; i < COLOR_SPECTRUM_SEGMENTS; ++i) {
+        for (unsigned int i = 0; i < COLOR_SPECTRUM_SEGMENTS; ++i) {
             tDelta = colorIncrement[i];
 //          tError = COLOR_RESOLUTION / 2;
 //          for (int j = 0; j < COLOR_RESOLUTION; ++j) {
@@ -1971,7 +1868,7 @@ void BlueDisplay::generateColorSpectrum(void) {
 //              }
 //          }
             tError = ((mRequestedDisplaySize.XWidth / COLOR_SPECTRUM_SEGMENTS) - 1) / 2;
-            for (uint16_t j = 0; j < (mRequestedDisplaySize.XWidth / COLOR_SPECTRUM_SEGMENTS) - 1; ++j) {
+            for (unsigned int j = 0; j < (mRequestedDisplaySize.XWidth / COLOR_SPECTRUM_SEGMENTS) - 1; ++j) {
                 drawPixel(tXPos++, tYpos, tColor);
                 tError += tColorChangeAmount;
                 if (tError > ((mRequestedDisplaySize.XWidth / COLOR_SPECTRUM_SEGMENTS) - 1)) {
@@ -1988,3 +1885,6 @@ void BlueDisplay::generateColorSpectrum(void) {
         }
     }
 }
+
+#endif // _BLUEDISPLAY_HPP
+#pragma once

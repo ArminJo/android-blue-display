@@ -641,9 +641,9 @@ public class TouchButton {
             break;
 
         case FUNCTION_BUTTON_REMOVE:
-            int tBackgroundColor = RPCView.shortToLongColor(aParameters[2]);
+            int tBackgroundColor = RPCView.shortToLongColor(aParameters[1]);
             if (MyLog.isINFO()) {
-                MyLog.i(LOG_TAG, "Remove button background color= " + RPCView.shortToColorString(aParameters[2]) + " for"
+                MyLog.i(LOG_TAG, "Remove button background color= " + RPCView.shortToColorString(aParameters[1]) + " for"
                         + tButtonCaption + tButtonNumber);
             }
             tButton.removeButton(tBackgroundColor);

@@ -22,8 +22,10 @@
         android:largeScreens="true"
         android:xlargeScreens="true" />
 
-    <uses-sdk android:minSdkVersion="10" android:targetSdkVersion="29" />
-    <!-- android:minSdkVersion="10" is Android 2.3.3  and android:targetSdkVersion="29" is Android 10 -->
+    <uses-sdk android:minSdkVersion="12" android:targetSdkVersion="29" />
+    <!-- android:minSdkVersion="10" is Android 2.3.3 but this is not sufficient for some calls -->
+    <!-- android:minSdkVersion="12" is Android 3.1 -->
+    <!-- android:targetSdkVersion="29" is Android 10 -->
 
     <application
         android:allowBackup="true"

@@ -1032,6 +1032,10 @@ public class RPCView extends View {
 
     };
 
+    /*
+     *  To be used for ASCII values between 0x80 and 0xFF to be mapped (aka codepage)
+     *  Only entries != 0x0000 are used, otherwise the local codepage is taken
+     */
     private char[] mCharMappingArray = new char[128];
 
     public char[] myConvertChars(byte[] aData, char[] aChars, int aDataLength) {
@@ -1043,6 +1047,7 @@ public class RPCView extends View {
 
     private char myConvertChar(byte aData) {
         char tChar;
+        // we have signed arithmetic here, so 0x80 is negative
         if (aData > 0) {
             tChar = (char) aData;
         } else {
@@ -1430,7 +1435,7 @@ public class RPCView extends View {
                         tCodepage[i] = (byte) (0x0080 + i);
                     }
                     ByteBuffer tBytebuffer = ByteBuffer.wrap(tCodepage);
-                    CharBuffer tCharBuffer = tCharset.decode(tBytebuffer);
+                    CharBuffer tCharBuffer = tCharset.decode(tBytebuffer); // decode selected code page to char buffer
                     mCharMappingArray = tCharBuffer.array();
                     break;
 

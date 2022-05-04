@@ -7,7 +7,7 @@
  *  It also implements basic GUI elements as buttons and sliders.
  *  GUI callback, touch and sensor events are sent back to Arduino.
  *
- *  Copyright (C) 2015  Armin Joachimsmeyer
+ *  Copyright (C) 2015-2022  Armin Joachimsmeyer
  *  armin.joachimsmeyer@gmail.com
  *
  *  This file is part of BlueDisplay https://github.com/ArminJo/android-blue-display.
@@ -23,16 +23,16 @@
  *  GNU General Public License for more details.
  *
  *  You should have received a copy of the GNU General Public License
- *  along with this program.  If not, see <http://www.gnu.org/licenses/gpl.html>.
+ *  along with this program. If not, see <http://www.gnu.org/licenses/gpl.html>.
  *
  */
 
-#ifndef BLUEDISPLAY_INCLUDE_BDBUTTON_H_
-#define BLUEDISPLAY_INCLUDE_BDBUTTON_H_
+#ifndef _BDBUTTON_H
+#define _BDBUTTON_H
 
 #include <stdint.h>
 
-#ifdef ARDUINO
+#if defined(ARDUINO)
 #  if ! defined(ESP32)
 // For not AVR platforms this contains mapping defines (at least for STM32)
 #include <avr/pgmspace.h>
@@ -40,8 +40,8 @@
 #include "WString.h"    // for __FlashStringHelper
 #endif
 
-#define BUTTON_AUTO_RED_GREEN_FALSE_COLOR COLOR_RED
-#define BUTTON_AUTO_RED_GREEN_TRUE_COLOR COLOR_GREEN
+#define BUTTON_AUTO_RED_GREEN_FALSE_COLOR COLOR16_RED
+#define BUTTON_AUTO_RED_GREEN_TRUE_COLOR COLOR16_GREEN
 
 // Flags for BUTTON_GLOBAL_SETTINGS
 static const int FLAG_BUTTON_GLOBAL_USE_DOWN_EVENTS_FOR_BUTTONS = 0x00; // Default
@@ -55,7 +55,7 @@ static const int FLAG_BUTTON_TYPE_TOGGLE_RED_GREEN = 0x02; // Value true -> gree
 static const int FLAG_BUTTON_TYPE_AUTOREPEAT = 0x04;
 static const int FLAG_BUTTON_TYPE_TOGGLE_RED_GREEN_MANUAL_REFRESH = 0x0A; // Button must be manually drawn after event to show new caption/color
 
-#ifdef USE_BUTTON_POOL
+#if defined(USE_BUTTON_POOL)
 #define INTERNAL_FLAG_MASK 0x80
 #define FLAG_IS_ALLOCATED 0x80 // For use with get and releaseButton
 #endif
@@ -236,12 +236,12 @@ constexpr int ButtonWidth ( int aNumberOfButtonsPerLine, int aDisplayWidth ) {re
 
 #define BUTTON_HEIGHT_10 20
 
-#ifdef LOCAL_DISPLAY_EXISTS
+#if defined(SUPPORT_LOCAL_DISPLAY)
 #include "TouchButton.h"
 // since we have only a restricted pool of local buttons
 typedef uint8_t BDButtonHandle_t;
 #else
-#ifdef AVR
+#if defined(AVR)
 typedef uint8_t BDButtonHandle_t;
 #else
 typedef uint16_t BDButtonHandle_t;
@@ -266,7 +266,7 @@ public:
     // Constructors
     BDButton();
     BDButton(BDButtonHandle_t aButtonHandle);
-#ifdef LOCAL_DISPLAY_EXISTS
+#if defined(SUPPORT_LOCAL_DISPLAY)
     BDButton(BDButtonHandle_t aButtonHandle, TouchButton *aLocalButtonPtr);
 #endif
     BDButton(const BDButton &aButton);
@@ -285,8 +285,8 @@ public:
     void removeButton(color16_t aBackgroundColor);
     void drawCaption(void);
     void setCaption(const char *aCaption, bool doDrawButton = false);
+    void setCaptionFromStringArray(const char *const aCaptionStringArrayPtr[], uint8_t aStringIndex, bool doDrawButton);
     void setCaptionForValueTrue(const char *aCaption);
-    void setCaptionAndDraw(const char *aCaption);
     void setValue(int16_t aValue, bool doDrawButton = false);
     void setValueAndDraw(int16_t aValue);
     void setButtonColor(color16_t aButtonColor);
@@ -298,7 +298,7 @@ public:
     void activate(void);
     void deactivate(void);
 
-#ifdef ARDUINO
+#if defined(ARDUINO)
     void initPGM(uint16_t aPositionX, uint16_t aPositionY, uint16_t aWidthX, uint16_t aHeightY, color16_t aButtonColor,
             const char *aPGMCaption, uint8_t aCaptionSize, uint8_t aFlags, int16_t aValue,
             void (*aOnTouchHandler)(BDButton*, int16_t));
@@ -315,11 +315,11 @@ public:
             void (*aOnTouchHandler)(BDButton*, int16_t));
     void setCaptionForValueTrue(const __FlashStringHelper *aCaption);
     void setCaption(const __FlashStringHelper *aPGMCaption, bool doDrawButton = false);
-#endif
+#endif // defined(ARDUINO)
 
     BDButtonHandle_t mButtonHandle; // Index for BlueDisplay button functions
 
-#ifdef LOCAL_DISPLAY_EXISTS
+#if defined(SUPPORT_LOCAL_DISPLAY)
     void deinit(void);
     TouchButton *mLocalButtonPtr;
 #endif
@@ -343,8 +343,7 @@ private:
 //    void (*aOnTouchHandler)(BDButton*, int16_t);
 ////    const __FlashStringHelper *PGMCaption;
 //};
-#endif
+#endif // #ifdef __cplusplus
 
-#endif /* BLUEDISPLAY_INCLUDE_BDBUTTON_H_ */
-
+#endif //_BDBUTTON_H
 #pragma once

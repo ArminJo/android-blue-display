@@ -139,7 +139,11 @@ public class DeviceListActivity extends Activity {
              */
             List<String> tDeviceNameList = new ArrayList<String>(mPairedDevices.size());
             for (BluetoothDevice device : mPairedDevices) {
-                tDeviceNameList.add(device.getName());
+                String tDeviceName = device.getName();
+                // I have seen it! If a device has only its mac-address as name
+                if (tDeviceName != null) {
+                    tDeviceNameList.add(tDeviceName);
+                }
             }
             Collections.sort(tDeviceNameList);
             for (String tDeviceName : tDeviceNameList) {
