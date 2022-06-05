@@ -198,11 +198,7 @@ public class TouchSlider {
         }
         mOnChangeHandlerCallbackAddress = aOnChangeHandlerCallbackAddress;
 
-        int tShortBordersAddedWidth = mBarWidth;
-        int tLongBordersAddedWidth = 2 * mBarWidth;
         if ((mOptions & FLAG_SLIDER_SHOW_BORDER) == 0) {
-            tLongBordersAddedWidth = 0;
-            tShortBordersAddedWidth = 0;
             /*
              * If no border specified, then take unused slider color as bar background color.
              */
@@ -213,34 +209,7 @@ public class TouchSlider {
             mBarBackgroundColor = sDefaultBackgroundColor;
         }
 
-        /*
-         * compute lower right corner and validate
-         */
-        if ((mOptions & FLAG_SLIDER_IS_HORIZONTAL) != 0) {
-            // border at the long ends are half the size of the other borders
-            mPositionXRight = mPositionX + mBarLength + tShortBordersAddedWidth - 1;
-            if (mPositionXRight >= aRPCView.mRequestedCanvasWidth) {
-                MyLog.e(LOG_TAG, "PositionXRight=" + mPositionXRight + " is greater than DisplayWidth="
-                        + aRPCView.mRequestedCanvasWidth);
-            }
-            mPositionYBottom = mPositionY + (tLongBordersAddedWidth + mBarWidth) - 1;
-            if (mPositionYBottom >= aRPCView.mRequestedCanvasHeight) {
-                MyLog.e(LOG_TAG, "PositionYBottom=" + mPositionYBottom + " is greater than DisplayHeight="
-                        + aRPCView.mRequestedCanvasHeight);
-            }
-
-        } else {
-            mPositionXRight = mPositionX + (tLongBordersAddedWidth + mBarWidth) - 1;
-            if (mPositionXRight >= aRPCView.mRequestedCanvasWidth) {
-                MyLog.e(LOG_TAG, "PositionXRight=" + mPositionXRight + " is greater than DisplayWidth="
-                        + aRPCView.mRequestedCanvasWidth);
-            }
-            mPositionYBottom = mPositionY + mBarLength + tShortBordersAddedWidth - 1;
-            if (mPositionYBottom >= aRPCView.mRequestedCanvasHeight) {
-                MyLog.e(LOG_TAG, "PositionYBottom=" + mPositionYBottom + " is greater than DisplayHeight="
-                        + aRPCView.mRequestedCanvasHeight);
-            }
-        }
+        computeLowerRightCorner();
 
         /*
          * Set initial layout info
@@ -258,6 +227,45 @@ public class TouchSlider {
 
         mIsActive = false;
         mIsInitialized = true;
+    }
+
+    /*
+     * compute lower right corner and validate
+     */
+    private void computeLowerRightCorner() {
+
+        int tShortBordersAddedWidth = mBarWidth;
+        int tLongBordersAddedWidth = 2 * mBarWidth;
+        if ((mOptions & FLAG_SLIDER_SHOW_BORDER) == 0) {
+            tLongBordersAddedWidth = 0;
+            tShortBordersAddedWidth = 0;
+        }
+
+        if ((mOptions & FLAG_SLIDER_IS_HORIZONTAL) != 0) {
+            // border at the long ends are half the size of the other borders
+            mPositionXRight = mPositionX + mBarLength + tShortBordersAddedWidth - 1;
+            if (mPositionXRight >= mRPCView.mRequestedCanvasWidth) {
+                MyLog.e(LOG_TAG, "PositionXRight=" + mPositionXRight + " is greater than DisplayWidth="
+                        + mRPCView.mRequestedCanvasWidth);
+            }
+            mPositionYBottom = mPositionY + (tLongBordersAddedWidth + mBarWidth) - 1;
+            if (mPositionYBottom >= mRPCView.mRequestedCanvasHeight) {
+                MyLog.e(LOG_TAG, "PositionYBottom=" + mPositionYBottom + " is greater than DisplayHeight="
+                        + mRPCView.mRequestedCanvasHeight);
+            }
+
+        } else {
+            mPositionXRight = mPositionX + (tLongBordersAddedWidth + mBarWidth) - 1;
+            if (mPositionXRight >= mRPCView.mRequestedCanvasWidth) {
+                MyLog.e(LOG_TAG, "PositionXRight=" + mPositionXRight + " is greater than DisplayWidth="
+                        + mRPCView.mRequestedCanvasWidth);
+            }
+            mPositionYBottom = mPositionY + mBarLength + tShortBordersAddedWidth - 1;
+            if (mPositionYBottom >= mRPCView.mRequestedCanvasHeight) {
+                MyLog.e(LOG_TAG, "PositionYBottom=" + mPositionYBottom + " is greater than DisplayHeight="
+                        + mRPCView.mRequestedCanvasHeight);
+            }
+        }
     }
 
     void drawSlider() {
@@ -372,12 +380,14 @@ public class TouchSlider {
             }
         }
 
-        // draw part of background bar, which is visible
+        // draw part of background bar, which becomes visible
         if (tCurrentValueScaled < mBarLength) {
             if ((mOptions & FLAG_SLIDER_IS_HORIZONTAL) != 0) {
+                // Horizontal slider
                 mRPCView.fillRectRel(mPositionX + tShortBorderWidth + tCurrentValueScaled, mPositionY + tLongBorderWidth,
                         mBarLength - tCurrentValueScaled, mBarWidth, tBarBackgroundColor);
             } else {
+                // Vertical slider
                 mRPCView.fillRectRel(mPositionX + tLongBorderWidth, mPositionY + tShortBorderWidth, mBarWidth, mBarLength
                         - tCurrentValueScaled, tBarBackgroundColor);
             }
@@ -386,9 +396,11 @@ public class TouchSlider {
         // Draw value bar
         if (tCurrentValueScaled > 0) {
             if ((mOptions & FLAG_SLIDER_IS_HORIZONTAL) != 0) {
+                // Horizontal slider
                 mRPCView.fillRectRel(mPositionX + tShortBorderWidth, mPositionY + tLongBorderWidth, tCurrentValueScaled, mBarWidth,
                         tBarColor);
             } else {
+                // Vertical slider
                 mRPCView.fillRectRel(mPositionX + tLongBorderWidth, mPositionYBottom - tShortBorderWidth - tCurrentValueScaled + 1,
                         mBarWidth, tCurrentValueScaled, tBarColor);
             }
@@ -748,6 +760,11 @@ public class TouchSlider {
                 case SUBFUNCTION_SLIDER_SET_POSITION:
                     tSlider.mPositionX = aParameters[2];
                     tSlider.mPositionY = aParameters[3];
+                    tSlider.computeLowerRightCorner();
+                    // recompute positions of mCaptionLayoutInfo.
+                    if (tSlider.mCaption != null) {
+                        tSlider.computeTextPositions(tSlider.mCaptionLayoutInfo, tSlider.mCaption);
+                    }
                     if (MyLog.isINFO()) {
                         MyLog.i(LOG_TAG, "Set position=" + tSlider.mPositionX + " / " + tSlider.mPositionY + tSliderCaption
                                 + tSliderNumber);

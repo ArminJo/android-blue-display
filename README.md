@@ -1,7 +1,7 @@
 # [BlueDisplay App](https://play.google.com/store/apps/details?id=de.joachimsmeyer.android.bluedisplay) - convert your smartphone into an Android remote touch display for your Arduino or ARM projects.
-### Version 4.2
+### Version 4.3 - work in progress
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-[![Hit Counter](https://hitcounter.pythonanywhere.com/count/tag.svg?url=https%3A%2F%2Fgithub.com%2FArminJo%2Fandroid-blue-display)](https://github.com/brentvollebregt/hit-counter)
+![Hit Counter](https://visitor-badge.laobi.icu/badge?page_id=ArminJo_android-blue-display)
 
 ## SUMMARY
 Let the Arduino sketch create a GUI with Graphics, Buttons and Sliders on your smartphone by simply connecting a HC-05 to the rx/tx pins of your Arduino.
@@ -27,6 +27,7 @@ The library includes examples for easy initializing a HC-05 and for a simple DSO
 - Local display of received and sent command log for debugging purposes.
 - Hex and ASCII output of received Bluetooth data at log level verbose.
 - Debug messages shown as toasts.
+- Swipe from the left border opens the options menu.
 - C++ Libraries for [Arduino](https://github.com/ArminJo/Arduino-BlueDisplay).
  and [ARM (STM)](https://github.com/ArminJo/android-blue-display/tree/master/STM32/lib).
 
@@ -55,7 +56,8 @@ Android axis are [defined for **natural screen orientation**](https://source.and
 - Added Slider command `SUBFUNCTION_SLIDER_SET_DEFAULT_COLOR_THRESHOLD`.
 - Opening options menu by swipe now not restricted on full screen and connected.
 - Strings printed with Serial.print() are not interpreted, but stored in the log for debug purposes.
-- Fixed error in FUNCTION_BUTTON_REMOVE.
+- Fixed bug in FUNCTION_BUTTON_REMOVE.
+- Fixed bug in SUBFUNCTION_SLIDER_SET_POSITION.
 
 ### Version 4.2
 - Swipe from the left border in application full screen mode opens the options menu.
@@ -133,9 +135,9 @@ DSO with passive attenuator on breadboard
 At work
 ![DSO at work](https://github.com/ArminJo/android-blue-display/blob/gh-pages/pictures/DSO+Tablet.jpg)
 Fritzing
-![DSO Fritzing](https://github.com/ArminJo/Arduino-Simple-DSO/blob/master/fritzing/Arduino_Nano_DSO_Steckplatine.png)
+![DSO Fritzing](https://github.com/ArminJo/Arduino-Simple-DSO/blob/master/extras/Arduino_Nano_DSO_BT_full_Steckplatine.png)
 Schematic
-![DSO Schematic](https://github.com/ArminJo/Arduino-Simple-DSO/blob/master/fritzing/Arduino_Nano_DSO_Schaltplan.png)
+![DSO Schematic](https://github.com/ArminJo/Arduino-Simple-DSO/blob/master/extras/Arduino_Nano_DSO_BT_full_Schaltplan.png)
 DSO settings menu
 ![DSO settings menu](https://github.com/ArminJo/android-blue-display/blob/gh-pages/screenshots/DSOSettings.png)
 DSO frequency generator menu

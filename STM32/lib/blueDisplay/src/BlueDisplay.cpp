@@ -1887,4 +1887,3 @@ void BlueDisplay::generateColorSpectrum(void) {
 }
 
 #endif // _BLUEDISPLAY_HPP
-#pragma once
