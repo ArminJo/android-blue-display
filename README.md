@@ -49,7 +49,8 @@ Android axis are [defined for **natural screen orientation**](https://source.and
 **The BlueDisplay application converts the axis, so that this definition holds for each screen orientation.**
 
 # Revision History
-### Version 4.3 - work in progress
+### Version 4.4 - work in progress
+### Version 4.3
 - New command `FUNCTION_CLEAR_DISPLAY_OPTIONAL` to enable resynchronization of slow displays.
 - Bluetooth random delay detection.
 - Fixed bug for micro-swipe suppressing.

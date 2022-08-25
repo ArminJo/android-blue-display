@@ -1612,7 +1612,7 @@ public class RPCView extends View {
                 tColor = shortToLongColor(aParameters[4]);
 
                 if (aParamsLength > 5) {
-                    // Stroke parameter
+                    // Stroke / thickness parameter
                     mGraphPaintStrokeSettable.setStrokeWidth(aParameters[5] * mScaleFactor);
                     tResultingPaint = mGraphPaintStrokeSettable;
                     if (MyLog.isDEBUG()) {

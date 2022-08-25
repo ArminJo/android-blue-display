@@ -5,6 +5,7 @@
     android:versionCode="17"
     android:versionName="@string/app_version" >
 
+    <!-- versionCode="18" => Version 4.4 -->
     <!-- versionCode="17" => Version 4.3 -->
     <!-- versionCode="16" => Version 4.2 -->
     <!-- versionCode="15" => Version 4.1 -->
@@ -26,6 +27,7 @@
     <!-- android:minSdkVersion="10" is Android 2.3.3 but this is not sufficient for some calls -->
     <!-- android:minSdkVersion="12" is Android 3.1 -->
     <!-- android:targetSdkVersion="29" is Android 10 -->
+    <!-- android:targetSdkVersion="30" is Android 11 -->
 
     <application
         android:allowBackup="true"

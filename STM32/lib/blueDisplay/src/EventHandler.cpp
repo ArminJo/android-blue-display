@@ -35,18 +35,16 @@
 #include "EventHandler.h"
 #include "BlueDisplay.h"
 
-#if defined(ARDUINO)
-#include <Arduino.h> // for millis()
-#else
+#if !defined(ARDUINO)
 #include "timing.h" // for getMillisSinceBoot()
 #  if defined(USE_STM32F3_DISCO)
 #  include "stm32f3_discovery.h"  // For LEDx
 #  endif
 #include "stm32fx0xPeripherals.h" // For Watchdog_reload()
 #include <stdio.h> // for printf
-#endif // ARDUINO
+#endif // ! ARDUINO
 
-#if defined(SUPPORT_LOCAL_DISPLAY)
+#if defined(BD_DRAW_TO_LOCAL_DISPLAY_TOO)
 #include "ADS7846.h"
 #endif
 
@@ -61,7 +59,7 @@ struct TouchEvent sCurrentPosition;
 struct TouchEvent sUpPosition;
 #endif
 
-#if defined(SUPPORT_LOCAL_DISPLAY)
+#if defined(BD_DRAW_TO_LOCAL_DISPLAY_TOO)
 /*
  * helper variables
  */
@@ -184,7 +182,7 @@ void setTouchUpCallbackEnabled(bool aTouchUpCallbackEnabled) {
  */
 void registerLongTouchDownCallback(void (*aLongTouchDownCallback)(struct TouchEvent*), uint16_t aLongTouchDownTimeoutMillis) {
     sLongTouchDownCallback = aLongTouchDownCallback;
-#if defined(SUPPORT_LOCAL_DISPLAY)
+#if defined(BD_DRAW_TO_LOCAL_DISPLAY_TOO)
     sLongTouchDownTimeoutMillis = aLongTouchDownTimeoutMillis;
     if (aLongTouchDownCallback == NULL) {
         changeDelayCallback(&callbackLongTouchDownTimeout, DISABLE_TIMER_DELAY_VALUE); // housekeeping - disable timeout
@@ -258,7 +256,7 @@ void delayMillisWithCheckAndHandleEvents(unsigned long aTimeMillis) {
     }
 }
 
-#if defined(SUPPORT_LOCAL_DISPLAY)
+#if defined(BD_DRAW_TO_LOCAL_DISPLAY_TOO)
 bool sDisplayXYValuesEnabled = false;  // displays touch values on screen
 
 /**
@@ -324,7 +322,7 @@ void checkAndHandleEvents(void) {
     Watchdog_reload();
 #endif
 
-#if defined(SUPPORT_LOCAL_DISPLAY)
+#if defined(BD_DRAW_TO_LOCAL_DISPLAY_TOO)
     resetTouchFlags();
     if (localTouchEvent.EventType != EVENT_NO_EVENT) {
         handleEvent(&localTouchEvent);
@@ -372,7 +370,7 @@ extern "C" void handleEvent(struct BluetoothEvent *aEvent) {
     aEvent->EventType = EVENT_NO_EVENT;
 
 #if !defined(DO_NOT_NEED_BASIC_TOUCH_EVENTS)
-#ifdef  SUPPORT_LOCAL_DISPLAY
+#ifdef  BD_DRAW_TO_LOCAL_DISPLAY_TOO
     if (tEventType <= EVENT_TOUCH_ACTION_MOVE && sDisplayXYValuesEnabled) {
         printTPData(30, 2 + TEXT_SIZE_11_ASCEND, COLOR16_BLACK, COLOR_WHITE);
     }
@@ -396,7 +394,7 @@ extern "C" void handleEvent(struct BluetoothEvent *aEvent) {
         BSP_LED_On(LED_BLUE_2); // BLUE Front
 #endif
         sTouchIsStillDown = true;
-#if defined(SUPPORT_LOCAL_DISPLAY)
+#if defined(BD_DRAW_TO_LOCAL_DISPLAY_TOO)
         // start timeout for long touch if it is local event
         if (sLongTouchDownCallback != NULL && aEvent != &remoteEvent) {
             changeDelayCallback(&callbackLongTouchDownTimeout, sLongTouchDownTimeoutMillis); // enable timeout
@@ -425,7 +423,7 @@ extern "C" void handleEvent(struct BluetoothEvent *aEvent) {
         BSP_LED_Off(LED_BLUE_2); // BLUE Front
 #endif
         sTouchIsStillDown = false;
-#if defined(SUPPORT_LOCAL_DISPLAY)
+#if defined(BD_DRAW_TO_LOCAL_DISPLAY_TOO)
         // may set sDisableTouchUpOnce
         handleLocalTouchUp();
 #endif
@@ -454,7 +452,7 @@ extern "C" void handleEvent(struct BluetoothEvent *aEvent) {
     case EVENT_BUTTON_CALLBACK:
 //    if (tEventType == EVENT_BUTTON_CALLBACK) {
         sTouchIsStillDown = false; // to disable local touch up detection
-#if defined(SUPPORT_LOCAL_DISPLAY)
+#if defined(BD_DRAW_TO_LOCAL_DISPLAY_TOO)
                 tButtonCallback = (void (*)(BDButtonHandle_t*, int16_t)) tEvent.EventData.GuiCallbackInfo.Handler;; // 2 ;; for pretty print :-(
                 {
                     BDButton tTempButton = BDButton(tEvent.EventData.GuiCallbackInfo.ObjectIndex,
@@ -473,7 +471,7 @@ extern "C" void handleEvent(struct BluetoothEvent *aEvent) {
     case EVENT_SLIDER_CALLBACK:
 //    } else if (tEventType == EVENT_SLIDER_CALLBACK) {
         sTouchIsStillDown = false; // to disable local touch up detection
-#if defined(SUPPORT_LOCAL_DISPLAY)
+#if defined(BD_DRAW_TO_LOCAL_DISPLAY_TOO)
         tSliderCallback = (void (*)(BDSliderHandle_t *, int16_t))tEvent.EventData.GuiCallbackInfo.Handler; {
             TouchSlider *tLocalSlider = TouchSlider::getLocalSliderFromBDSliderHandle(tEvent.EventData.GuiCallbackInfo.ObjectIndex);
             BDSlider tTempSlider = BDSlider(tEvent.EventData.GuiCallbackInfo.ObjectIndex, tLocalSlider);
@@ -589,7 +587,7 @@ extern "C" void handleEvent(struct BluetoothEvent *aEvent) {
         // Since with simpleSerial we have only buffer for 1 event, we must also call redraw here
         tEventType = EVENT_REDRAW;
 
-#if defined(SUPPORT_LOCAL_DISPLAY)
+#if defined(BD_DRAW_TO_LOCAL_DISPLAY_TOO)
         // do it after sConnectCallback() since the upper tends to send a reset all command
         TouchButton::reinitAllLocalButtonsForRemote();
         TouchSlider::reinitAllLocalSlidersForRemote();
@@ -638,7 +636,7 @@ void copyDisplaySizeAndTimestamp(struct BluetoothEvent *aEvent) {
     BlueDisplay1.mHostUnixTimestamp = aEvent->EventData.DisplaySizeAndTimestamp.UnixTimestamp;
 }
 
-#if defined(SUPPORT_LOCAL_DISPLAY)
+#if defined(BD_DRAW_TO_LOCAL_DISPLAY_TOO)
 void resetTouchFlags(void) {
     sNothingTouched = false;
 }
@@ -735,6 +733,6 @@ void printTPData(int x, int y, color16_t aColor, color16_t aBackColor) {
     snprintf(tStringBuffer, 12, "X:%03i Y:%03i", sCurrentPosition.TouchPosition.PosX, sCurrentPosition.TouchPosition.PosY);
     BlueDisplay1.drawText(x, y, tStringBuffer, TEXT_SIZE_11, aColor, aBackColor);
 }
-#endif //SUPPORT_LOCAL_DISPLAY
+#endif //BD_DRAW_TO_LOCAL_DISPLAY_TOO
 
 #endif // _EVENTHANDLER_HPP

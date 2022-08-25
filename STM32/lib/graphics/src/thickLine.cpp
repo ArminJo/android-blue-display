@@ -1,21 +1,38 @@
-/*
- * thickLine.cpp
- * Draw a solid line with thickness using a modified Bresenhams algorithm.
+/**
+ *  @file thickLine.cpp
  *
- * @date 25.03.2013
- * @author Armin Joachimsmeyer
- *      Email:   armin.joachimsmeyer@gmail.com
- * @copyright LGPL v3 (http://www.gnu.org/licenses/lgpl.html)
- * @version 1.5.0
+ *  @brief Draw a solid line with thickness using a modified Bresenhams algorithm.
+ *
+ *  Copyright (C) 2013-2022  Armin Joachimsmeyer
+ *  armin.joachimsmeyer@gmail.com
+ *
+ *  This file is part of STMF3-Discovery-Demos https://github.com/ArminJo/STMF3-Discovery-Demos/blob/master/lib/graphics/src/thickLine.cpp.
+ *                                             https://gist.github.com/ArminJo/8dc4e61847a693e99bdde919cc7005cc
+ *
+ *  STMF3-Discovery-Demos is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, either version 3 of the License, or
+ *  (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program. If not, see <http://www.gnu.org/licenses/gpl.html>.
  */
 
 #include "thickline.h"
-// for LocalDisplay.drawPixel(), LocalDisplay.drawLine() and LocalDisplay.fillRect()
-#if defined(USE_HY32D)
-#include "SSD1289.h"
-#else
-#include "MI0283QT2.h"
-#endif
+
+/*
+ * The graphic primitives used by thickline.
+ * fillRect() is exclusively used for horizontal and vertical lines, because is implementation (on my system) is way faster than drawLine().
+ * drawLine() is exclusively used for the start / base line of a thick line and can be replaced by drawLineOverlap(..., LINE_OVERLAP_NONE, aColor)
+ */
+void drawPixel(uint16_t aXPos, uint16_t aYPos, uint16_t aColor);
+void drawLine(uint16_t aXStart, uint16_t aYStart, uint16_t aXEnd, uint16_t aYEnd, uint16_t aColor);
+void fillRect(uint16_t aXStart, uint16_t aYStart, uint16_t aXEnd, uint16_t aYEnd, uint16_t aColor);
 
 /** @addtogroup Graphic_Library
  * @{
@@ -32,9 +49,18 @@
  *         -0000+
  *             -00
  *
- *  0 pixels are drawn for normal line without any overlap
+ *  0 pixels are drawn for normal line without any overlap LINE_OVERLAP_NONE
  *  + pixels are drawn if LINE_OVERLAP_MAJOR
  *  - pixels are drawn if LINE_OVERLAP_MINOR
+ */
+
+#if !defined(DISPLAY_HEIGHT)
+#define DISPLAY_HEIGHT  240
+#define DISPLAY_WIDTH   320
+#endif
+/**
+ * Draws a line from aXStart/aYStart to aXEnd/aYEnd including both ends
+ * @param aOverlap One of LINE_OVERLAP_NONE, LINE_OVERLAP_MAJOR, LINE_OVERLAP_MINOR, LINE_OVERLAP_BOTH
  */
 void drawLineOverlap(unsigned int aXStart, unsigned int aYStart, unsigned int aXEnd, unsigned int aYEnd, uint8_t aOverlap,
         uint16_t aColor) {
@@ -43,36 +69,36 @@ void drawLineOverlap(unsigned int aXStart, unsigned int aYStart, unsigned int aX
     /*
      * Clip to display size
      */
-    if (aXStart >= LOCAL_DISPLAY_WIDTH) {
-        aXStart = LOCAL_DISPLAY_WIDTH - 1;
+    if (aXStart >= DISPLAY_WIDTH) {
+        aXStart = DISPLAY_WIDTH - 1;
     }
     if (aXStart < 0) {
         aXStart = 0;
     }
-    if (aXEnd >= LOCAL_DISPLAY_WIDTH) {
-        aXEnd = LOCAL_DISPLAY_WIDTH - 1;
+    if (aXEnd >= DISPLAY_WIDTH) {
+        aXEnd = DISPLAY_WIDTH - 1;
     }
     if (aXEnd < 0) {
         aXEnd = 0;
     }
-    if (aYStart >= LOCAL_DISPLAY_HEIGHT) {
-        aYStart = LOCAL_DISPLAY_HEIGHT - 1;
+    if (aYStart >= DISPLAY_HEIGHT) {
+        aYStart = DISPLAY_HEIGHT - 1;
     }
     if (aYStart < 0) {
         aYStart = 0;
     }
-    if (aYEnd >= LOCAL_DISPLAY_HEIGHT) {
-        aYEnd = LOCAL_DISPLAY_HEIGHT - 1;
+    if (aYEnd >= DISPLAY_HEIGHT) {
+        aYEnd = DISPLAY_HEIGHT - 1;
     }
     if (aYEnd < 0) {
         aYEnd = 0;
     }
 
     if ((aXStart == aXEnd) || (aYStart == aYEnd)) {
-        //horizontal or vertical line -> fillRect() is faster than drawLine()
-        LocalDisplay.fillRect(aXStart, aYStart, aXEnd, aYEnd, aColor);
+        // horizontal or vertical line -> fillRect() is faster than drawLine()
+        fillRect(aXStart, aYStart, aXEnd, aYEnd, aColor); // you can remove the check and this line if you have no fillRect() or drawLine() available.
     } else {
-        //calculate direction
+        // calculate direction
         tDeltaX = aXEnd - aXStart;
         tDeltaY = aYEnd - aYStart;
         if (tDeltaX < 0) {
@@ -89,8 +115,8 @@ void drawLineOverlap(unsigned int aXStart, unsigned int aYStart, unsigned int aX
         }
         tDeltaXTimes2 = tDeltaX << 1;
         tDeltaYTimes2 = tDeltaY << 1;
-        //draw start pixel
-        LocalDisplay.drawPixel(aXStart, aYStart, aColor);
+        // draw start pixel
+        drawPixel(aXStart, aYStart, aColor);
         if (tDeltaX > tDeltaY) {
             // start value represents a half step in Y direction
             tError = tDeltaYTimes2 - tDeltaX;
@@ -100,18 +126,18 @@ void drawLineOverlap(unsigned int aXStart, unsigned int aYStart, unsigned int aX
                 if (tError >= 0) {
                     if (aOverlap & LINE_OVERLAP_MAJOR) {
                         // draw pixel in main direction before changing
-                        LocalDisplay.drawPixel(aXStart, aYStart, aColor);
+                        drawPixel(aXStart, aYStart, aColor);
                     }
                     // change Y
                     aYStart += tStepY;
                     if (aOverlap & LINE_OVERLAP_MINOR) {
                         // draw pixel in minor direction before changing
-                        LocalDisplay.drawPixel(aXStart - tStepX, aYStart, aColor);
+                        drawPixel(aXStart - tStepX, aYStart, aColor);
                     }
                     tError -= tDeltaXTimes2;
                 }
                 tError += tDeltaYTimes2;
-                LocalDisplay.drawPixel(aXStart, aYStart, aColor);
+                drawPixel(aXStart, aYStart, aColor);
             }
         } else {
             tError = tDeltaXTimes2 - tDeltaY;
@@ -120,17 +146,17 @@ void drawLineOverlap(unsigned int aXStart, unsigned int aYStart, unsigned int aX
                 if (tError >= 0) {
                     if (aOverlap & LINE_OVERLAP_MAJOR) {
                         // draw pixel in main direction before changing
-                        LocalDisplay.drawPixel(aXStart, aYStart, aColor);
+                        drawPixel(aXStart, aYStart, aColor);
                     }
                     aXStart += tStepX;
                     if (aOverlap & LINE_OVERLAP_MINOR) {
                         // draw pixel in minor direction before changing
-                        LocalDisplay.drawPixel(aXStart, aYStart - tStepY, aColor);
+                        drawPixel(aXStart, aYStart - tStepY, aColor);
                     }
                     tError -= tDeltaYTimes2;
                 }
                 tError += tDeltaXTimes2;
-                LocalDisplay.drawPixel(aXStart, aYStart, aColor);
+                drawPixel(aXStart, aYStart, aColor);
             }
         }
     }
@@ -152,26 +178,26 @@ void drawThickLine(unsigned int aXStart, unsigned int aYStart, unsigned int aXEn
     /*
      * Clip to display size
      */
-    if (aXStart >= LOCAL_DISPLAY_WIDTH) {
-        aXStart = LOCAL_DISPLAY_WIDTH - 1;
+    if (aXStart >= DISPLAY_WIDTH) {
+        aXStart = DISPLAY_WIDTH - 1;
     }
     if (aXStart < 0) {
         aXStart = 0;
     }
-    if (aXEnd >= LOCAL_DISPLAY_WIDTH) {
-        aXEnd = LOCAL_DISPLAY_WIDTH - 1;
+    if (aXEnd >= DISPLAY_WIDTH) {
+        aXEnd = DISPLAY_WIDTH - 1;
     }
     if (aXEnd < 0) {
         aXEnd = 0;
     }
-    if (aYStart >= LOCAL_DISPLAY_HEIGHT) {
-        aYStart = LOCAL_DISPLAY_HEIGHT - 1;
+    if (aYStart >= DISPLAY_HEIGHT) {
+        aYStart = DISPLAY_HEIGHT - 1;
     }
     if (aYStart < 0) {
         aYStart = 0;
     }
-    if (aYEnd >= LOCAL_DISPLAY_HEIGHT) {
-        aYEnd = LOCAL_DISPLAY_HEIGHT - 1;
+    if (aYEnd >= DISPLAY_HEIGHT) {
+        aYEnd = DISPLAY_HEIGHT - 1;
     }
     if (aYEnd < 0) {
         aYEnd = 0;
@@ -212,8 +238,13 @@ void drawThickLine(unsigned int aXStart, unsigned int aYStart, unsigned int aXEn
         tDrawStartAdjustCount = 0;
     }
 
+    /*
+     * Now tDelta* are positive and tStep* define the direction
+     * tSwap is false if we mirrored only once
+     */
     // which octant are we now
     if (tDeltaX >= tDeltaY) {
+        // Octant 1, 3, 5, 7 (between 0 and 45, 90 and 135, ... degree)
         if (tSwap) {
             tDrawStartAdjustCount = (aThickness - 1) - tDrawStartAdjustCount;
             tStepY = -tStepY;
@@ -221,7 +252,7 @@ void drawThickLine(unsigned int aXStart, unsigned int aYStart, unsigned int aXEn
             tStepX = -tStepX;
         }
         /*
-         * Vector for draw direction of start of lines is rectangular and counterclockwise to main line direction
+         * Vector for draw direction of the starting points of lines is rectangular and counterclockwise to main line direction
          * Therefore no pixel will be missed if LINE_OVERLAP_MAJOR is used on change in minor rectangular direction
          */
         // adjust draw start point
@@ -238,8 +269,8 @@ void drawThickLine(unsigned int aXStart, unsigned int aYStart, unsigned int aXEn
             }
             tError += tDeltaYTimes2;
         }
-        //draw start line
-        LocalDisplay.drawLine(aXStart, aYStart, aXEnd, aYEnd, aColor);
+        // draw start line. We can alternatively use drawLineOverlap(aXStart, aYStart, aXEnd, aYEnd, LINE_OVERLAP_NONE, aColor) here.
+        drawLine(aXStart, aYStart, aXEnd, aYEnd, aColor);
         // draw aThickness number of lines
         tError = tDeltaYTimes2 - tDeltaX;
         for (i = aThickness; i > 1; i--) {
@@ -266,7 +297,7 @@ void drawThickLine(unsigned int aXStart, unsigned int aYStart, unsigned int aXEn
                  *   3333-222211
                  * 33-22221111
                  *  221111                     /\
-				 *  11                          Main direction of start of lines draw vector
+                 *  11                          Main direction of start of lines draw vector
                  *  -> Line main direction
                  *  <- Minor direction of counterclockwise of start of lines draw vector
                  */
@@ -276,7 +307,7 @@ void drawThickLine(unsigned int aXStart, unsigned int aYStart, unsigned int aXEn
             drawLineOverlap(aXStart, aYStart, aXEnd, aYEnd, tOverlap, aColor);
         }
     } else {
-        // the other octant
+        // the other octant 2, 4, 6, 8 (between 45 and 90, 135 and 180, ... degree)
         if (tSwap) {
             tStepX = -tStepX;
         } else {
@@ -296,7 +327,7 @@ void drawThickLine(unsigned int aXStart, unsigned int aYStart, unsigned int aXEn
             tError += tDeltaXTimes2;
         }
         //draw start line
-        LocalDisplay.drawLine(aXStart, aYStart, aXEnd, aYEnd, aColor);
+        drawLine(aXStart, aYStart, aXEnd, aYEnd, aColor);
         // draw aThickness number of lines
         tError = tDeltaXTimes2 - tDeltaY;
         for (i = aThickness; i > 1; i--) {
@@ -360,8 +391,8 @@ void drawThickLineSimple(unsigned int aXStart, unsigned int aYStart, unsigned in
                 tError += tDeltaYTimes2;
             }
         }
-        //draw start line
-        LocalDisplay.drawLine(aXStart, aYStart, aXEnd, aYEnd, aColor);
+        // draw start line. We can alternatively use drawLineOverlap(aXStart, aYStart, aXEnd, aYEnd, LINE_OVERLAP_NONE, aColor) here.
+        drawLine(aXStart, aYStart, aXEnd, aYEnd, aColor);
         // draw aThickness lines
         tError = tDeltaYTimes2 - tDeltaX;
         for (i = aThickness; i > 1; i--) {
@@ -394,8 +425,8 @@ void drawThickLineSimple(unsigned int aXStart, unsigned int aYStart, unsigned in
                 tError += tDeltaXTimes2;
             }
         }
-        //draw start line
-        LocalDisplay.drawLine(aXStart, aYStart, aXEnd, aYEnd, aColor);
+        // draw start line. We can alternatively use drawLineOverlap(aXStart, aYStart, aXEnd, aYEnd, LINE_OVERLAP_NONE, aColor) here.
+        drawLine(aXStart, aYStart, aXEnd, aYEnd, aColor);
         tError = tDeltaXTimes2 - tDeltaY;
         for (i = aThickness; i > 1; i--) {
             aYStart += tStepY;
@@ -413,6 +444,40 @@ void drawThickLineSimple(unsigned int aXStart, unsigned int aYStart, unsigned in
     }
 }
 
+// Includes for implementation of drawPixel(), drawLine() and fillRect()
+#if defined(BD_DRAW_TO_LOCAL_DISPLAY_TOO)
+#include "BlueDisplay.h"
+#else
+#  if defined(USE_HY32D)
+#include "SSD1289.h"
+#  else
+#include "MI0283QT2.h"
+#  endif
+#endif
+
+void drawPixel(uint16_t aXPos, uint16_t aYPos, uint16_t aColor) {
+#if defined(BD_DRAW_TO_LOCAL_DISPLAY_TOO)
+    BlueDisplay1.drawPixel(aXPos, aYPos, aColor); // this in turn also calls LocalDisplay.drawPixel()
+#else
+    LocalDisplay.drawPixel(aXPos, aYPos, aColor);
+#endif
+}
+
+void drawLine(uint16_t aXStart, uint16_t aYStart, uint16_t aXEnd, uint16_t aYEnd, uint16_t aColor) {
+#if defined(BD_DRAW_TO_LOCAL_DISPLAY_TOO)
+    BlueDisplay1.drawLine(aXStart, aYStart, aXEnd, aYEnd, aColor); // this in turn also calls LocalDisplay.drawLine()
+#else
+    LocalDisplay.drawLine(aXStart, aYStart, aXEnd, aYEnd, aColor);
+#endif
+}
+
+void fillRect(uint16_t aXStart, uint16_t aYStart, uint16_t aXEnd, uint16_t aYEnd, uint16_t aColor){
+#if defined(BD_DRAW_TO_LOCAL_DISPLAY_TOO)
+    BlueDisplay1.fillRect(aXStart, aYStart, aXEnd, aYEnd, aColor); // this in turn also calls LocalDisplay.fillRect()
+#else
+    LocalDisplay.fillRect(aXStart, aYStart, aXEnd, aYEnd, aColor);
+#endif
+}
 /**
  * @}
  */
