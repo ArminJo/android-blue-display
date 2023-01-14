@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    android:installLocation="auto">
+    <!-- versionCode and name are in gradle build script. See also File > Project Structure -->
+
+    <!-- versionCode="18" => Version 4.3.1 -->
+    <!-- versionCode="17" => Version 4.3 -->
+    <!-- versionCode="16" => Version 4.2 -->
+    <!-- versionCode="15" => Version 4.1 -->
+    <!-- versionCode="14" => Version 4.0 -->
+    <!-- versionCode="13" => Version 3.6 -->
+    <!-- versionCode="12" => Version 3.5 -->
+
+
+    <!-- android:launchMode = "singleInstance" -->
+
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+    <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+
+    <supports-screens
+        android:largeScreens="true"
+        android:xlargeScreens="true" />
+
+    <!-- <uses-sdk android:minSdkVersion="12" android:targetSdkVersion="32" /> -->
+    <!-- !!!Both versions are always overridden by the values specified in the Gradle build script!!! See also File > Project Structure -->
+    <!-- android:minSdkVersion="10" is Android 2.3.3 but this is not sufficient for some calls -->
+    <!-- android:minSdkVersion="12" is Android 3.1 -->
+    <!-- android:targetSdkVersion="30" is Android 11 -->
+    <!-- android:targetSdkVersion="30" is Android 11 -->
+
+    <application
+        android:allowBackup="true"
+        android:icon="@drawable/icon"
+        android:label="@string/app_name" >
+        <activity
+            android:name="de.joachimsmeyer.android.bluedisplay.BlueDisplay"
+            android:configChanges="keyboardHidden|orientation|screenSize"
+            android:exported="true"
+            android:theme="@android:style/Theme.NoTitleBar.Fullscreen" >
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
+            </intent-filter>
+
+            <meta-data
+                android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
+                android:resource="@xml/usb_device_filter" />
+        </activity>
+        <activity
+            android:name="de.joachimsmeyer.android.bluedisplay.DeviceListActivity"
+            android:label="@string/label_select_device"
+            android:theme="@android:style/Theme.Dialog" />
+        <activity android:name="de.joachimsmeyer.android.bluedisplay.BlueDisplayPreferences" />
+        <activity android:name="de.joachimsmeyer.android.bluedisplay.LogViewActivity" />
+    </application>
+
+</manifest>

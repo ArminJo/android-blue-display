@@ -1,0 +1,30 @@
+apply plugin: 'com.android.application'
+
+android {
+    compileSdkVersion 32
+    buildToolsVersion "33.0.0"
+
+    defaultConfig {
+        applicationId "de.joachimsmeyer.android.bluedisplay"
+        minSdkVersion 12
+        targetSdkVersion 32
+        versionCode 18
+        versionName '4.3.1'
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.txt'
+        }
+    }
+    compileOptions {
+        targetCompatibility JavaVersion.VERSION_1_8
+        sourceCompatibility JavaVersion.VERSION_1_8
+    }
+    dependenciesInfo {
+        includeInApk false
+        includeInBundle false
+    }
+    namespace 'de.joachimsmeyer.android.bluedisplay'
+}

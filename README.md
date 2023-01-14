@@ -1,5 +1,5 @@
 # [BlueDisplay App](https://play.google.com/store/apps/details?id=de.joachimsmeyer.android.bluedisplay) - convert your smartphone into an Android remote touch display for your Arduino or ARM projects.
-### Version 4.3 - work in progress
+### Version 4.4 - work in progress
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 ![Hit Counter](https://visitor-badge.laobi.icu/badge?page_id=ArminJo_android-blue-display)
 
@@ -49,8 +49,10 @@ Android axis are [defined for **natural screen orientation**](https://source.and
 **The BlueDisplay application converts the axis, so that this definition holds for each screen orientation.**
 
 # Revision History
-### Version 4.4 - work in progress
-### Version 4.3
+### Version 4.3.1 / 18
+- Fixed Permission bug for Andoid 12
+
+### Version 4.3 / 17 - First version build with Android Studio
 - New command `FUNCTION_CLEAR_DISPLAY_OPTIONAL` to enable resynchronization of slow displays.
 - Bluetooth random delay detection.
 - Fixed bug for micro-swipe suppressing.
@@ -60,7 +62,7 @@ Android axis are [defined for **natural screen orientation**](https://source.and
 - Fixed bug in FUNCTION_BUTTON_REMOVE.
 - Fixed bug in SUBFUNCTION_SLIDER_SET_POSITION.
 
-### Version 4.2
+### Version 4.2 / 16
 - Swipe from the left border in application full screen mode opens the options menu.
 - Removed unnecessary message on no data received under certain circumstances.
 - Added parameter values `*LOCK_SENSOR_LANDSCAPE` and `*LOCK_SENSOR_PORTRAIT` for function `setScreenOrientationLock()`.
