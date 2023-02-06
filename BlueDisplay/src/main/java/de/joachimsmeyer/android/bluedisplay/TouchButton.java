@@ -80,6 +80,7 @@ public class TouchButton {
     static int sAutorepeatState;
     private static final int BUTTON_AUTOREPEAT_FIRST_PERIOD = 1;
     private static final int BUTTON_AUTOREPEAT_SECOND_PERIOD = 2;
+    private static final int BUTTON_AUTOREPEAT_DISABLED_UNTIL_END_OF_TOUCH = 3;
     static int sAutorepeatCount;
     // static int sMillisFirstAutorepeatRate;
     // static int sMillisSecondAutorepeatRate;
@@ -108,6 +109,8 @@ public class TouchButton {
     private static final int FUNCTION_BUTTON_ACTIVATE_ALL = 0x48;
     private static final int FUNCTION_BUTTON_DEACTIVATE_ALL = 0x49;
     private static final int FUNCTION_BUTTON_GLOBAL_SETTINGS = 0x4A;
+
+    private static final int FUNCTION_BUTTON_DISABLE_AUTOREPEAT_UNTIL_END_OF_TOUCH = 0x4B;
     // Flags for BUTTON_GLOBAL_SETTINGS
     private static final int FLAG_BUTTON_GLOBAL_USE_UP_EVENTS_FOR_BUTTONS = 0x01;
     private static final int FLAG_BUTTON_GLOBAL_SET_BEEP_TONE = 0x02;
@@ -214,9 +217,6 @@ public class TouchButton {
             mIsRedGreen = true;
             if (mValue != 0) {
                 mValue = 1;
-                mButtonColor = Color.GREEN;
-            } else {
-                mButtonColor = Color.RED;
             }
         }
         if ((aFlags & BUTTON_FLAG_MANUAL_REFRESH) != 0) {
@@ -233,6 +233,7 @@ public class TouchButton {
 
     void drawButton() {
         mIsActive = true;
+        setColorForRedGreenButton();
         // Draw rect
         mRPCView.fillRectRel(mPositionX, mPositionY, mWidth, mHeight, mButtonColor);
         drawCaption();
@@ -245,22 +246,16 @@ public class TouchButton {
     }
 
     /*
-     * Sets color and caption position
+     * Sets color according to value
      */
-    private void handleValueForRedGreenButton() {
-        if (mValue != 0) {
-            // TRUE
-            mValue = 1; // set to one instead of keeping any value != 0
-            mButtonColor = Color.GREEN;
-            if (mRawCaptionForValueTrue != null) {
-                handleCaption(mRawCaptionForValueTrue);
-            }
-        } else {
-            // FALSE
-            mButtonColor = Color.RED;
-            if (mRawCaptionForValueTrue != null) {
-                // not needed if only one caption for both values
-                handleCaption(mRawCaptionForValueFalse);
+    private void setColorForRedGreenButton(){
+        if (mIsRedGreen) {
+            if (mValue != 0) {
+                // TRUE
+                mButtonColor = Color.GREEN;
+            } else {
+                // FALSE
+                mButtonColor = Color.RED;
             }
         }
     }
@@ -319,6 +314,21 @@ public class TouchButton {
      */
     void drawCaption() {
         mIsActive = true;
+        if (mIsRedGreen) {
+            if (mValue != 0) {
+                // TRUE
+                if (mRawCaptionForValueTrue != null) {
+                    // select and prepare caption for value true
+                    handleCaption(mRawCaptionForValueTrue);
+                }
+            } else {
+                // FALSE
+                if (mRawCaptionForValueTrue != null) {
+                    // not needed if only one caption for both values
+                    handleCaption(mRawCaptionForValueFalse);
+                }
+            }
+        }
         if (mCaptionSize > 0) { // don't render anything if caption size == 0
             if (mCaptionStrings.length == 1) {
                 mRPCView.drawTextWithBackground(mCaptionPositionX, mCaptionPositionY, mCaptionStrings[0], mCaptionSize,
@@ -401,7 +411,6 @@ public class TouchButton {
                         // FALSE
                         mValue = 0;
                     }
-                    handleValueForRedGreenButton();
                     if (MyLog.isDEBUG()) {
                         MyLog.d(LOG_TAG, "Set value=" + mValue + " for" + " \"" + mEscapedCaption + "\". ButtonNr=" + mListIndex);
                     }
@@ -485,20 +494,22 @@ public class TouchButton {
         @Override
         public void handleMessage(Message msg) {
             if (mRPCView.mTouchIsActive[0]) {
-                // beep and send button event
-                if (mDoBeep) {
-                    sButtonToneGenerator.startTone(sTouchBeepIndex, sCurrentToneDurationMillis);
-                }
-                mRPCView.mBlueDisplayContext.mSerialService.writeGuiCallbackEvent(SerialService.EVENT_BUTTON_CALLBACK, mListIndex,
-                        mCallbackAddress, mValue, mEscapedCaption);
-                if (sAutorepeatState == BUTTON_AUTOREPEAT_FIRST_PERIOD) {
-                    sAutorepeatCount--;
-                    if (sAutorepeatCount <= 0) {
-                        sAutorepeatState = BUTTON_AUTOREPEAT_SECOND_PERIOD;
+                if (sAutorepeatState != BUTTON_AUTOREPEAT_DISABLED_UNTIL_END_OF_TOUCH) {
+                    // beep and send button event
+                    if (mDoBeep) {
+                        sButtonToneGenerator.startTone(sTouchBeepIndex, sCurrentToneDurationMillis);
                     }
-                    sendEmptyMessageDelayed(0, mMillisFirstAutorepeatRate);
-                } else {
-                    sendEmptyMessageDelayed(0, mMillisSecondAutorepeatRate);
+                    mRPCView.mBlueDisplayContext.mSerialService.writeGuiCallbackEvent(SerialService.EVENT_BUTTON_CALLBACK, mListIndex,
+                            mCallbackAddress, mValue, mEscapedCaption);
+                    if (sAutorepeatState == BUTTON_AUTOREPEAT_FIRST_PERIOD) {
+                        sAutorepeatCount--;
+                        if (sAutorepeatCount <= 0) {
+                            sAutorepeatState = BUTTON_AUTOREPEAT_SECOND_PERIOD;
+                        }
+                        sendEmptyMessageDelayed(0, mMillisFirstAutorepeatRate);
+                    } else {
+                        sendEmptyMessageDelayed(0, mMillisSecondAutorepeatRate);
+                    }
                 }
             }
         }
@@ -515,7 +526,7 @@ public class TouchButton {
          * Plausi
          */
         if (aCommand != FUNCTION_BUTTON_ACTIVATE_ALL && aCommand != FUNCTION_BUTTON_DEACTIVATE_ALL
-                && aCommand != FUNCTION_BUTTON_GLOBAL_SETTINGS) {
+                && aCommand != FUNCTION_BUTTON_GLOBAL_SETTINGS && aCommand != FUNCTION_BUTTON_DISABLE_AUTOREPEAT_UNTIL_END_OF_TOUCH) {
             /*
              * We need a button for the command
              */
@@ -524,7 +535,8 @@ public class TouchButton {
                         "aParamsLength is <=0 but Command=0x" + Integer.toHexString(aCommand) + " is not one of 0x"
                                 + Integer.toHexString(FUNCTION_BUTTON_ACTIVATE_ALL) + ", 0x"
                                 + Integer.toHexString(FUNCTION_BUTTON_DEACTIVATE_ALL) + " or 0x"
-                                + Integer.toHexString(FUNCTION_BUTTON_GLOBAL_SETTINGS));
+                                + Integer.toHexString(FUNCTION_BUTTON_GLOBAL_SETTINGS) + " or 0x"
+                                + Integer.toHexString(FUNCTION_BUTTON_DISABLE_AUTOREPEAT_UNTIL_END_OF_TOUCH));
                 return;
             } else {
                 tButtonNumber = aParameters[0];
@@ -561,6 +573,13 @@ public class TouchButton {
                     MyLog.i(LOG_TAG, "Deactivate all buttons");
                 }
                 deactivateAllButtons();
+                break;
+
+            case FUNCTION_BUTTON_DISABLE_AUTOREPEAT_UNTIL_END_OF_TOUCH:
+                if (MyLog.isINFO()) {
+                    MyLog.i(LOG_TAG, "Disable autorepeat until end of touch");
+                }
+                sAutorepeatState = BUTTON_AUTOREPEAT_DISABLED_UNTIL_END_OF_TOUCH;
                 break;
 
             case FUNCTION_BUTTON_GLOBAL_SETTINGS:
@@ -610,7 +629,7 @@ public class TouchButton {
                             sTouchBeepIndex = aParameters[1];
                         }
                         if (MyLog.isINFO()) {
-                            tInfoString = " Touch tone volume=" + sLastRequestedToneVolume + ", index=" + sTouchBeepIndex;
+                            tInfoString = " Touch tone volume=" + sLastRequestedToneVolume + ", duration=" + sCurrentToneDurationMillis +"ms, index=" + sTouchBeepIndex;
                         }
                     }
                 }
@@ -712,9 +731,6 @@ public class TouchButton {
                         tButton.mValue = aParameters[2] & 0x0000FFFF;
                         if (aParamsLength == 4) {
                             tButton.mValue = tButton.mValue | (aParameters[3] << 16);
-                        }
-                        if (tButton.mIsRedGreen) {
-                            tButton.handleValueForRedGreenButton();
                         }
                         if (MyLog.isINFO()) {
                             MyLog.i(LOG_TAG, "Set value=" + aParameters[2] + " for" + tButtonCaption + tButtonNumber);

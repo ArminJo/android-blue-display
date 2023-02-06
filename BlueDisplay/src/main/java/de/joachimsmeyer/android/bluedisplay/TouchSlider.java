@@ -57,9 +57,10 @@ public class TouchSlider {
 
     private class TextLayoutInfo {
         int mSize = mRPCView.mRequestedCanvasHeight / 20; // text size
-        int mMargin = mRPCView.mRequestedCanvasHeight / 60; // distance from slider
+        int mMargin; // distance from slider
+        boolean mTakeDefaultMargin = true; // Caption mRPCView.mRequestedCanvasHeight / 60 below slider and value the same below caption
         boolean mAbove = false;
-        int mAlign = FLAG_SLIDER_CAPTION_ALIGN_MIDDLE;
+        int mAlign = FLAG_SLIDER_VALUE_CAPTION_ALIGN_MIDDLE;
         int mColor = Color.BLACK;
         int mBackgroundColor = Color.WHITE;
 
@@ -74,12 +75,15 @@ public class TouchSlider {
     String mValueFormatString;
     TextLayoutInfo mValueLayoutInfo;
     // private static final int SLIDER_VALUE_CAPTION_BELOW = 0x00;
-    private static final int FLAG_SLIDER_CAPTION_ABOVE = 0x04;
+    private static final int FLAG_SLIDER_VALUE_CAPTION_ABOVE = 0x04;
+
+    // do not interpret the margin value
+    private static final int FLAG_SLIDER_VALUE_CAPTION_TAKE_DEFAULT_MARGIN = 0x08;
 
     // private static final int SLIDER_VALUE_CAPTION_ALIGN_LEFT = 0x00;
-    private static final int FLAG_SLIDER_CAPTION_ALIGN_RIGHT = 0x01;
-    private static final int FLAG_SLIDER_CAPTION_ALIGN_MIDDLE = 0x02;
-    private static final int FLAG_SLIDER_CAPTION_ALIGN_MASK = 0x03;
+    private static final int FLAG_SLIDER_VALUE_CAPTION_ALIGN_RIGHT = 0x01;
+    private static final int FLAG_SLIDER_VALUE_CAPTION_ALIGN_MIDDLE = 0x02;
+    private static final int FLAG_SLIDER_VALUE_CAPTION_ALIGN_MASK = 0x03;
 
     int mOptions;
     // constants for options
@@ -266,10 +270,10 @@ public class TouchSlider {
         if ((mOptions & FLAG_SLIDER_SHOW_BORDER) != 0) {
             drawBorder();
         }
-        // Fill middle bar with initial value
+        // Fill middle bar with current value
         drawBar();
         if (mCaption != null) {
-            computeTextPositions(mCaptionLayoutInfo, mCaption);
+            computeTextPositions(mCaptionLayoutInfo, mCaption, false);
             mRPCView.drawTextWithBackground(mCaptionLayoutInfo.mPositionX, mCaptionLayoutInfo.mPositionY, mCaption,
                     mCaptionLayoutInfo.mSize, mCaptionLayoutInfo.mColor, mCaptionLayoutInfo.mBackgroundColor);
         }
@@ -304,7 +308,7 @@ public class TouchSlider {
     }
 
     void printValueString(String aValueString) {
-        computeTextPositions(mValueLayoutInfo, aValueString);
+        computeTextPositions(mValueLayoutInfo, aValueString, true);
         mRPCView.drawTextWithBackground(mValueLayoutInfo.mPositionX, mValueLayoutInfo.mPositionY, aValueString,
                 mValueLayoutInfo.mSize, mValueLayoutInfo.mColor, mValueLayoutInfo.mBackgroundColor);
     }
@@ -400,12 +404,28 @@ public class TouchSlider {
         }
     }
 
-    void computeTextPositions(TextLayoutInfo aTextLayoutInfo, String aText) {
+    void computeTextPositions(TextLayoutInfo aTextLayoutInfo, String aText, boolean isValuePosition) {
         if (aText == null || aTextLayoutInfo == null || !aTextLayoutInfo.mPositionsInvalid) {
             return;
         }
         // aTextLayoutInfo.mPositionsInvalid is true here
 
+        int tMargin = aTextLayoutInfo.mMargin;
+        if (aTextLayoutInfo.mTakeDefaultMargin) {
+            if (isValuePosition) {
+                // Position for value, works currently only for caption below
+                if(mCaption == null) {
+                    tMargin = mRPCView.mRequestedCanvasHeight / 60;
+                } else {
+                    // 1 default margin for caption but only half marging between caption and value,
+                    // since below the caption text, we have the almost empty font decent
+                    tMargin = mCaptionLayoutInfo.mSize + (mRPCView.mRequestedCanvasHeight / 60) + (mRPCView.mRequestedCanvasHeight / 120);
+                }
+            } else {
+                // Position for Caption
+                tMargin = mRPCView.mRequestedCanvasHeight / 60;
+            }
+        }
         int tTextPixelLength = (int) ((RPCView.TEXT_WIDTH_FACTOR * aTextLayoutInfo.mSize * aText.length()) + 0.5);
 
         int tSliderShortWidth = mBarWidth;
@@ -417,45 +437,45 @@ public class TouchSlider {
 
         if ((mOptions & FLAG_SLIDER_IS_HORIZONTAL) != 0) {
             // Horizontal slider
-            if (aTextLayoutInfo.mAlign == FLAG_SLIDER_CAPTION_ALIGN_RIGHT) {
+            if (aTextLayoutInfo.mAlign == FLAG_SLIDER_VALUE_CAPTION_ALIGN_RIGHT) {
                 aTextLayoutInfo.mPositionX = mPositionX + tSliderLongWidth - tTextPixelLength;
-            } else if (aTextLayoutInfo.mAlign == FLAG_SLIDER_CAPTION_ALIGN_MIDDLE) {
+            } else if (aTextLayoutInfo.mAlign == FLAG_SLIDER_VALUE_CAPTION_ALIGN_MIDDLE) {
                 aTextLayoutInfo.mPositionX = mPositionX + ((tSliderLongWidth - tTextPixelLength) / 2);
             } else {
                 aTextLayoutInfo.mPositionX = mPositionX;
             }
             if (aTextLayoutInfo.mAbove) {
-                aTextLayoutInfo.mPositionY = mPositionY - aTextLayoutInfo.mMargin - aTextLayoutInfo.mSize
+                aTextLayoutInfo.mPositionY = mPositionY - tMargin - aTextLayoutInfo.mSize
                         + (int) ((RPCView.TEXT_ASCEND_FACTOR * aTextLayoutInfo.mSize) + 0.5);
             } else {
-                aTextLayoutInfo.mPositionY = mPositionY + tSliderShortWidth + aTextLayoutInfo.mMargin
+                aTextLayoutInfo.mPositionY = mPositionY + tSliderShortWidth + tMargin
                         + (int) ((RPCView.TEXT_ASCEND_FACTOR * aTextLayoutInfo.mSize) + 0.5);
             }
 
         } else {
             // Vertical slider
-            if (aTextLayoutInfo.mAlign == FLAG_SLIDER_CAPTION_ALIGN_RIGHT) {
+            if (aTextLayoutInfo.mAlign == FLAG_SLIDER_VALUE_CAPTION_ALIGN_RIGHT) {
                 aTextLayoutInfo.mPositionX = mPositionX + tSliderShortWidth - tTextPixelLength;
-            } else if (aTextLayoutInfo.mAlign == FLAG_SLIDER_CAPTION_ALIGN_MIDDLE) {
+            } else if (aTextLayoutInfo.mAlign == FLAG_SLIDER_VALUE_CAPTION_ALIGN_MIDDLE) {
                 aTextLayoutInfo.mPositionX = mPositionX + ((tSliderShortWidth - tTextPixelLength) / 2);
             } else {
                 aTextLayoutInfo.mPositionX = mPositionX;
             }
             if (aTextLayoutInfo.mAbove) {
-                if ((mPositionY - aTextLayoutInfo.mMargin - aTextLayoutInfo.mSize) < 0) {
+                if ((mPositionY - tMargin - aTextLayoutInfo.mSize) < 0) {
                     MyLog.w(LOG_TAG, "Not enough space for text \"" + aText + "\" above slider");
                     aTextLayoutInfo.mPositionY = (int) ((RPCView.TEXT_ASCEND_FACTOR * aTextLayoutInfo.mSize) + 0.5);
                 } else {
-                    aTextLayoutInfo.mPositionY = mPositionY - aTextLayoutInfo.mMargin - aTextLayoutInfo.mSize
+                    aTextLayoutInfo.mPositionY = mPositionY - tMargin - aTextLayoutInfo.mSize
                             + (int) ((RPCView.TEXT_ASCEND_FACTOR * aTextLayoutInfo.mSize) + 0.5);
                 }
             } else {
-                if ((mPositionY + tSliderLongWidth + aTextLayoutInfo.mMargin + aTextLayoutInfo.mSize) > mRPCView.mRequestedCanvasHeight) {
+                if ((mPositionY + tSliderLongWidth + tMargin + aTextLayoutInfo.mSize) > mRPCView.mRequestedCanvasHeight) {
                     MyLog.w(LOG_TAG, "Not enough space for text \"" + aText + "\" below slider");
                     aTextLayoutInfo.mPositionY = (mRPCView.mRequestedCanvasHeight - aTextLayoutInfo.mSize)
                             + (int) ((RPCView.TEXT_ASCEND_FACTOR * aTextLayoutInfo.mSize) + 0.5);
                 } else {
-                    aTextLayoutInfo.mPositionY = mPositionY + tSliderLongWidth + aTextLayoutInfo.mMargin
+                    aTextLayoutInfo.mPositionY = mPositionY + tSliderLongWidth + tMargin
                             + (int) ((RPCView.TEXT_ASCEND_FACTOR * aTextLayoutInfo.mSize) + 0.5);
                 }
             }
@@ -751,7 +771,7 @@ public class TouchSlider {
                     tSlider.computeLowerRightCorner();
                     // recompute positions of mCaptionLayoutInfo.
                     if (tSlider.mCaption != null) {
-                        tSlider.computeTextPositions(tSlider.mCaptionLayoutInfo, tSlider.mCaption);
+                        tSlider.computeTextPositions(tSlider.mCaptionLayoutInfo, tSlider.mCaption, false);
                     }
                     if (MyLog.isINFO()) {
                         MyLog.i(LOG_TAG, "Set position=" + tSlider.mPositionX + " / " + tSlider.mPositionY + tSliderCaption
@@ -787,19 +807,20 @@ public class TouchSlider {
                     tLayoutInfo.mPositionsInvalid = true;
 
                     tLayoutInfo.mSize = aParameters[2];
-                    tLayoutInfo.mAlign = aParameters[3] & FLAG_SLIDER_CAPTION_ALIGN_MASK;
+                    tLayoutInfo.mTakeDefaultMargin = ((aParameters[3] & FLAG_SLIDER_VALUE_CAPTION_TAKE_DEFAULT_MARGIN) != 0);
+                    tLayoutInfo.mAlign = aParameters[3] & FLAG_SLIDER_VALUE_CAPTION_ALIGN_MASK;
                     tLayoutInfo.mMargin = aParameters[4];
                     tLayoutInfo.mColor = RPCView.shortToLongColor(aParameters[5]);
                     tLayoutInfo.mBackgroundColor = RPCView.shortToLongColor(aParameters[6]);
                     String tAlign = "left";
-                    if (tLayoutInfo.mAlign == FLAG_SLIDER_CAPTION_ALIGN_RIGHT) {
+                    if (tLayoutInfo.mAlign == FLAG_SLIDER_VALUE_CAPTION_ALIGN_RIGHT) {
                         tAlign = "right";
-                    } else if (tLayoutInfo.mAlign == FLAG_SLIDER_CAPTION_ALIGN_MIDDLE) {
+                    } else if (tLayoutInfo.mAlign == FLAG_SLIDER_VALUE_CAPTION_ALIGN_MIDDLE) {
                         tAlign = "middle";
                     }
 
                     String tAbove;
-                    if ((aParameters[3] & FLAG_SLIDER_CAPTION_ABOVE) != 0) {
+                    if ((aParameters[3] & FLAG_SLIDER_VALUE_CAPTION_ABOVE) != 0) {
                         tLayoutInfo.mAbove = true;
                         tAbove = "above";
                     } else {

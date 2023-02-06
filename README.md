@@ -49,6 +49,9 @@ Android axis are [defined for **natural screen orientation**](https://source.and
 **The BlueDisplay application converts the axis, so that this definition holds for each screen orientation.**
 
 # Revision History
+4.4
+- Support für new function disableAutorepeatUntilEndOfTouch().
+
 ### Version 4.3.1 / 18
 - Fixed Permission bug for Andoid 12
 
