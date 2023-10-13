@@ -7,9 +7,9 @@ android {
     defaultConfig {
         applicationId "de.joachimsmeyer.android.bluedisplay"
         minSdkVersion 12
-        targetSdkVersion 32
-        versionCode 19
-        versionName '4.3.2'
+        targetSdk 33
+        versionCode 20
+        versionName '4.3.3'
     }
 
     buildTypes {

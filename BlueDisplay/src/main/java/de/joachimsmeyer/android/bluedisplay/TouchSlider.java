@@ -418,7 +418,7 @@ public class TouchSlider {
                     tMargin = mRPCView.mRequestedCanvasHeight / 60;
                 } else {
                     // 1 default margin for caption but only half marging between caption and value,
-                    // since below the caption text, we have the almost empty font decent
+                    // since below the caption text, we have an almost empty font decent
                     tMargin = mCaptionLayoutInfo.mSize + (mRPCView.mRequestedCanvasHeight / 60) + (mRPCView.mRequestedCanvasHeight / 120);
                 }
             } else {

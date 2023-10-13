@@ -1,20 +1,38 @@
-# [BlueDisplay App](https://play.google.com/store/apps/details?id=de.joachimsmeyer.android.bluedisplay) - convert your smartphone into an Android remote touch display for your Arduino or ARM projects.
-### Version 4.4 - work in progress
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-![Hit Counter](https://visitor-badge.laobi.icu/badge?page_id=ArminJo_android-blue-display)
+<div align = center>
 
-## SUMMARY
+# [BlueDisplay App](https://play.google.com/store/apps/details?id=de.joachimsmeyer.android.bluedisplay)
+Convert your smartphone into an Android remote touch display for your Arduino or ARM projects.
+
+[![Badge License: GPLv3](https://img.shields.io/badge/License-GPLv3-brightgreen.svg)](https://www.gnu.org/licenses/gpl-3.0)
+ &nbsp; &nbsp;
+[![Badge Version](https://img.shields.io/github/v/release/ArminJo/android-blue-display?include_prereleases&color=yellow&logo=DocuSign&logoColor=white)](https://github.com/ArminJo/android-blue-display/releases/latest)
+ &nbsp; &nbsp;
+[![Badge Commits since latest](https://img.shields.io/github/commits-since/ArminJo/android-blue-display/latest?color=yellow)](https://github.com/ArminJo/android-blue-display/commits/master)
+ &nbsp; &nbsp;
+![Badge Hit Counter](https://visitor-badge.laobi.icu/badge?page_id=ArminJo_android-blue-display)
+<br/>
+<br/>
+[![Stand With Ukraine](https://raw.githubusercontent.com/vshymanskyy/StandWithUkraine/main/badges/StandWithUkraine.svg)](https://stand-with-ukraine.pp.ua)
+
+
+[![Button Changelog](https://img.shields.io/badge/Changelog-blue?logoColor=white&logo=AzureArtifacts)](https://github.com/ArminJo/android-blue-display#revision-history)
+
+</div>
+
+#### If you find this library useful, please give it a star.
+
+<br/>
+
+# SUMMARY
 Let the Arduino sketch create a GUI with Graphics, Buttons and Sliders on your smartphone by simply connecting a HC-05 to the rx/tx pins of your Arduino.
 Directly connecting the Arduino with an USB cable and an USB-OTG adapter to your smartphone is also supported.<br/>
 It receives draw requests from Arduino over Bluetooth and renders it.
 GUI callback, touch and sensor events are sent back to Arduino.
 **No Android programming needed!**
 
-### The Arduino library with lot of examples can be found [here](https://github.com/ArminJo/Arduino-BlueDisplay).
-You can load the library with *Tools -> Manage Libraries...* or *Ctrl+Shift+I*. Use "BlueDisplay" as filter string.
-The library includes examples for easy initializing a HC-05 and for a simple DSO with 0.3 megasamples/sec.
+<br/>
 
-## Features
+# Features
 - Touch button + slider objects with tone feedback.
 - Button and slider callback as well as touch and sensor events are sent back to Arduino.
 - Graphic + text output as well as basic printf implementation.
@@ -31,14 +49,26 @@ The library includes examples for easy initializing a HC-05 and for a simple DSO
 - C++ Libraries for [Arduino](https://github.com/ArminJo/Arduino-BlueDisplay).
  and [ARM (STM)](https://github.com/ArminJo/android-blue-display/tree/master/STM32/lib).
 
-Usage:
+<br/>
+
+# The Arduino library with lot of examples can be found [here](https://github.com/ArminJo/Arduino-BlueDisplay).
+You can load the library with *Tools -> Manage Libraries...* or *Ctrl+Shift+I*. Use "BlueDisplay" as filter string.
+The library includes examples for easy initializing a HC-05 and for a simple DSO with 0.3 megasamples/sec.
+
+<br/>
+
+# Usage
 Before using the examples, take care that the BT-module (e.g. the the HC-05 module) is connected to your Android device and is visible in the Bluetooth Settings.
 For full screen applications, the menu is called by swiping from the left edge of the screen. Otherwise, you can call it by touching the area not occupied by the client application (black display area).
 
-Baudrate:
+<br/>
+
+# Baudrate
 All examples initially use the baudrate of 9600. Especially the SimpleTouchScreenDSO example will run smoother with a baudrate of 115200.
 For this, change the example baudrate by deactivating the line `#define HC_05_BAUD_RATE BAUD_9600` and activating `#define HC_05_BAUD_RATE BAUD_115200`.
 AND change the BT-Module baudrate e.g. by using the BTModuleProgrammer.ino example.
+
+<br/>
 
 # Sensor axis for an Arduino application
 Android axis are [defined for **natural screen orientation**](https://source.android.com/devices/sensors/sensor-types), which is portrait for my devices:
@@ -48,12 +78,70 @@ Android axis are [defined for **natural screen orientation**](https://source.and
 
 **The BlueDisplay application converts the axis, so that this definition holds for each screen orientation.**
 
+<br/>
+
+# Example for Hex + ASCII output (on log level verbose):
+```
+V Hex= 00 4C 13 A5 01 08 00 53 65 74 74 69 6E 67 73 A5
+V Asc=     L                 S  e  t  t  i  n  g  s
+V Hex= 70 12 00 04 00 00 00 00 00 60 00 34 00 00 F8 0B
+V Asc=  p                          `     4
+V Hex= 03 00 00 30 21 A5 01 07 00 48 69 73 74 6F 72 79
+V Asc=           0  !              H  i  s  t  o  r  y
+```
+
+# Hints
+If you need debugging with print() you must use the debug() functions since using Serial.print() etc. gives errors (we have only one serial port on the Arduino) . E.g.
+```
+BlueDisplay1.debug("\r\nDoBlink=", (uint8_t) doBlink);
+```
+
+To enable programming of the Arduino while the HC-05 module is connected, use a diode to connect Arduino rx and HC-05 tx.
+On Arduino MEGA 2560 TX1 is used, so no diode is needed.
+```
+                 |\ |
+   Arduino-rx ___| \|___ HC-05-tx
+                 | /|
+                 |/ |
+```
+<br/>
+
+# Pictures and screenshots
+
+BlueDisplay example breadboard picture
+![Breadboard picture](https://github.com/ArminJo/android-blue-display/blob/gh-pages/pictures/Blink1.jpg)
+Fritzing schematic for BlueDisplay example
+![Fritzing schematics](https://github.com/ArminJo/android-blue-display/blob/gh-pages/schematics/BlueDisplayBlink_Steckplatine.png)
+DSO with passive attenuator on breadboard
+![DSO with passive attenuator on breadboard](https://github.com/ArminJo/android-blue-display/blob/gh-pages/pictures/ArduinoDSO.jpg)
+At work
+![DSO at work](https://github.com/ArminJo/android-blue-display/blob/gh-pages/pictures/DSO+Tablet.jpg)
+Fritzing
+![DSO Fritzing](https://github.com/ArminJo/Arduino-Simple-DSO/blob/master/extras/Arduino_Nano_DSO_BT_full_Steckplatine.png)
+Schematic
+![DSO Schematic](https://github.com/ArminJo/Arduino-Simple-DSO/blob/master/extras/Arduino_Nano_DSO_BT_full_Schaltplan.png)
+DSO settings menu
+![DSO settings menu](https://github.com/ArminJo/android-blue-display/blob/gh-pages/screenshots/DSOSettings.png)
+DSO frequency generator menu
+![Frequency generator menu](https://github.com/ArminJo/android-blue-display/blob/gh-pages/screenshots/Frequency.png)
+Hacked RC car
+![Hacked RC car](https://github.com/ArminJo/android-blue-display/blob/gh-pages/pictures/RCCar+Tablet.jpg)
+
+RC car control display
+![RC car control display](https://github.com/ArminJo/android-blue-display/blob/gh-pages/screenshots/RCCarControl.png)
+
 # Revision History
-4.4
-- Support für new function disableAutorepeatUntilEndOfTouch().
+### Version 4.3.3 / 20
+- Targeted Android 13 / 33
+
+### Version 4.3.2 / 19
+- Targeted Android 12 / 32
+- Support for new function disableAutorepeatUntilEndOfTouch().
+- Added Flag `FLAG_SLIDER_VALUE_CAPTION_TAKE_DEFAULT_MARGIN`. Margin is set to RequestedCanvasHeight / 60.
+- Inproved color handling for red / green button.
 
 ### Version 4.3.1 / 18
-- Fixed Permission bug for Andoid 12
+- Fixed Permission bug for Andoid 12 / 32
 
 ### Version 4.3 / 17 - First version build with Android Studio
 - New command `FUNCTION_CLEAR_DISPLAY_OPTIONAL` to enable resynchronization of slow displays.
@@ -75,7 +163,7 @@ Android axis are [defined for **natural screen orientation**](https://source.and
 ### Version 4.1
 - Improved startup. New message if no data received after connect and part of screen is inactive/black, to access the options menu.
 
-### Version 4.0 
+### Version 4.0
 - Connection with USB OTG cable now also possible. In this case no Bluetooth adapter is needed.
 - Handling of no input for getNumber.
 - Slider `setScaleFactor()` does not scale the current value, which is delivered as initial value at `init()`.
@@ -104,55 +192,6 @@ Android axis are [defined for **natural screen orientation**](https://source.and
 
 ### Version 3.0
 - Android sensor accessible by Arduino.
-
-
-## Example for Hex + ASCII output (on log level verbose):
-```
-V Hex= 00 4C 13 A5 01 08 00 53 65 74 74 69 6E 67 73 A5
-V Asc=     L                 S  e  t  t  i  n  g  s
-V Hex= 70 12 00 04 00 00 00 00 00 60 00 34 00 00 F8 0B
-V Asc=  p                          `     4
-V Hex= 03 00 00 30 21 A5 01 07 00 48 69 73 74 6F 72 79
-V Asc=           0  !              H  i  s  t  o  r  y
-```
-
-# Hints
-If you need debugging with print() you must use the debug() functions since using Serial.print() etc. gives errors (we have only one serial port on the Arduino) . E.g.
-```
-BlueDisplay1.debug("\r\nDoBlink=", (uint8_t) doBlink);
-```
-
-To enable programming of the Arduino while the HC-05 module is connected, use a diode to connect Arduino rx and HC-05 tx.
-On Arduino MEGA 2560 TX1 is used, so no diode is needed.
-```
-                 |\ |
-   Arduino-rx ___| \|___ HC-05-tx
-                 | /|
-                 |/ |
-```
-
-
-BlueDisplay example breadboard picture
-![Breadboard picture](https://github.com/ArminJo/android-blue-display/blob/gh-pages/pictures/Blink1.jpg)
-Fritzing schematic for BlueDisplay example
-![Fritzing schematics](https://github.com/ArminJo/android-blue-display/blob/gh-pages/schematics/BlueDisplayBlink_Steckplatine.png)
-DSO with passive attenuator on breadboard
-![DSO with passive attenuator on breadboard](https://github.com/ArminJo/android-blue-display/blob/gh-pages/pictures/ArduinoDSO.jpg)
-At work
-![DSO at work](https://github.com/ArminJo/android-blue-display/blob/gh-pages/pictures/DSO+Tablet.jpg)
-Fritzing
-![DSO Fritzing](https://github.com/ArminJo/Arduino-Simple-DSO/blob/master/extras/Arduino_Nano_DSO_BT_full_Steckplatine.png)
-Schematic
-![DSO Schematic](https://github.com/ArminJo/Arduino-Simple-DSO/blob/master/extras/Arduino_Nano_DSO_BT_full_Schaltplan.png)
-DSO settings menu
-![DSO settings menu](https://github.com/ArminJo/android-blue-display/blob/gh-pages/screenshots/DSOSettings.png)
-DSO frequency generator menu
-![Frequency generator menu](https://github.com/ArminJo/android-blue-display/blob/gh-pages/screenshots/Frequency.png)
-Hacked RC car
-![Hacked RC car](https://github.com/ArminJo/android-blue-display/blob/gh-pages/pictures/RCCar+Tablet.jpg)
-
-RC car control display
-![RC car control display](https://github.com/ArminJo/android-blue-display/blob/gh-pages/screenshots/RCCarControl.png)
 
 # Credits
 The USB driver library used in this project is [Kai Morichs fork of usb-serial-for-android](https://github.com/kai-morich/usb-serial-for-android)

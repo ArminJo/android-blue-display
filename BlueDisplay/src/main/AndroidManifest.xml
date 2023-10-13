@@ -3,6 +3,7 @@
     android:installLocation="auto">
     <!-- versionCode and name are in gradle build script. See also File > Project Structure -->
 
+    <!-- versionCode="20" => Version 4.3.3 -->
     <!-- versionCode="19" => Version 4.3.2 -->
     <!-- versionCode="18" => Version 4.3.1 -->
     <!-- versionCode="17" => Version 4.3 -->
@@ -23,12 +24,12 @@
         android:largeScreens="true"
         android:xlargeScreens="true" />
 
-    <!-- <uses-sdk android:minSdkVersion="12" android:targetSdkVersion="32" /> -->
-    <!-- !!!Both versions are always overridden by the values specified in the Gradle build script!!! See also File > Project Structure -->
+    <!-- <uses-sdk android:minSdkVersion="12" android:targetSdkVersion="33" /> -->
+    <!-- !!!Both versions are always overridden by the values specified in the Gradle build script!!! See also File > Project Structure > Modules -->
     <!-- android:minSdkVersion="10" is Android 2.3.3 but this is not sufficient for some calls -->
     <!-- android:minSdkVersion="12" is Android 3.1 -->
     <!-- android:targetSdkVersion="30" is Android 11 -->
-    <!-- android:targetSdkVersion="30" is Android 11 -->
+    <!-- android:targetSdkVersion="33" is Android 13 -->
 
     <application
         android:allowBackup="true"
