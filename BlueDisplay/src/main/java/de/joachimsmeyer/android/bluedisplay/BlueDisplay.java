@@ -1014,9 +1014,8 @@ public class BlueDisplay extends Activity {
 
     @Override
     // Source is from http://stackoverflow.com/questions/9996333/openoptionsmenu-function-not-working-in-ics/17903128#17903128
-    // I found the android one not working on a 5.0 tablet
     public void openOptionsMenu() {
-
+        super.invalidateOptionsMenu(); // This is required at least for Android 15
         Configuration config = getResources().getConfiguration();
 
         if ((config.screenLayout & Configuration.SCREENLAYOUT_SIZE_MASK) > Configuration.SCREENLAYOUT_SIZE_LARGE) {

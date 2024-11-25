@@ -52,6 +52,8 @@ import android.view.GestureDetector.SimpleOnGestureListener;
 import android.view.MotionEvent;
 import android.view.ScaleGestureDetector;
 import android.view.View;
+import android.view.Window;
+import android.view.WindowManager;
 import android.widget.Toast;
 
 import java.nio.ByteBuffer;
@@ -80,14 +82,11 @@ public class RPCView extends View {
     int mLastSystemVolume;
     int mLastRequestedToneVolume;
 
-    private static final int MAX_CHART_LINE_WIDTH = 1280;
+    private static final int MAX_CHART_LINE_WIDTH = 1800;
 
-    // 4 values for one line - 4 lines possible
-    public static float[][] mChartScreenBuffer = new float[4][MAX_CHART_LINE_WIDTH * 4];
-
-    public static int mChartScreenBufferCurrentLength = 0;
-    public static float mChartScreenBufferXStart = 0;
-
+    // 4 values for one line - 16 lines possible
+    public static float[][] mChartScreenBuffer = new float[16][MAX_CHART_LINE_WIDTH * 4];
+    public static int[] mChartScreenBufferValidDataLength = new int[16];
     public static Bitmap mBitmap;
     private final Paint mBitmapPaint; // only used for onDraw() to draw bitmap
     private final Paint mInfoPaint; // for internal info text like touch coordinates
@@ -103,7 +102,7 @@ public class RPCView extends View {
     private final Paint mTextBackgroundPaint; // for all scaled text background
     private final Paint mGraphPaintStroke1Fill; // for circle, rectangles and path
     private final Paint mGraphPaintStrokeScaleFactor; // for pixel, line and chart
-    private final Paint mGraphPaintStrokeSettable; // user settable for pixel, line and chart
+    private final Paint mGraphPaintStrokeAndColorSettable; // Stroke and color must be set, before used
 
     /*
      * All values are input values (for scale factor = 1.0)
@@ -260,7 +259,7 @@ public class RPCView extends View {
     // private final static int FLAG_SCREEN_ORIENTATION_LOCK_SENSOR_PORTRAIT = 0x07;
     // private final static int FLAG_SCREEN_ORIENTATION_LOCK_REVERSE_LANDSCAPE = 0x08;
     // private final static int FLAG_SCREEN_ORIENTATION_LOCK_REVERSE_PORTRAIT = 0x09;
-
+    private final static int SUBFUNCTION_GLOBAL_SET_SCREEN_BRIGHTNESS = 0x0D;
     private final static int FLAG_SCREEN_ORIENTATION_LOCK_CURRENT = 0x02;
     private final static int FLAG_SCREEN_ORIENTATION_LOCK_UNLOCK = 0x03;
 
@@ -329,6 +328,21 @@ public class RPCView extends View {
     final static int FUNCTION_DRAW_CHART = 0x6A;
     final static int FUNCTION_DRAW_CHART_WITHOUT_DIRECT_RENDERING = 0x6B;
 
+    final static int CHART_MODE_PIXEL = 0;
+    final static int CHART_MODE_LINE = 1;
+    final static int CHART_MODE_AREA = 2; // not yet supported
+    final static int CHART_X_AXIS_SCALE_FACTOR_1 = 0; // identity is code with 0
+    final static int CHART_X_AXIS_SCALE_FACTOR_EXPANSION_1_5 = 1; // expansion by 1.5
+    final static int CHART_X_AXIS_SCALE_FACTOR_EXPANSION_2 = 2; // expansion by factor 2
+    final static int CHART_X_AXIS_SCALE_FACTOR_EXPANSION_3 = 3; // expansion by factor 3
+    final static int CHART_X_AXIS_SCALE_FACTOR_EXPANSION_4 = 4; // expansion by factor 4
+    final static int CHART_X_AXIS_SCALE_FACTOR_COMPRESSION_1_5 = -1; // compression by 1.5
+    final static int CHART_X_AXIS_SCALE_FACTOR_COMPRESSION_2 = -2; // compression by factor 2
+    final static int CHART_X_AXIS_SCALE_FACTOR_COMPRESSION_3 = -3; // compression by factor 3
+    final static int CHART_X_AXIS_SCALE_FACTOR_COMPRESSION_4 = -4; // compression by factor 4
+    final static int FUNCTION_DRAW_SCALED_CHART = 0x6C; // For chart implementation
+    final static int FUNCTION_DRAW_SCALED_CHART_WITHOUT_DIRECT_RENDERING = 0x6D;
+
     private static final int LONG_TOUCH_DOWN = 0;
 
     /*
@@ -370,6 +384,66 @@ public class RPCView extends View {
         if (MyLog.isINFO()) {
             MyLog.d(LOG_TAG, "MaxScaleFactor=" + mMaxScaleFactor);
         }
+    }
+
+    /*
+     * Not used yet
+     */
+    protected int reduceIntWithXScaleFactor(int aValue, int aXScaleFactor) {
+        if (aXScaleFactor == CHART_X_AXIS_SCALE_FACTOR_1) {
+            return aValue;
+        }
+        int tRetValue = aValue;
+        if (aXScaleFactor > CHART_X_AXIS_SCALE_FACTOR_EXPANSION_1_5) {
+            tRetValue = aValue / aXScaleFactor;
+        } else if (aXScaleFactor == CHART_X_AXIS_SCALE_FACTOR_EXPANSION_1_5) {
+            // value * 2/3
+            tRetValue = (aValue * 2) / 3;
+        } else if (aXScaleFactor == CHART_X_AXIS_SCALE_FACTOR_COMPRESSION_1_5) {
+            // value * 3/2
+            tRetValue = (aValue * 3) / 2;
+        } else {
+            tRetValue = aValue * -aXScaleFactor;
+        }
+        return tRetValue;
+    }
+
+    /**
+     * Enlarge value if scale factor is compression
+     * Reduce value, if scale factor is expansion
+     * <p>
+     * aXScaleFactor > 1 : expansion by factor aXScaleFactor. I.e. value -> (value / factor)
+     * aXScaleFactor == 1 : expansion by 1.5
+     * aXScaleFactor == 0 : identity
+     * aXScaleFactor == -1 : compression by 1.5
+     * aXScaleFactor < -1 : compression by factor -aXScaleFactor -> (value * factor)
+     * multiplies value with factor if aXScaleFactor is < 0 (compression) or divide if aXScaleFactor is > 0 (expansion)
+     */
+    protected float reduceFloatWithXScaleFactor(float aValue, int aXScaleFactor) {
+        if (aXScaleFactor == CHART_X_AXIS_SCALE_FACTOR_1) {
+            return aValue;
+        }
+        float tRetValue = aValue;
+        if (aXScaleFactor > CHART_X_AXIS_SCALE_FACTOR_EXPANSION_1_5) {
+            tRetValue = aValue / aXScaleFactor;
+        } else if (aXScaleFactor == CHART_X_AXIS_SCALE_FACTOR_EXPANSION_1_5) {
+            // value * 2/3
+            tRetValue = (aValue * 2) / 3;
+        } else if (aXScaleFactor == CHART_X_AXIS_SCALE_FACTOR_COMPRESSION_1_5) {
+            // value * 3/2
+            tRetValue = (aValue * 3) / 2;
+        } else {
+            tRetValue = aValue * -aXScaleFactor;
+        }
+        return tRetValue;
+    }
+
+    /**
+     * Enlarge value if scale factor is expansion
+     * Reduce value, if scale factor is compression
+     */
+    protected float enlargeFloatWithXScaleFactor(float aValue, int aXScaleFactor) {
+        return reduceFloatWithXScaleFactor(aValue, -aXScaleFactor);
     }
 
     @SuppressLint("NewApi")
@@ -425,8 +499,8 @@ public class RPCView extends View {
         mGraphPaintStrokeScaleFactor.setStyle(Paint.Style.STROKE);
         // mGraphPaintStrokeScaleFactor.setStrokeCap(Cap.BUTT);
 
-        mGraphPaintStrokeSettable = new Paint();
-        mGraphPaintStrokeSettable.setStyle(Paint.Style.STROKE);
+        mGraphPaintStrokeAndColorSettable = new Paint();
+        mGraphPaintStrokeAndColorSettable.setStyle(Paint.Style.STROKE);
 
         /*
          * create start Bitmap
@@ -534,8 +608,8 @@ public class RPCView extends View {
                             Thread.sleep(20);
                             tSumWaitDelay += 20;
                             if (tBytesInBuffer == mBlueDisplayContext.mSerialService.getBufferBytesAvailable()
-                                    && tSumWaitDelay > 100) {
-                                MyLog.e(LOG_TAG, "Read delay of more than 100 ms for missing bytes. Bytes in buffer="
+                                    && tSumWaitDelay > 1000) {
+                                MyLog.e(LOG_TAG, "Read delay > 1000 ms for missing bytes. Maybe android is busy / rendering a lot? Bytes in buffer="
                                         + mBlueDisplayContext.mSerialService.getBufferBytesAvailable());
                                 tResult = SerialService.RPCVIEW_DO_NOTHING; // Just request new trigger
                             }
@@ -767,7 +841,7 @@ public class RPCView extends View {
                      * Check SLIDER if ACTION_MOVE
                      */
                     if (tMaskedAction == MotionEvent.ACTION_MOVE && mTouchStartsOnSliderNumber[tActionIndex] >= 0) {
-                        if(TouchSlider
+                        if (TouchSlider
                                 .checkIfTouchInSlider(tCurrentXScaled, tCurrentYScaled, mTouchStartsOnSliderNumber[tActionIndex])) {
                             invalidate(); // Show new local slider bar value
                         }
@@ -1376,7 +1450,7 @@ public class RPCView extends View {
                             if (TimeZone.getDefault().useDaylightTime()) {
                                 tUseDaylightTime = 1;
                             }
-                            int tGmtOffset = TimeZone.getDefault().getRawOffset() + TimeZone.getDefault().getDSTSavings();
+                            int tGmtOffset = TimeZone.getDefault().getRawOffset(); // + TimeZone.getDefault().getDSTSavings(); // 1 hour if DST enabled, which is always true :-(
                             long tTimestamp = System.currentTimeMillis();
                             if (tSubcommand == SUBFUNCTION_GET_INFO_LOCAL_TIME) {
                                 tTimestamp += tGmtOffset;
@@ -1488,6 +1562,18 @@ public class RPCView extends View {
                             }
                             break;
 
+                        case SUBFUNCTION_GLOBAL_SET_SCREEN_BRIGHTNESS:
+                            Window window = mBlueDisplayContext.getWindow();
+                            WindowManager.LayoutParams layoutParams = window.getAttributes();
+                            // 0 is user default, 1 is dark and 0xFF is full bright
+                            layoutParams.screenBrightness = (float) ((aParameters[1] - 1) / 254.0);
+                            window.setAttributes(layoutParams);
+                            if (MyLog.isINFO()) {
+                                MyLog.i(LOG_TAG, "Set screen brightness 0x" + Integer.toHexString(aParameters[1])
+                                        + " -> " + layoutParams.screenBrightness);
+                            }
+                            break;
+
                         default:
                             MyLog.e(LOG_TAG, "Global settings: unknown subcommand 0x" + Integer.toHexString(tSubcommand)
                                     + " received. paramsLength=" + aParamsLength + " dataLength=" + aDataLength);
@@ -1556,8 +1642,6 @@ public class RPCView extends View {
                         MyLog.i(LOG_TAG, "Clear screen color= " + shortToColorString(aParameters[0]));
                     }
                     mCanvas.drawColor(shortToLongColor(aParameters[0]));
-                    // reset screen buffer
-                    mChartScreenBufferCurrentLength = 0;
                     break;
 
                 case FUNCTION_DRAW_PIXEL:
@@ -1593,8 +1677,8 @@ public class RPCView extends View {
 
                     if (aParamsLength > 5) {
                         // Stroke / thickness parameter
-                        mGraphPaintStrokeSettable.setStrokeWidth(aParameters[5] * mScaleFactor);
-                        tResultingPaint = mGraphPaintStrokeSettable;
+                        mGraphPaintStrokeAndColorSettable.setStrokeWidth(aParameters[5] * mScaleFactor);
+                        tResultingPaint = mGraphPaintStrokeAndColorSettable;
                         if (MyLog.isDEBUG()) {
                             tAdditionalInfo = " strokeWidth=" + aParameters[5];
                         }
@@ -1626,8 +1710,8 @@ public class RPCView extends View {
 
                     if (aParamsLength > 6) {
                         // Stroke parameter
-                        mGraphPaintStrokeSettable.setStrokeWidth(aParameters[6] * mScaleFactor);
-                        tResultingPaint = mGraphPaintStrokeSettable;
+                        mGraphPaintStrokeAndColorSettable.setStrokeWidth(aParameters[6] * mScaleFactor);
+                        tResultingPaint = mGraphPaintStrokeAndColorSettable;
                         if (MyLog.isDEBUG()) {
                             tAdditionalInfo = " strokeWidth=" + aParameters[6];
                         }
@@ -1649,6 +1733,8 @@ public class RPCView extends View {
 
                 case FUNCTION_DRAW_CHART:
                 case FUNCTION_DRAW_CHART_WITHOUT_DIRECT_RENDERING:
+                case FUNCTION_DRAW_SCALED_CHART:
+                case FUNCTION_DRAW_SCALED_CHART_WITHOUT_DIRECT_RENDERING:
                     /*
                      * Chart index is coded in the upper 4 bits of Y start position
                      */
@@ -1657,57 +1743,117 @@ public class RPCView extends View {
                         tYStart = (aParameters[1] & 0x0FFF) * mScaleFactor;
                     }
                     tColor = shortToLongColor(aParameters[2]);
-                    int tDeleteColor = shortToLongColor(aParameters[3]);
+
+                    boolean tDeleteOldLine = false;
+                    int tDeleteColor;
+                    float tYScaleFactor = 1.0F;
+                    float tAdjustedXScaleFactor = mScaleFactor;
+                    int tXScaleFactor = 0;
+                    int tChartMode = CHART_MODE_LINE;
+
+                    if (aParamsLength > 6) {
+                        /*
+                         * FUNCTION_DRAW_SCALED_CHART and FUNCTION_DRAW_SCALED_CHART_WITHOUT_DIRECT_RENDERING here
+                         * get float YScale value and adjust effective data length to XScale
+                         */
+                        tXScaleFactor = aParameters[2];
+                        tIntValue = (aParameters[3] & 0x0000FFFF) | (aParameters[4] << 16);
+                        tYScaleFactor = Float.intBitsToFloat(tIntValue);
+                        // Stroke / thickness parameter
+                        mGraphPaintStrokeAndColorSettable.setStrokeWidth(aParameters[5] * mScaleFactor);
+                        tChartMode = aParameters[6];
+                        tColor = shortToLongColor(aParameters[7]);
+                        tDeleteColor = shortToLongColor(aParameters[8]);
+                        if (aParameters[8] != 0) {
+                            tDeleteOldLine = true;
+                        }
+                        // Adjust values to XScaleFactor
+                        tAdjustedXScaleFactor = enlargeFloatWithXScaleFactor(mScaleFactor, tXScaleFactor);
+                    } else {
+                        tDeleteColor = shortToLongColor(aParameters[3]);
+                        if (aParameters[3] != 0) {
+                            tDeleteOldLine = true;
+                        }
+                        mGraphPaintStrokeAndColorSettable.setStrokeWidth(mScaleFactor);
+                    }
 
                     if (MyLog.isDEBUG()) {
                         if (aCommand == FUNCTION_DRAW_CHART) {
                             tFunctionName = "drawChart";
-                        } else {
+                        } else if (aCommand == FUNCTION_DRAW_CHART_WITHOUT_DIRECT_RENDERING) {
                             tFunctionName = "drawChartWithoutDirectRendering";
+                        } else if (aCommand == FUNCTION_DRAW_SCALED_CHART) {
+                            tFunctionName = "drawScaledChart";
+                        } else {
+                            tFunctionName = "drawScaledChartWithoutDirectRendering";
                         }
                         MyLog.d(LOG_TAG, tFunctionName + "(" + aParameters[0] + ", " + (aParameters[1] & 0x0FFF) + ") color= "
                                 + shortToColorString(aParameters[2]) + " ,deleteColor= " + shortToColorString(aParameters[3])
                                 + " length=" + aDataLength + " ChartIndex=" + tChartIndex);
                     }
 
-                    if (aParameters[3] != 0) {
+
+                    // can not use tDeleteColor here, because it is a converted value
+                    if (tDeleteOldLine) {
                         /*
-                         * delete old chart
+                         * delete old chart line
                          */
-                        // set delete color
-                        mGraphPaintStrokeScaleFactor.setColor(tDeleteColor);
-                        mCanvas.drawLines(mChartScreenBuffer[tChartIndex], 0, mChartScreenBufferCurrentLength * 4,
-                                mGraphPaintStrokeScaleFactor);
+                        mGraphPaintStrokeAndColorSettable.setColor(tDeleteColor); // set delete color
+                        if (tChartMode == CHART_MODE_LINE) {
+                            mCanvas.drawLines(mChartScreenBuffer[tChartIndex], 0, mChartScreenBufferValidDataLength[tChartIndex],
+                                    mGraphPaintStrokeAndColorSettable);
+                        } else {
+                            mCanvas.drawPoints(mChartScreenBuffer[tChartIndex], 0, mChartScreenBufferValidDataLength[tChartIndex],
+                                    mGraphPaintStrokeAndColorSettable);
+                        }
+                    }
+
+                    mGraphPaintStrokeAndColorSettable.setColor(tColor); // now set draw color
+
+                    /*
+                     * draw new chart.
+                     * Origin is at upper left and therefore Y values are inverse!
+                     * After returning to searchCommand() this will break to enable rendering
+                     * or continue to receive the next draw command until no data gets in and rendering may happen.
+                     */
+                    if (aDataLength > MAX_CHART_LINE_WIDTH) {
+                        aDataLength = MAX_CHART_LINE_WIDTH;
+                        MyLog.w(LOG_TAG, "aDataLength of" + aDataLength + " is bigger than maximun allowed data length of " + MAX_CHART_LINE_WIDTH);
                     }
 
                     /*
-                     * draw new chart
+                     * Fill draw buffer with points for chart to draw at the end
                      */
-                    mGraphPaintStrokeScaleFactor.setColor(tColor);
-
-                    float tYOffset = tYStart;
-                    tYStart += SerialService.convertByteToFloat(aDataBytes[0]) * mScaleFactor;
-                    mChartScreenBuffer[tChartIndex][0] = tXStart;
-                    mChartScreenBuffer[tChartIndex][1] = tYStart;
-                    mChartScreenBufferCurrentLength = aDataLength;
-                    mChartScreenBufferXStart = tXStart;
-                    int j = 1;
-                    int i = 2;
-                    // for points for each line
-                    while (i < (aDataLength - 2) * 4) {
-                        tXStart += mScaleFactor;
-                        tYStart = (SerialService.convertByteToFloat(aDataBytes[j++]) * mScaleFactor) + tYOffset;
-                        // end of first line ...
-                        mChartScreenBuffer[tChartIndex][i++] = tXStart;
-                        mChartScreenBuffer[tChartIndex][i++] = tYStart;
-                        // ... is start of next line
-                        mChartScreenBuffer[tChartIndex][i++] = tXStart;
-                        mChartScreenBuffer[tChartIndex][i++] = tYStart;
+                    int tSourceIndex = 0;
+                    int tDestinationIndex = 0;
+                    float tYValue = (SerialService.convertByteToFloat(aDataBytes[tSourceIndex++]) * mScaleFactor * tYScaleFactor) + tYStart;
+                    for (int i = 0; i < aDataLength - 1; i++) {
+                        // Each line is taken from 4 consecutive values in the pts array
+                        // Start of line / pixel
+                        mChartScreenBuffer[tChartIndex][tDestinationIndex++] = tXStart;
+                        mChartScreenBuffer[tChartIndex][tDestinationIndex++] = tYValue;
+                        /*
+                         * Get values of next point
+                         */
+                        tYValue = (SerialService.convertByteToFloat(aDataBytes[tSourceIndex++]) * mScaleFactor * tYScaleFactor) + tYStart;
+                        tXStart += tAdjustedXScaleFactor;
+                        if (tChartMode == CHART_MODE_LINE) {
+                            // Write next point as end of current line
+                            mChartScreenBuffer[tChartIndex][tDestinationIndex++] = tXStart;
+                            mChartScreenBuffer[tChartIndex][tDestinationIndex++] = tYValue;
+                        }
                     }
-                    mChartScreenBuffer[tChartIndex][i++] = tXStart + mScaleFactor;
-                    mChartScreenBuffer[tChartIndex][i] = (SerialService.convertByteToFloat(aDataBytes[j]) * mScaleFactor) + tYOffset;
-
-                    mCanvas.drawLines(mChartScreenBuffer[tChartIndex], 0, aDataLength * 4, mGraphPaintStrokeScaleFactor);
+                    if (tChartMode == CHART_MODE_LINE) {
+                        // fon n points we have n-1 lines
+                        mCanvas.drawLines(mChartScreenBuffer[tChartIndex], 0, (aDataLength - 1) * 4, mGraphPaintStrokeAndColorSettable);
+                        mChartScreenBufferValidDataLength[tChartIndex] = (aDataLength - 1) * 4; // for optional deletion of this line
+                    } else {
+                        // store last point
+                        mChartScreenBuffer[tChartIndex][tDestinationIndex++] = tXStart;
+                        mChartScreenBuffer[tChartIndex][tDestinationIndex++] = tYValue;
+                        mCanvas.drawPoints(mChartScreenBuffer[tChartIndex], 0, aDataLength * 2, mGraphPaintStrokeAndColorSettable);
+                        mChartScreenBufferValidDataLength[tChartIndex] = aDataLength * 2; // for optional deletion of this line
+                    }
 
                     break;
 
@@ -1716,9 +1862,9 @@ public class RPCView extends View {
                     tColor = shortToLongColor(aParameters[0]);
                     if (aCommand == FUNCTION_DRAW_PATH) {
                         tFunctionName = "drawPath";
-                        mGraphPaintStrokeSettable.setColor(tColor);
-                        mGraphPaintStrokeSettable.setStrokeWidth(aParameters[1] * mScaleFactor);
-                        tResultingPaint = mGraphPaintStrokeSettable;
+                        mGraphPaintStrokeAndColorSettable.setColor(tColor);
+                        mGraphPaintStrokeAndColorSettable.setStrokeWidth(aParameters[1] * mScaleFactor);
+                        tResultingPaint = mGraphPaintStrokeAndColorSettable;
                         if (MyLog.isDEBUG()) {
                             tAdditionalInfo = " strokeWidth=" + aParameters[1];
                         }
@@ -1737,7 +1883,7 @@ public class RPCView extends View {
                      */
                     mPath.incReserve(aDataLength + 1);
                     mPath.moveTo(aDataInts[0] * mScaleFactor, aDataInts[1] * mScaleFactor);
-                    i = 2;
+                    int i = 2;
                     while (i < aDataLength) {
                         mPath.lineTo(aDataInts[i] * mScaleFactor, aDataInts[i + 1] * mScaleFactor);
                         i += 2;
@@ -1783,9 +1929,9 @@ public class RPCView extends View {
                         } else {
                             tFunctionName = "drawRect";
                         }
-                        mGraphPaintStrokeSettable.setColor(tColor);
-                        mGraphPaintStrokeSettable.setStrokeWidth(aParameters[5] * mScaleFactor);
-                        tResultingPaint = mGraphPaintStrokeSettable;
+                        mGraphPaintStrokeAndColorSettable.setColor(tColor);
+                        mGraphPaintStrokeAndColorSettable.setStrokeWidth(aParameters[5] * mScaleFactor);
+                        tResultingPaint = mGraphPaintStrokeAndColorSettable;
                         if (MyLog.isDEBUG()) {
                             tAdditionalInfo = " strokeWidth=" + aParameters[5];
                         }
@@ -1812,9 +1958,9 @@ public class RPCView extends View {
                     float tRadius = aParameters[2] * mScaleFactor;
                     if (aCommand == FUNCTION_DRAW_CIRCLE) {
                         tFunctionName = "drawCircle";
-                        mGraphPaintStrokeSettable.setColor(tColor);
-                        mGraphPaintStrokeSettable.setStrokeWidth(aParameters[4] * mScaleFactor);
-                        tResultingPaint = mGraphPaintStrokeSettable;
+                        mGraphPaintStrokeAndColorSettable.setColor(tColor);
+                        mGraphPaintStrokeAndColorSettable.setStrokeWidth(aParameters[4] * mScaleFactor);
+                        tResultingPaint = mGraphPaintStrokeAndColorSettable;
                         if (MyLog.isDEBUG()) {
                             tAdditionalInfo = " strokeWidth=" + aParameters[4];
                         }
@@ -1938,7 +2084,7 @@ public class RPCView extends View {
                         } else {
                             tColumn++;
                         }
-                    }
+                    } // while true
                     break;
 
                 case FUNCTION_DRAW_CHAR:

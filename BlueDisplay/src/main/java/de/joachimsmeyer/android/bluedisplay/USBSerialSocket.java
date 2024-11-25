@@ -127,6 +127,8 @@ public class USBSerialSocket implements SerialInputOutputManager.Listener {
 
         List<UsbSerialDriver> availableDrivers = UsbSerialProber.getDefaultProber().findAllDrivers(mUsbManager);
         if (!availableDrivers.isEmpty()) {
+//        mUsbSerialDriver = UsbSerialProber.getDefaultProber().probeDevice(mUsbManager.getDeviceList().get(0));
+//        if (mUsbSerialDriver != null) {
             // Set this flag here, since it is used below for signalBlueDisplayConnection()
             mBlueDisplayContext.mUSBDeviceAttached = true;
             // Open a connection to the first available driver.
@@ -167,7 +169,7 @@ public class USBSerialSocket implements SerialInputOutputManager.Listener {
              */
             mUSBSerialPort = mUsbSerialDriver.getPorts().get(0);
             try {
-                mUSBSerialPort.open(mUSBDeviceConnection);
+                mUSBSerialPort.open(mUSBDeviceConnection); // Here I got IOException "Expected 0xee bytes, but get 0xa8 [init#6]"
                 mUSBSerialPort.setParameters(115200, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
 
                 mUSBSerialPort.setDTR(true); // Reset for arduino
@@ -203,8 +205,8 @@ public class USBSerialSocket implements SerialInputOutputManager.Listener {
                 mHandler.sendEmptyMessage(BlueDisplay.MESSAGE_USB_CONNECT);
 
             } catch (IOException e) {
+                MyLog.e(LOG_TAG, "USB open() failed: " + e.getMessage());
                 disconnect();
-                MyLog.e(LOG_TAG, "USB open() failed: " + e);
             }
         }
 
