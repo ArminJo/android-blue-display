@@ -107,6 +107,7 @@ import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.Surface;
 import android.view.View;
+import android.view.Window;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.EditText;
@@ -124,7 +125,7 @@ public class BlueDisplay extends Activity {
 
     // Message types sent from the BluetoothSerialSocket Handler
     public static final int MESSAGE_TIMEOUT_AFTER_CONNECT = 1;
-//    public static final int MESSAGE_READ = 2;
+    //    public static final int MESSAGE_READ = 2;
 //    public static final int MESSAGE_WRITE = 3;
     public static final int MESSAGE_BT_CONNECT = 2;
     public static final int MESSAGE_BT_DISCONNECT = 3;
@@ -311,7 +312,7 @@ public class BlueDisplay extends Activity {
 //                                mDeviceNameToConnect = device.getName();
 //                            }
 //                        } else {
-                            mDeviceNameToConnect = device.getName();
+                        mDeviceNameToConnect = device.getName();
 //                        }
                     }
                 } else {
@@ -364,8 +365,8 @@ public class BlueDisplay extends Activity {
 //                    mInTryToEnableEnableBT = false;
 //                    finish();
 //                } else {
-                    startActivityForResult(enableIntent, REQUEST_ENABLE_BT);
-                    mInTryToEnableEnableBT = true;
+                startActivityForResult(enableIntent, REQUEST_ENABLE_BT);
+                mInTryToEnableEnableBT = true;
 //                }
             }
         }
@@ -394,6 +395,11 @@ public class BlueDisplay extends Activity {
 
         mCurrentRotation = getWindowManager().getDefaultDisplay().getRotation();
         mSensorEventListener.registerAllActiveSensorListeners();
+        // Reset brightness to user value, it can be set by application to another value
+        Window window = getWindow();
+        WindowManager.LayoutParams layoutParams = window.getAttributes();
+        layoutParams.screenBrightness = -1;
+        window.setAttributes(layoutParams);
 
         mRPCView.invalidate();
     }
@@ -402,6 +408,18 @@ public class BlueDisplay extends Activity {
     public void onWindowFocusChanged(boolean hasFocus) {
         if (MyLog.isINFO()) {
             Log.i(LOG_TAG, "+ onWindowFocusChanged focus=" + hasFocus);
+        }
+        // send new max size to client, but only if device is connected (check needed here since we always get an onSizeChanged
+        // event at startup)
+        if (mRPCView.mSendPendingConnectMessage) {
+            mRPCView.mSendPendingConnectMessage = false;
+            // Signal connection to Client, now that the mCurrentViewWidth and mCurrentViewHeight are set.
+            mSerialService.signalBlueDisplayConnection();
+            /*
+             * Send the event to the UI Activity, which in turn shows the connected toast and sets window to always on
+             */
+            mHandlerForGUIRequests.sendEmptyMessage(BlueDisplay.MESSAGE_USB_CONNECT);
+            MyLog.i(LOG_TAG, "onWindowFocusChanged: Send delayed connection build up event");
         }
     }
 
@@ -605,34 +623,34 @@ public class BlueDisplay extends Activity {
             }
             return true;
 
-        } else if (item.getItemId() == R.id.menu_show_log){
-                startActivity(new Intent(this, LogViewActivity.class));
-                return true;
+        } else if (item.getItemId() == R.id.menu_show_log) {
+            startActivity(new Intent(this, LogViewActivity.class));
+            return true;
 
-        } else if (item.getItemId() == R.id.menu_preferences){
+        } else if (item.getItemId() == R.id.menu_preferences) {
 
-                Intent tPreferencesIntent = new Intent(this, BlueDisplayPreferences.class);
-                tPreferencesIntent.putExtra(BT_DEVICE_NAME, mAutoConnectDeviceNameFromPreferences);
-                startActivity(tPreferencesIntent);
-                return true;
+            Intent tPreferencesIntent = new Intent(this, BlueDisplayPreferences.class);
+            tPreferencesIntent.putExtra(BT_DEVICE_NAME, mAutoConnectDeviceNameFromPreferences);
+            startActivity(tPreferencesIntent);
+            return true;
 
             // case R.id.menu_show_graph_testpage:
             // mRPCView.showGraphTestpage();
             // return true;
-        } else if (item.getItemId() == R.id.menu_show_testpage){
-                mRPCView.showTestpage();
-                return true;
+        } else if (item.getItemId() == R.id.menu_show_testpage) {
+            mRPCView.showTestpage();
+            return true;
 
-        } else if (item.getItemId() == R.id.menu_show_statistics){
-                if (MyLog.isINFO()) {
-                    Log.i(LOG_TAG, mSerialService.getStatisticsString());
-                }
-                showStatisticsMessage();
-                return true;
+        } else if (item.getItemId() == R.id.menu_show_statistics) {
+            if (MyLog.isINFO()) {
+                Log.i(LOG_TAG, mSerialService.getStatisticsString());
+            }
+            showStatisticsMessage();
+            return true;
 
-        } else if (item.getItemId() == R.id.menu_about){
-                showAboutDialog();
-                return true;
+        } else if (item.getItemId() == R.id.menu_about) {
+            showAboutDialog();
+            return true;
         }
         return false;
     }
@@ -692,6 +710,7 @@ public class BlueDisplay extends Activity {
                 case MESSAGE_USB_CONNECT:
                     /*
                      * called by USBSerialSocket after connect -> set window to always on, reset button and slider and show toast
+                     * Seems too late for the initial events, the are not sent because connect flag is not yet true
                      */
                     if (MyLog.isDEBUG()) {
                         Log.d(LOG_TAG, "MESSAGE_USB_CONNECT received");
@@ -843,24 +862,24 @@ public class BlueDisplay extends Activity {
 //                            mDeviceNameToConnect = device.getName();
 //                        }
 //                    } else {
-                        mDeviceNameToConnect = device.getName();
+                    mDeviceNameToConnect = device.getName();
 //                    }
-            }
-            break;
-
-        case REQUEST_ENABLE_BT:
-            /*
-             * When the request to enable Bluetooth returns
-             */
-            if (resultCode != Activity.RESULT_OK) {
-                if (MyLog.isDEBUG()) {
-                    Log.d(LOG_TAG, "BT not enabled");
                 }
-                finishDialogNoBluetooth();
-            } else {
-                launchDeviceListActivity();
-            }
-            break;
+                break;
+
+            case REQUEST_ENABLE_BT:
+                /*
+                 * When the request to enable Bluetooth returns
+                 */
+                if (resultCode != Activity.RESULT_OK) {
+                    if (MyLog.isDEBUG()) {
+                        Log.d(LOG_TAG, "BT not enabled");
+                    }
+                    finishDialogNoBluetooth();
+                } else {
+                    launchDeviceListActivity();
+                }
+                break;
 
         }
     }
@@ -1014,9 +1033,8 @@ public class BlueDisplay extends Activity {
 
     @Override
     // Source is from http://stackoverflow.com/questions/9996333/openoptionsmenu-function-not-working-in-ics/17903128#17903128
-    // I found the android one not working on a 5.0 tablet
     public void openOptionsMenu() {
-
+        super.invalidateOptionsMenu(); // This is required at least for Android 15
         Configuration config = getResources().getConfiguration();
 
         if ((config.screenLayout & Configuration.SCREENLAYOUT_SIZE_MASK) > Configuration.SCREENLAYOUT_SIZE_LARGE) {

@@ -4,10 +4,10 @@
  *     It receives basic draw requests from Arduino etc. over Bluetooth and renders it.
  *     It also implements basic GUI elements as buttons and sliders.
  *     It sends touch or GUI callback events over Bluetooth back to Arduino.
- * 
+ *
  *  Copyright (C) 2014-2020  Armin Joachimsmeyer
  *  armin.joachimsmeyer@gmail.com
- *  
+ *
  *     This file is part of BlueDisplay.
  *  BlueDisplay is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -21,23 +21,23 @@
 
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/gpl.html>.
- *  
- *  
+ *
+ *
  * This service handles the data in the receive buffer and assembles the event buffer.
  */
 
 package de.joachimsmeyer.android.bluedisplay;
+
+import android.os.Handler;
+import android.util.Log;
+
+import com.hoho.android.usbserial.util.SerialInputOutputManager;
 
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
 import java.util.TimeZone;
-
-import com.hoho.android.usbserial.util.SerialInputOutputManager;
-
-import android.os.Handler;
-import android.util.Log;
 
 /**
  * This class does all the work for setting up and managing Bluetooth connections with other devices. It has a thread for connecting
@@ -51,7 +51,7 @@ public class SerialService {
      * The big receive ring buffer
      */
     public static final int SIZE_OF_IN_BUFFER = 10 * 4096;
-    public static final int MIN_MESSAGE_SIZE = 5; // data message with one byte
+    public static final int MIN_MESSAGE_SIZE = 4; // was former 5 (data message with one byte), but this makes problems with receiving empty data blocks
     public static final int MIN_COMMAND_SIZE = 4; // command message with no parameter
 
     public volatile byte[] mBigReceiveBuffer = new byte[SIZE_OF_IN_BUFFER];
@@ -66,7 +66,7 @@ public class SerialService {
 
     byte[] mDataBuffer = new byte[4096]; // Buffer to hold data for one data command
     private volatile boolean inBufferReadingLock = false; // Safety net to avoid 2 instances of search command calls. Should never
-                                                          // happen :-).
+    // happen :-).
 
     public static final int SIZE_OF_DEBUG_BUFFER = 16;
     byte[] mHexOutputTempBuffer = new byte[SIZE_OF_DEBUG_BUFFER]; // holds one output line for verbose HEX output
@@ -118,11 +118,9 @@ public class SerialService {
 
     /**
      * Constructor. Prepares a new BluetoothChat session.
-     * 
-     * @param aContext
-     *            The UI Activity Context
-     * @param aHandler
-     *            A Handler to send messages back to the UI Activity
+     *
+     * @param aContext The UI Activity Context
+     * @param aHandler A Handler to send messages back to the UI Activity
      */
     public SerialService(BlueDisplay aContext, Handler aHandler) {
         mBlueDisplayContext = aContext;
@@ -131,7 +129,9 @@ public class SerialService {
     }
 
     /*
-     * Called by BT or USB driver thread. Handle statistics, buffer overflow, buffer wrap around.
+     * Called by BT or USB driver thread.
+     * Handle statistics, buffer overflow, buffer wrap around
+     * and signal BlueDisplay.MESSAGE_UPDATE_VIEW.
      */
     void handleReceived(int aReadLength) {
 
@@ -145,7 +145,8 @@ public class SerialService {
             int tBytesInBuffer = getBufferBytesAvailable();
             if (tOldInIndex < tOutIndex && mReceiveBufferInIndex > tOutIndex) {
                 // input index overtakes out index
-                MyLog.e(LOG_TAG, "Buffer overflow! InIndex=" + mReceiveBufferInIndex);
+                MyLog.e(LOG_TAG, "Buffer overflow! new InIndex=" + mReceiveBufferInIndex
+                        + " OutIndex=" + tOutIndex + " ReadLength=" + aReadLength);
             }
 
             // check for wrap around
@@ -161,10 +162,6 @@ public class SerialService {
                 if (MyLog.isVERBOSE()) {
                     // Output length
                     Log.v(LOG_TAG, "Buffer wrap around. Bytes in buffer=" + (mInputBufferWrapAroundIndex - tOutIndex));
-                }
-                if (mReceiveBufferInIndex > tOutIndex) {
-                    // After wrap bigger than out index
-                    MyLog.e(LOG_TAG, "Buffer overflow! InIndex=" + mReceiveBufferInIndex);
                 }
             }
             if (MyLog.isVERBOSE()) {
@@ -250,8 +247,8 @@ public class SerialService {
     }
 
     /*
-     * Signal connection to Arduino. First write a NOP command for synchronizing, i.e. the client receive buffer is filled up once.
-     * Then send EVENT_CONNECTION_BUILD_UP, which calls the connect and redraw callback, specified at initCommunication(), on the
+     * Signal connection to Arduino. First write a NOP command (12 * 0x00) for synchronizing, i.e. the client receive buffer is filled up once.
+     * Then send EVENT_CONNECTION_BUILD_UP, which calls the connect and redraw callback, which were specified at initCommunication(), on the
      * client. The very first call for USB sends 0 as current size values. In response we first get a NOP command for syncing the
      * host, and then the commands of the client ConnectCallback() function.
      */
@@ -263,12 +260,11 @@ public class SerialService {
     }
 
     void writeEvent(byte[] aEventDataBuffer, int aEventDataLength) {
-        if (mBlueDisplayContext.mDeviceConnected) {
-            if (mBlueDisplayContext.mUSBDeviceAttached) {
-                mBlueDisplayContext.mUSBSerialSocket.writeEvent(aEventDataBuffer, aEventDataLength);
-            } else {
+        // Check USB connection this way, because the mDeviceConnected flag is set by a message, which may not be processed yet.
+        if(mBlueDisplayContext.mUSBSerialSocket != null && mBlueDisplayContext.mUSBSerialSocket.mIsConnected) {
+            mBlueDisplayContext.mUSBSerialSocket.writeEvent(aEventDataBuffer, aEventDataLength);
+        } else if (mBlueDisplayContext.mDeviceConnected) {
                 mBlueDisplayContext.mBTSerialSocket.writeEvent(aEventDataBuffer, aEventDataLength);
-            }
         } else {
             if (MyLog.isINFO()) {
                 MyLog.i(LOG_TAG, "Do not send event, because client is not (yet) connected");
@@ -285,7 +281,7 @@ public class SerialService {
 
         // assemble data buffer
         int tIndex = 0;
-        mSendByteBuffer[tIndex++] = (byte) tEventLength; // gross message length in bytes
+        mSendByteBuffer[tIndex++] = (byte) tEventLength; // gross message length in bytes including sync token
         mSendByteBuffer[tIndex++] = (byte) tEventType; // Function token
 
         short tXPos = (short) aX;
@@ -315,7 +311,7 @@ public class SerialService {
 
         // assemble data buffer
         int tIndex = 0;
-        mSendByteBuffer[tIndex++] = (byte) tEventLength; // gross message length in bytes
+        mSendByteBuffer[tIndex++] = (byte) tEventLength; // gross message length in bytes including sync token
         mSendByteBuffer[tIndex++] = (byte) tEventType; // Function token
 
         short tXPos = (short) aX;
@@ -348,7 +344,7 @@ public class SerialService {
 
         // assemble data buffer
         int tIndex = 0;
-        mSendByteBuffer[tIndex++] = (byte) tEventLength; // gross message length in bytes
+        mSendByteBuffer[tIndex++] = (byte) tEventLength; // gross message length in bytes including sync token
         mSendByteBuffer[tIndex++] = (byte) tEventType; // Function token
 
         short tXPos = (short) aX;
@@ -361,8 +357,10 @@ public class SerialService {
         /*
          * Timestamp of local time (for convenience reason)
          */
-        int tGmtOffset = TimeZone.getDefault().getRawOffset() + TimeZone.getDefault().getDSTSavings();
-        long tTimestamp = System.currentTimeMillis() + tGmtOffset;
+        TimeZone tDefaultTimeZone = TimeZone.getDefault();
+        long tTimestamp = System.currentTimeMillis();
+        tTimestamp += tDefaultTimeZone.getRawOffset(); // 1 hour
+//        tTimestamp += tDefaultTimeZone.getDSTSavings(); // 1 hour if DST enabled, which is always true :-(
         long tTimestampSeconds = tTimestamp / 1000L;
         mSendByteBuffer[tIndex++] = (byte) (tTimestampSeconds & 0xFF); // LSB
         mSendByteBuffer[tIndex++] = (byte) ((tTimestampSeconds >> 8) & 0xFF);
@@ -375,15 +373,14 @@ public class SerialService {
             // DateFormat tDateFormat = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.MEDIUM, Locale.GERMAN);
             DateFormat tDateFormat = new SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.getDefault());
             Date tDate = new Date(tTimestamp);
-            MyLog.i(LOG_TAG, "Send Type=0x" + Integer.toHexString(tEventType) + "|" + tType + " X=" + aX + " Y=" + aY + " Date="
-                    + tDateFormat.format(tDate));
+            MyLog.i(LOG_TAG, "Send Type=0x" + Integer.toHexString(tEventType) + "|" + tType + " X=" + aX + " Y=" + aY
+                    + " Timestamp=" + tTimestampSeconds + " Date=" + tDateFormat.format(tDate));
         }
 
         mStatisticNumberOfSentBytes += tEventLength;
         mStatisticNumberOfSentCommands++;
 
         writeEvent(mSendByteBuffer, tEventLength);
-
     }
 
     /*
@@ -395,7 +392,7 @@ public class SerialService {
 
         // assemble data buffer
         int tIndex = 0;
-        mSendByteBuffer[tIndex++] = (byte) tEventLength; // gross message length in bytes
+        mSendByteBuffer[tIndex++] = (byte) tEventLength; // gross message length in bytes including sync token
         mSendByteBuffer[tIndex++] = (byte) tEventType; // Function token
 
         short tShortValue = (short) aButtonSliderIndex;
@@ -442,7 +439,7 @@ public class SerialService {
 
         // assemble data buffer
         int tIndex = 0;
-        mSendByteBuffer[tIndex++] = (byte) tEventLength; // gross message length in bytes
+        mSendByteBuffer[tIndex++] = (byte) tEventLength; // gross message length in bytes including sync token
         mSendByteBuffer[tIndex++] = (byte) tEventType; // Function token
 
         // for future use (index of function calling getNumber etc.)
@@ -483,7 +480,7 @@ public class SerialService {
 
         // assemble data buffer
         int tIndex = 0;
-        mSendByteBuffer[tIndex++] = (byte) tEventLength; // gross message length in bytes
+        mSendByteBuffer[tIndex++] = (byte) tEventLength; // gross message length in bytes including sync token
         mSendByteBuffer[tIndex++] = (byte) tEventType; // Function token
         short tShortValue = (short) aIsXDirection;
         mSendByteBuffer[tIndex++] = (byte) (tShortValue & 0xFF); // LSB
@@ -522,7 +519,7 @@ public class SerialService {
 
         // assemble data buffer
         int tIndex = 0;
-        mSendByteBuffer[tIndex++] = (byte) tEventLength; // gross message length in bytes
+        mSendByteBuffer[tIndex++] = (byte) tEventLength; // gross message length in bytes including sync token
         mSendByteBuffer[tIndex++] = (byte) tEventType; // Function token
 
         int tValue = Float.floatToIntBits(aValueX);
@@ -558,13 +555,13 @@ public class SerialService {
      * Never used yet
      */
     public void writeInfoCallbackEvent(int aEventType, int aSubFunction, int aByteInfo, int aShortInfo, int aCallbackAddress,
-            int aInfo_0, int aInfo_1) {
+                                       int aInfo_0, int aInfo_1) {
         int tEventLength = CALLBACK_DATA_SIZE;
         int tEventType = aEventType & 0xFF;
 
         // assemble data buffer
         int tIndex = 0;
-        mSendByteBuffer[tIndex++] = (byte) tEventLength; // gross message length in bytes
+        mSendByteBuffer[tIndex++] = (byte) tEventLength; // gross message length in bytes including sync token
 
         mSendByteBuffer[tIndex++] = (byte) tEventType; // Sub function token
 
@@ -601,13 +598,13 @@ public class SerialService {
     }
 
     public void writeInfoCallbackEvent(int aEventType, int aSubFunction, int aByteInfo, int aShortInfo, int aCallbackAddress,
-            long aLongInfo) {
+                                       long aLongInfo) {
         int tEventLength = CALLBACK_DATA_SIZE;
         int tEventType = aEventType & 0xFF;
 
         // assemble data buffer
         int tIndex = 0;
-        mSendByteBuffer[tIndex++] = (byte) tEventLength; // gross message length in bytes
+        mSendByteBuffer[tIndex++] = (byte) tEventLength; // gross message length in bytes including sync token
 
         mSendByteBuffer[tIndex++] = (byte) tEventType; // Function token
 
@@ -681,7 +678,7 @@ public class SerialService {
 
     private static final int numberOfBitsInAHalfByte = 4;
     private static final int halfByte = 0x0F;
-    private static final char[] hexDigits = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F' };
+    private static final char[] hexDigits = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'};
 
     public static void appendByteAsHex(StringBuilder aStringBuilder, byte aByte) {
         aStringBuilder.append(hexDigits[(aByte >> numberOfBitsInAHalfByte) & halfByte]);
@@ -749,17 +746,17 @@ public class SerialService {
 
     public static final int RPCVIEW_DO_NOTHING = 0; // No data in buffer, no need for draw -> request trigger from socket.
     public static final int RPCVIEW_DO_WAIT = 1; // We had data, but not a complete command, so rendering makes no sense, wait and
-                                                 // call again.
+    // call again.
     public static final int RPCVIEW_DO_DRAW = 2; // The canvas should be rendered, and we have no more commands -> draw and request
-                                                 // new trigger.
+    // new trigger.
     public static final int RPCVIEW_DO_DRAW_AND_CALL_AGAIN = 3; // The canvas should be rendered, but we may have more data, so try
-                                                                // it again
+    // it again
 
     // after rendering -> call invalidate().
 
     /**
      * Search the input buffer for valid commands and call interpretCommand() as long as there is data available.
-     * 
+     *
      * @param aRPCView pointer to RPCView object
      * @return true if we have more data in the buffer but want to redraw now, e.g. after a FUNCTION_DRAW_CHART command.
      */
@@ -773,7 +770,7 @@ public class SerialService {
         }
         int tRetval = RPCVIEW_DO_WAIT;
         long tStartOfSearchCommand = System.nanoTime(); // We require it as nanos, because we compute the
-                                                        // mStatisticNanoTimeForCommands with it
+        // mStatisticNanoTimeForCommands with it
         long tNanosForChart = 0;
         inBufferReadingLock = true;
         byte tCommand = 0;
@@ -928,19 +925,21 @@ public class SerialService {
                 searchStateInputLengthToWaitFor = MIN_COMMAND_SIZE;
                 aRPCView.interpretCommand(tCommand, mParameters, tParamsLength, mDataBuffer, null, tLengthReceived);
                 tRetval = RPCVIEW_DO_DRAW;
-                if (tCommand == RPCView.FUNCTION_DRAW_CHART || tCommand == RPCView.FUNCTION_DRAW_CHART_WITHOUT_DIRECT_RENDERING) {
+                if (tCommand == RPCView.FUNCTION_DRAW_CHART || tCommand == RPCView.FUNCTION_DRAW_CHART_WITHOUT_DIRECT_RENDERING
+                        || tCommand == RPCView.FUNCTION_DRAW_SCALED_CHART
+                        || tCommand == RPCView.FUNCTION_DRAW_SCALED_CHART_WITHOUT_DIRECT_RENDERING) {
                     // do statistics
                     mStatisticNumberOfReceivedChartCommands++;
                     tNanosForChart += System.nanoTime() - tStart1;
 
-                    if (tCommand == RPCView.FUNCTION_DRAW_CHART) {
+                    if (tCommand == RPCView.FUNCTION_DRAW_CHART || tCommand == RPCView.FUNCTION_DRAW_SCALED_CHART) {
                         int tBufferBytesAvailable = getBufferBytesAvailable();
                         if (tBufferBytesAvailable > 0) {
                             // We still have bytes in the buffer, so call again
                             tRetval = RPCVIEW_DO_DRAW_AND_CALL_AGAIN;
                             if (tBufferBytesAvailable > 2000) {
                                 /*
-                                 * Scan for clear screen command and skip content until it
+                                 * Scan for clear screen command and skip content until this clear screen command
                                  */
                                 scanBufferForClearDisplayOptionalCommandAndSkip(tBufferBytesAvailable);
                             }
@@ -960,7 +959,7 @@ public class SerialService {
                     break;
                 }
 
-            } else /* Data buffer command */{
+            } else /* Data buffer command */ {
                 /*
                  * Command parameters here
                  */
@@ -1090,7 +1089,7 @@ public class SerialService {
                     MyLog.w("Serial.print", tStringFromSerial);
                     mSerialPrintBufferInIndex = 0;
                     mBlueDisplayContext.mRPCView.showAsDebugToast(tStringFromSerial);
-}
+                }
             }
         } while (tByte != SYNC_TOKEN);
         return true;

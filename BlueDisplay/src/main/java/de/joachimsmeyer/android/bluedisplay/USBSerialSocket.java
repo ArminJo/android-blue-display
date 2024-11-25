@@ -4,10 +4,10 @@
  * 	It receives basic draw requests from Arduino etc. over Bluetooth and renders it.
  * 	It also implements basic GUI elements as buttons and sliders.
  * 	It sends touch or GUI callback events over Bluetooth back to Arduino.
- * 
+ *
  *  Copyright (C) 2019-2020  Armin Joachimsmeyer
  *  armin.joachimsmeyer@gmail.com
- *  
+ *
  * 	This file is part of BlueDisplay.
  *  BlueDisplay is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -21,12 +21,14 @@
 
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/gpl.html>.
- *  
- *  
+ *
+ *
  * This service handles the USB connection.
  */
 
 package de.joachimsmeyer.android.bluedisplay;
+
+import static android.app.PendingIntent.FLAG_MUTABLE;
 
 import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
@@ -127,6 +129,8 @@ public class USBSerialSocket implements SerialInputOutputManager.Listener {
 
         List<UsbSerialDriver> availableDrivers = UsbSerialProber.getDefaultProber().findAllDrivers(mUsbManager);
         if (!availableDrivers.isEmpty()) {
+//        mUsbSerialDriver = UsbSerialProber.getDefaultProber().probeDevice(mUsbManager.getDeviceList().get(0));
+//        if (mUsbSerialDriver != null) {
             // Set this flag here, since it is used below for signalBlueDisplayConnection()
             mBlueDisplayContext.mUSBDeviceAttached = true;
             // Open a connection to the first available driver.
@@ -145,7 +149,7 @@ public class USBSerialSocket implements SerialInputOutputManager.Listener {
                         "Request user USB permission for VID=" + mUSBDevice.getVendorId() + " ProductId="
                                 + mUSBDevice.getProductId());
                 PendingIntent tUSBPermissionIntent = PendingIntent.getBroadcast(mBlueDisplayContext, 0, new Intent(
-                        ACTION_USB_PERMISSION), 0);
+                        ACTION_USB_PERMISSION), FLAG_MUTABLE);
                 mUsbManager.requestPermission(mUSBDevice, tUSBPermissionIntent);
             }
         }
@@ -167,10 +171,10 @@ public class USBSerialSocket implements SerialInputOutputManager.Listener {
              */
             mUSBSerialPort = mUsbSerialDriver.getPorts().get(0);
             try {
-                mUSBSerialPort.open(mUSBDeviceConnection);
+                mUSBSerialPort.open(mUSBDeviceConnection); // Here I got IOException "Expected 0xee bytes, but get 0xa8 [init#6]"
                 mUSBSerialPort.setParameters(115200, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
 
-                mUSBSerialPort.setDTR(true); // Reset for arduino
+                mUSBSerialPort.setDTR(false); // No reset for arduino on app start!
                 mUSBSerialPort.setRTS(true); // Channel readiness on some boards
                 mIoManager = new SerialInputOutputManager(mUSBSerialPort, this);
                 Executors.newSingleThreadExecutor().submit(mIoManager);
@@ -187,24 +191,20 @@ public class USBSerialSocket implements SerialInputOutputManager.Listener {
                 } catch (InterruptedException e) {
                     // Just do nothing
                 }
-
-                // // reset flags, buttons, sliders and sensors (and log this :-))
-                // mBlueDisplayContext.mRPCView.resetAll();
                 /*
-                 * Now we have read all old bytes from input stream. Start and initialize big ring buffer.
+                 * Start and initialize big ring buffer.
                  */
                 mSerialService.resetReceiveBuffer();
                 mSerialService.resetStatistics();
-                // signal connection to Client
-                mSerialService.signalBlueDisplayConnection();
                 /*
-                 * Send the event to the UI Activity, which in turn shows the connected toast and sets window to always on
+                 * Sending connection message now is too early, since the display size
+                 * is not yet set by RPCView SizeChanged event
+                 * Let RPCView do the delayed signaling the connection to Client,
                  */
-                mHandler.sendEmptyMessage(BlueDisplay.MESSAGE_USB_CONNECT);
-
+                mBlueDisplayContext.mRPCView.mSendPendingConnectMessage = true;
             } catch (IOException e) {
+                MyLog.e(LOG_TAG, "USB open() failed: " + e.getMessage());
                 disconnect();
-                MyLog.e(LOG_TAG, "USB open() failed: " + e);
             }
         }
 

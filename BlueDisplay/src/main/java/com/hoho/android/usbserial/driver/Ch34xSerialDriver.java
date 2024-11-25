@@ -280,7 +280,8 @@ public class Ch34xSerialDriver implements UsbSerialDriver {
 				throw new IOException("init failed! #5");
 			}
 
-			checkState("init #6", 0x95, 0x0706, new int[]{0xff, 0xee});
+			checkState("init #6", 0x95, 0x0706, new int[]{-1/*0xf?*/, -1/*0xec,0xee*/}); // new version
+//			checkState("init #6", 0x95, 0x0706, new int[]{0xff, 0xee}); // instead of EE|-18 I saw -88 on some devices
 
 			if (controlOut(0xa1, 0x501f, 0xd90a) < 0) {
 				throw new IOException("init failed! #7");
@@ -290,7 +291,8 @@ public class Ch34xSerialDriver implements UsbSerialDriver {
 
 			writeHandshakeByte();
 
-			checkState("init #10", 0x95, 0x0706, new int[]{-1/* 0x9f, 0xff*/, 0xee});
+			checkState("init #10", 0x95, 0x0706, new int[]{-1/* 0x9f, 0xff*/, -1/*0xec,0xee*/}); // new version
+//			checkState("init #10", 0x95, 0x0706, new int[]{-1/* 0x9f, 0xff*/, 0xee});
 		}
 
 

@@ -21,12 +21,12 @@
 
 package com.hoho.android.usbserial.util;
 
-import java.io.IOException;
-import java.nio.ByteBuffer;
-
 import android.util.Log;
 
 import com.hoho.android.usbserial.driver.UsbSerialPort;
+
+import java.io.IOException;
+import java.nio.ByteBuffer;
 
 import de.joachimsmeyer.android.bluedisplay.MyLog;
 
@@ -153,8 +153,8 @@ public class SerialInputOutputManager implements Runnable {
 		// Handle incoming data.
 		int len = mDriver.read(mReadBuffer.array(), READ_WAIT_MILLIS);
 		if (len > 0) {
-			if (MyLog.isDEBUG()) {
-				MyLog.d(TAG, "Read data len=" + len);
+			if (MyLog.isVERBOSE()) {
+				MyLog.v(TAG, "Read data len=" + len);
 			}
 			final Listener listener = getListener();
 			if (listener != null) {

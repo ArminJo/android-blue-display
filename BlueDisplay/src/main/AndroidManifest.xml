@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     android:installLocation="auto">
-    <!-- versionCode and name are in gradle build script. See also File > Project Structure -->
+    <!-- versionCode and name are in gradle build script. See also File > Project Structure > Modules > Default Config -->
 
-    <!-- versionCode="20" => Version 4.3.3 -->
+    <!-- versionCode="20" => Version 4.4 -->
     <!-- versionCode="19" => Version 4.3.2 -->
     <!-- versionCode="18" => Version 4.3.1 -->
     <!-- versionCode="17" => Version 4.3 -->
@@ -31,6 +31,7 @@
     <!-- android:targetSdkVersion="30" is Android 11 -->
     <!-- android:targetSdkVersion="33" is Android 13 -->
 
+    <!-- configChanges are the changes we handle in the app, we do not need to be restarted for this changes :-) -->
     <application
         android:allowBackup="true"
         android:icon="@drawable/icon"
