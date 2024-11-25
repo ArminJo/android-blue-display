@@ -33,7 +33,7 @@ import android.util.Log;
 
 public class MyLog {
 
-    static final int SIZE_OF_LOG_HISTORY = 300;
+    static final int SIZE_OF_LOG_HISTORY = 1500;
     static String[] Logmessages = new String[SIZE_OF_LOG_HISTORY];
     static int mNextIndex = 0;
     static int mLength = 0; // used to determine if wrap around has happened

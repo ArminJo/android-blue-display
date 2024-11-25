@@ -107,6 +107,7 @@ import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.Surface;
 import android.view.View;
+import android.view.Window;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.EditText;
@@ -394,6 +395,11 @@ public class BlueDisplay extends Activity {
 
         mCurrentRotation = getWindowManager().getDefaultDisplay().getRotation();
         mSensorEventListener.registerAllActiveSensorListeners();
+        // Reset brightness to user value, it can be set by application to another value
+        Window window = getWindow();
+        WindowManager.LayoutParams layoutParams = window.getAttributes();
+        layoutParams.screenBrightness = -1;
+        window.setAttributes(layoutParams);
 
         mRPCView.invalidate();
     }
@@ -1014,9 +1020,8 @@ public class BlueDisplay extends Activity {
 
     @Override
     // Source is from http://stackoverflow.com/questions/9996333/openoptionsmenu-function-not-working-in-ics/17903128#17903128
-    // I found the android one not working on a 5.0 tablet
     public void openOptionsMenu() {
-
+        super.invalidateOptionsMenu(); // This is required at least for Android 15
         Configuration config = getResources().getConfiguration();
 
         if ((config.screenLayout & Configuration.SCREENLAYOUT_SIZE_MASK) > Configuration.SCREENLAYOUT_SIZE_LARGE) {
