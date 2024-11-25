@@ -15,13 +15,14 @@ Convert your smartphone into an Android remote touch display for your Arduino or
 [![Stand With Ukraine](https://raw.githubusercontent.com/vshymanskyy/StandWithUkraine/main/badges/StandWithUkraine.svg)](https://stand-with-ukraine.pp.ua)
 
 
-[![Button Changelog](https://img.shields.io/badge/Changelog-blue?logoColor=white&logo=AzureArtifacts)](https://github.com/ArminJo/android-blue-display#revision-history)
-
-</div>
+[![Button Changelog](https://img.shields.io/badge/Changelog-blue?logoColor=white&logo=AzureArtifacts)](https://github.com/ArminJo/android-blue-display?tab=readme-ov-file#revision-history)
 
 #### If you find this library useful, please give it a star.
 
-<br/>
+&#x1F30E; [Google Translate](https://translate.google.com/translate?sl=en&u=https://github.com/ArminJo/android-blue-display)
+
+</div>
+
 
 # SUMMARY
 Let the Arduino sketch create a GUI with Graphics, Buttons and Sliders on your smartphone by simply connecting a HC-05 to the rx/tx pins of your Arduino.
@@ -46,8 +47,7 @@ GUI callback, touch and sensor events are sent back to Arduino.
 - Hex and ASCII output of received Bluetooth data at log level verbose.
 - Debug messages shown as toasts.
 - Swipe from the left border opens the options menu.
-- C++ Libraries for [Arduino](https://github.com/ArminJo/Arduino-BlueDisplay).
- and [ARM (STM)](https://github.com/ArminJo/android-blue-display/tree/master/STM32/lib).
+- C++ Libraries for [Arduino and ARM (STM)](https://github.com/ArminJo/Arduino-BlueDisplay).
 
 <br/>
 
