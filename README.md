@@ -61,6 +61,12 @@ The library includes examples for easy initializing a HC-05 and for a simple DSO
 Before using the examples, take care that the BT-module (e.g. the the HC-05 module) is connected to your Android device and is visible in the Bluetooth Settings.
 For full screen applications, the menu is called by swiping from the left edge of the screen. Otherwise, you can call it by touching the area not occupied by the client application (black display area).
 
+## Menu option "show touch position"
+The current touch position is shown at the upper left corner in the following format:<br/>
+<IndexOfTouchPointer>|<ActionCode>  <XPositionOnScreen>/<YPositionOnScreen> -> <XPositionForApplication>/<YPositionForApplication>.<br/>
+<IndexOfTouchPointer> is 0 for touch with one pointer and 1 for second touch of multitouch etc.<br/>
+<ActionCode> is 0 for DOWN, 1 for UP and 2 for MOVE.
+
 <br/>
 
 # Baudrate

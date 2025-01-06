@@ -68,8 +68,8 @@
     <!-- Screen orientation dialog -->
     <string name="title_screenorientation_preference">Screen orientation</string>
     <string name="summary_screenorientation_preference">Choose the screen orientation.</string>
-    <!-- Don't localize these default values -->
-    <string name="default_screenorientation_preference">0</string>
+    <!-- Don't localize these default values 0= Landscape, -1 = Auto -->
+    <string name="default_screenorientation_preference">-1</string>
     <string name="dialog_title_screenorientation_preference">Screen orientation</string>
 
     <!-- Log level dialog -->
@@ -83,5 +83,5 @@
     <string name="title_autoconnect_preference">Auto connect at startup</string>
     <string name="summary_autoconnect_preference">Connect to last BT Device at startup</string>
         <!-- Don't localize this default value -->
-    <string name="default_value_autoconnect_preference">false</string>
+    <string name="default_value_autoconnect_preference">true</string>
 </resources>

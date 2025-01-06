@@ -836,7 +836,7 @@ public class SerialService {
                 tByte = getByteFromBuffer();
                 tLengthReceived = convert2BytesToInt(tByte, getByteFromBuffer());
 
-                if (tCommandReceived <= RPCView.INDEX_LAST_FUNCTION_DATAFIELD) {
+                if (tCommandReceived <= RPCView.LAST_DATAFIELD_TAG) {
                     /*
                      * Data length received
                      */
@@ -878,7 +878,7 @@ public class SerialService {
 
                     searchStateMustBeLoaded = true;
                     if (MyLog.isVERBOSE()) {
-                        if (tCommandReceived <= RPCView.INDEX_LAST_FUNCTION_DATAFIELD) {
+                        if (tCommandReceived <= RPCView.LAST_DATAFIELD_TAG) {
                             Log.v(LOG_TAG, getBufferBytesAvailable() + "bytes in buffer, but " + tLengthReceived
                                     + " required for data field");
                         } else {
@@ -893,7 +893,7 @@ public class SerialService {
             /*
              * Now all bytes available to interpret command or data
              */
-            if (tCommandReceived <= RPCView.INDEX_LAST_FUNCTION_DATAFIELD) {
+            if (tCommandReceived <= RPCView.LAST_DATAFIELD_TAG) {
                 /*
                  * Data buffer command
                  */

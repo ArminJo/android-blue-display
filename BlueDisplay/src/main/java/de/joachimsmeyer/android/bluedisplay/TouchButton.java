@@ -29,7 +29,7 @@
 
 package de.joachimsmeyer.android.bluedisplay;
 
-import static de.joachimsmeyer.android.bluedisplay.RPCView.COLOR_NO_BACKGROUND;
+import static de.joachimsmeyer.android.bluedisplay.RPCView.COLOR32_NO_BACKGROUND;
 
 import android.annotation.SuppressLint;
 import android.graphics.Color;
@@ -89,7 +89,7 @@ public class TouchButton {
 
     boolean mIsActive;
     boolean mIsInitialized;
-    static int sTouchBeepIndex = ToneGenerator.TONE_CDMA_KEYPAD_VOLUME_KEY_LITE;
+    static int sTouchBeepIndex = ToneGenerator.TONE_CDMA_KEYPAD_VOLUME_KEY_LITE; // 89
     static ToneGenerator sButtonToneGenerator;
     static int sLastRequestedToneVolume;
     static int sLastSystemToneVolume;
@@ -228,7 +228,7 @@ public class TouchButton {
         mIsActive = true;
         setColorForRedGreenButton();
         // Draw button rect
-        if (mButtonColor != COLOR_NO_BACKGROUND) {
+        if (mButtonColor != COLOR32_NO_BACKGROUND) {
             mRPCView.fillRectRel(mPositionX, mPositionY, mWidth, mHeight, mButtonColor);
         }
         drawText();
