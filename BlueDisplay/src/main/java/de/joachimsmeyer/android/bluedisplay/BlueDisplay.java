@@ -584,8 +584,8 @@ public class BlueDisplay extends Activity {
                 if (mUSBSerialSocket.mIsConnected) {
                     // GUI disconnect request here -> send disconnect message to Arduino Client and wait for received
                     // stop running service which reset locked orientation in turn
-                    mSerialService.writeTwoIntegerEvent(SerialService.EVENT_DISCONNECT, mRPCView.mCurrentViewWidth,
-                            mRPCView.mCurrentViewHeight);
+                    mSerialService.writeTwoIntegerEvent(SerialService.EVENT_DISCONNECT, mRPCView.mCurrentViewPixelWidth,
+                            mRPCView.mCurrentViewPixelHeight);
                     // wait for the serial output to be sent
                     try {
                         Thread.sleep(100);
@@ -610,8 +610,8 @@ public class BlueDisplay extends Activity {
                 } else if (mBTSerialSocket.getState() == BluetoothSerialSocket.STATE_CONNECTED) {
                     // Disconnect request here -> stop running service + reset locked orientation in turn
                     // send disconnect message to Arduino Client
-                    mSerialService.writeTwoIntegerEvent(SerialService.EVENT_DISCONNECT, mRPCView.mCurrentViewWidth,
-                            mRPCView.mCurrentViewHeight);
+                    mSerialService.writeTwoIntegerEvent(SerialService.EVENT_DISCONNECT, mRPCView.mCurrentViewPixelWidth,
+                            mRPCView.mCurrentViewPixelHeight);
                     // wait for the serial output to be sent
                     try {
                         Thread.sleep(100);

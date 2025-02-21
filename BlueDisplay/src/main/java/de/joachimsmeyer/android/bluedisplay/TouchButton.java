@@ -169,7 +169,7 @@ public class TouchButton {
 
         mWidth = aWidthX;
         mHeight = aHeightY;
-        setEscapedText(aText); // required for error message of plausi
+        setEscapedText(aText); // required for error message of plausi, id called again by handleText(aText) below
         // Plausi is also done here
         setPosition(aPositionX, aPositionY);
 
@@ -206,12 +206,13 @@ public class TouchButton {
             mDoBeep = true;
         }
         if ((aFlags & FLAG_BUTTON_TYPE_TOGGLE_RED_GREEN) != 0) {
-            mRawTextForValueFalse = aText;
             mIsRedGreen = true;
             if (mValue != 0) {
                 mValue = 1;
             }
         }
+        mRawTextForValueFalse = aText; // do it anyway to enable a later conversion to red green
+
         if ((aFlags & BUTTON_FLAG_MANUAL_REFRESH) != 0) {
             mIsManualRefresh = true;
         }
@@ -234,6 +235,9 @@ public class TouchButton {
         drawText();
     }
 
+    /*
+     * Overwrite and deactivate button, but do not delete it.
+     */
     void removeButton(int tBackgroundColor) {
         // Clear rect
         mRPCView.fillRectRel(mPositionX, mPositionY, mWidth, mHeight, tBackgroundColor);
@@ -281,7 +285,7 @@ public class TouchButton {
                     mTextPositionY = mPositionY + (int) ((RPCView.TEXT_ASCEND_FACTOR * mTextSize) + 0.5); // Fallback - start
                     // at top + ascend
                 } else {
-                    mTextPositionY = (mPositionY + ((mHeight - mTextSize * (mTextStrings.length)) / 2) + (int) ((RPCView.TEXT_ASCEND_FACTOR * mTextSize) + 0.5));
+                    mTextPositionY = (int) (mPositionY + (((float) (mHeight - (mTextSize * (mTextStrings.length)))) / 2) + ((RPCView.TEXT_ASCEND_FACTOR * mTextSize) + 0.5));
                 }
                 mTextPositionX = -1; // to indicate multiline text
 
@@ -304,7 +308,7 @@ public class TouchButton {
                     MyLog.w(LOG_TAG, "text \"" + mEscapedText + "\" height=" + mTextSize + " is higher than button height=" + mHeight);
                 }
                 // (RPCView.TEXT_ASCEND_FACTOR * mCTextSize) is Ascend
-                mTextPositionY = (int) ((mPositionY + ((mHeight - mTextSize) / 2) + (RPCView.TEXT_ASCEND_FACTOR * mTextSize)) + 0.5);
+                mTextPositionY = (int) ((mPositionY + (((float) (mHeight - mTextSize)) / 2) + (RPCView.TEXT_ASCEND_FACTOR * mTextSize)) + 0.5);
             }
         }
     }
@@ -660,7 +664,7 @@ public class TouchButton {
             case FUNCTION_BUTTON_REMOVE:
                 int tBackgroundColor = RPCView.shortToLongColor(aParameters[1]);
                 if (MyLog.isINFO()) {
-                    MyLog.i(LOG_TAG, "Remove button background color=" + RPCView.shortToColorString(aParameters[1]) + " for"
+                    MyLog.i(LOG_TAG, "Remove button, background color=" + RPCView.shortToColorString(aParameters[1]) + " for"
                             + tButtonText);
                 }
                 tButton.removeButton(tBackgroundColor);
@@ -688,15 +692,20 @@ public class TouchButton {
                 break;
 
             case FUNCTION_BUTTON_SET_TEXT_FOR_VALUE_TRUE:
+                // This implicitly changes button to red/green type
+                tButton.mIsRedGreen = true;
+
                 aRPCView.myConvertChars(aDataBytes, RPCView.sCharsArray, aDataLength);
                 tString = new String(RPCView.sCharsArray, 0, aDataLength);
                 tButton.mRawTextForValueTrue = tString;
-                String tEscapedText = tString.replaceAll("\n", "|");
+
                 if (tButton.mValue != 0) {
                     // set right text position etc. if value is already true
+                    tButton.mValue = 1;
                     tButton.handleText(tString);
                 }
                 if (MyLog.isINFO()) {
+                    String tEscapedText = tString.replaceAll("\n", "|");
                     MyLog.i(LOG_TAG, "Set text=\"" + tEscapedText + "\" for value true for" + tButtonText);
                 }
                 break;
@@ -826,6 +835,11 @@ public class TouchButton {
                         tButton.mCallbackAddress = tCallbackAddress;
                         break;
 
+                    default:
+                        MyLog.w(LOG_TAG, "Unknown button settings subfunction 0x" + Integer.toHexString(tSubcommand)
+                                + "  received. aParameters[2]=" + aParameters[2] + ", aParameters[3]=" + aParameters[3]
+                                + tButtonText);
+                        break;
                 }
                 break;
 
