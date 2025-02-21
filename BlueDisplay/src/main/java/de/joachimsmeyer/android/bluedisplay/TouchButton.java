@@ -826,6 +826,11 @@ public class TouchButton {
                         tButton.mCallbackAddress = tCallbackAddress;
                         break;
 
+                    default:
+                        MyLog.w(LOG_TAG, "Unknown button settings subfunction 0x" + Integer.toHexString(tSubcommand)
+                                + "  received. aParameters[2]=" + aParameters[2] + ", aParameters[3]=" + aParameters[3]
+                                + tButtonText);
+                        break;
                 }
                 break;
 

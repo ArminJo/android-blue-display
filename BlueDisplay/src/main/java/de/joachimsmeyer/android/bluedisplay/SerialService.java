@@ -238,10 +238,10 @@ public class SerialService {
         }
 
         RPCView tRPCView = mBlueDisplayContext.mRPCView;
-        tReturn += "Scale=" + tRPCView.mScaleFactor * 100 + "%     max=" + tRPCView.mCurrentViewWidth + "/"
-                + tRPCView.mCurrentViewHeight + "\nRequested=" + tRPCView.mRequestedCanvasWidth + "*"
-                + tRPCView.mRequestedCanvasHeight + " -> current=" + tRPCView.mCurrentCanvasWidth + "*"
-                + tRPCView.mCurrentCanvasHeight + "\n";
+        tReturn += "Scale=" + tRPCView.mScaleFactor * 100 + "%     max=" + tRPCView.mCurrentViewPixelWidth + "/"
+                + tRPCView.mCurrentViewPixelHeight + "\nRequested=" + tRPCView.mRequestedCanvasWidth + "*"
+                + tRPCView.mRequestedCanvasHeight + " -> current=" + tRPCView.mCurrentCanvasPixelWidth + "*"
+                + tRPCView.mCurrentCanvasPixelHeight + "\n";
         tReturn += "Codepage=" + System.getProperty("file.encoding");
         return tReturn;
     }
@@ -255,8 +255,8 @@ public class SerialService {
     void signalBlueDisplayConnection() {
         // first write a NOP command for synchronizing
         writeGuiCallbackEvent(SerialService.EVENT_NOP, 0, 0, 0, null);
-        writeTwoIntegerEventAndTimestamp(SerialService.EVENT_CONNECTION_BUILD_UP, mBlueDisplayContext.mRPCView.mCurrentViewWidth,
-                mBlueDisplayContext.mRPCView.mCurrentViewHeight);
+        writeTwoIntegerEventAndTimestamp(SerialService.EVENT_CONNECTION_BUILD_UP, mBlueDisplayContext.mRPCView.mCurrentViewPixelWidth,
+                mBlueDisplayContext.mRPCView.mCurrentViewPixelHeight);
     }
 
     void writeEvent(byte[] aEventDataBuffer, int aEventDataLength) {
