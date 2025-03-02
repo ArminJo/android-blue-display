@@ -53,9 +53,6 @@
 
 package de.joachimsmeyer.android.bluedisplay;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import android.content.pm.ActivityInfo;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
@@ -64,6 +61,9 @@ import android.hardware.SensorManager;
 import android.util.Log;
 import android.view.OrientationEventListener;
 import android.view.Surface;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public class Sensors implements SensorEventListener {
 
@@ -137,7 +137,7 @@ public class Sensors implements SensorEventListener {
 
         /*
          * To detect direct switching from 0 to 180 and from 90 to 270 degrees and vice versa which does not call
-         * onConfigurationChanged() Used by onSensorChanged, to adjust X + Y values relative to rotation of canvas.
+         * onConfigurationChanged(). Used by onSensorChanged, to adjust X + Y values relative to rotation of canvas.
          */
         mOrientationEventListener = new OrientationEventListener(mBlueDisplayContext, SensorManager.SENSOR_DELAY_NORMAL) {
             @Override
@@ -162,6 +162,7 @@ public class Sensors implements SensorEventListener {
                             }
                             if (mBlueDisplayContext.mCurrentRotation != mBlueDisplayContext.getWindowManager().getDefaultDisplay()
                                     .getRotation()) {
+                                // Safety net, on my 5.1 tablet it seems, that we do not get here.
                                 mBlueDisplayContext
                                         .setCurrentScreenOrientationAndRotationVariables(mBlueDisplayContext.mCurrentScreenOrientation);
                             }
