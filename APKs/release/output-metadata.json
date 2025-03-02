@@ -11,8 +11,8 @@
       "type": "SINGLE",
       "filters": [],
       "attributes": [],
-      "versionCode": 20,
-      "versionName": "4.4",
+      "versionCode": 22,
+      "versionName": "4.4.1",
       "outputFile": "BlueDisplay-release.apk"
     }
   ],

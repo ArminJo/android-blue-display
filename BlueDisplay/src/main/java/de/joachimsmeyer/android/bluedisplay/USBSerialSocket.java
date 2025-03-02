@@ -38,6 +38,7 @@ import android.content.IntentFilter;
 import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbDeviceConnection;
 import android.hardware.usb.UsbManager;
+import android.os.Build;
 import android.os.Handler;
 
 import com.hoho.android.usbserial.driver.UsbSerialDriver;
@@ -88,7 +89,11 @@ public class USBSerialSocket implements SerialInputOutputManager.Listener {
         tFilter.addAction(ACTION_USB_PERMISSION);
         tFilter.addAction(ACTION_USB_DETACHED);
         tFilter.addAction(ACTION_USB_ATTACHED);
-        mBlueDisplayContext.registerReceiver(mUSBReceiver, tFilter);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            mBlueDisplayContext.registerReceiver(mUSBReceiver, tFilter, Context.RECEIVER_EXPORTED);
+        } else {
+            mBlueDisplayContext.registerReceiver(mUSBReceiver, tFilter);
+        }
     }
 
     /*

@@ -137,6 +137,10 @@ RC car control display
 ![RC car control display](https://github.com/ArminJo/android-blue-display/blob/gh-pages/screenshots/RCCarControl.png)
 
 # Revision History
+### Version 4.4.0 / 21
+- Targeted Android 14 / 34
+- Improved Chart and Slider support, minor bug fixes and improvements.
+
 ### Version 4.3.3 / 20
 - Targeted Android 13 / 33
 
