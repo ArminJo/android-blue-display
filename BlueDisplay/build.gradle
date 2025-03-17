@@ -7,8 +7,8 @@ android {
         applicationId "de.joachimsmeyer.android.bluedisplay"
         minSdkVersion 12
         targetSdk 35
-        versionCode 22
-        versionName '4.4.1'
+        versionCode 23
+        versionName '4.4.2'
     }
 
     buildTypes {

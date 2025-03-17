@@ -147,6 +147,7 @@ public class TouchButton {
     private static final int SUBFUNCTION_BUTTON_SET_AUTOREPEAT_TIMING = 0x12;
 
     private static final int SUBFUNCTION_BUTTON_SET_CALLBACK = 0x20;
+    private static final int SUBFUNCTION_BUTTON_SET_FLAGS = 0x30;
 
     TouchButton() {
         // empty button
@@ -188,39 +189,10 @@ public class TouchButton {
             mButtonColor = sDefaultButtonColor;
         }
 
-        /*
-         * local flags
-         */
-        mDoBeep = false;
-        mIsRedGreen = false;
-        mIsManualRefresh = false;
-        mIsAutorepeatButton = false;
+        handleFlags(aFlags);
+
         mMillisFirstAutorepeatDelay = 0;
-
-        if ((aFlags & FLAG_BUTTON_DO_BEEP_ON_TOUCH) != 0) {
-            if (sButtonToneGenerator == null) {
-                int tCurrentSystemVolume = mRPCView.mBlueDisplayContext.mAudioManager.getStreamVolume(AudioManager.STREAM_SYSTEM);
-                sButtonToneGenerator = new ToneGenerator(AudioManager.STREAM_SYSTEM,
-                        (tCurrentSystemVolume * ToneGenerator.MAX_VOLUME) / mRPCView.mBlueDisplayContext.mMaxSystemVolume);
-            }
-            mDoBeep = true;
-        }
-        if ((aFlags & FLAG_BUTTON_TYPE_TOGGLE_RED_GREEN) != 0) {
-            mIsRedGreen = true;
-            if (mValue != 0) {
-                mValue = 1;
-            }
-        }
         mRawTextForValueFalse = aText; // do it anyway to enable a later conversion to red green
-
-        if ((aFlags & BUTTON_FLAG_MANUAL_REFRESH) != 0) {
-            mIsManualRefresh = true;
-        }
-
-        if ((aFlags & FLAG_BUTTON_TYPE_AUTOREPEAT) != 0) {
-            mIsAutorepeatButton = true;
-        }
-
         mIsActive = false;
         mIsInitialized = true;
     }
@@ -271,6 +243,43 @@ public class TouchButton {
             mTextStrings[i] = mTextStrings[i].trim();
         }
         positionText();
+    }
+
+    /*
+     * interpret flags and set local flags
+     */
+    private void handleFlags(int aFlags) {
+
+        if ((aFlags & FLAG_BUTTON_DO_BEEP_ON_TOUCH) == 0) {
+            mDoBeep = false;
+        } else {
+            if (sButtonToneGenerator == null) {
+                int tCurrentSystemVolume = mRPCView.mBlueDisplayContext.mAudioManager.getStreamVolume(AudioManager.STREAM_SYSTEM);
+                sButtonToneGenerator = new ToneGenerator(AudioManager.STREAM_SYSTEM,
+                        (tCurrentSystemVolume * ToneGenerator.MAX_VOLUME) / mRPCView.mBlueDisplayContext.mMaxSystemVolume);
+            }
+            mDoBeep = true;
+        }
+        if ((aFlags & FLAG_BUTTON_TYPE_TOGGLE_RED_GREEN) == 0) {
+            mIsRedGreen = false;
+        } else {
+            mIsRedGreen = true;
+            if (mValue != 0) {
+                mValue = 1;
+            }
+        }
+
+        if ((aFlags & BUTTON_FLAG_MANUAL_REFRESH) == 0) {
+            mIsManualRefresh = false;
+        } else {
+            mIsManualRefresh = true;
+        }
+
+        if ((aFlags & FLAG_BUTTON_TYPE_AUTOREPEAT) == 0) {
+            mIsAutorepeatButton = false;
+        } else {
+            mIsAutorepeatButton = true;
+        }
     }
 
     private void positionText() {
@@ -807,6 +816,12 @@ public class TouchButton {
                             MyLog.w(LOG_TAG, "Refused to set autorepeat timing for non autorepeat button. 1.delay=" + aParameters[2]
                                     + ", 1.rate=" + aParameters[3] + ", 1.count=" + aParameters[4] + ", 2.rate=" + aParameters[5] + ". "
                                     + tButtonText);
+                        }
+                        break;
+                    case SUBFUNCTION_BUTTON_SET_FLAGS:
+                        tButton.handleFlags(aParameters[2]);
+                        if (MyLog.isINFO()) {
+                            MyLog.i(LOG_TAG, "Set Options to 0x" + Integer.toHexString(aParameters[2]) + tButtonText);
                         }
                         break;
 

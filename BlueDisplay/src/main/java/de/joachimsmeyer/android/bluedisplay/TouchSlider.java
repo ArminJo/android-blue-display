@@ -88,7 +88,7 @@ public class TouchSlider {
     private static final int FLAG_SLIDER_VALUE_CAPTION_ALIGN_MASK = 0x03;
 
     int mOptions;
-    // constants for options
+    // constants for options / flags
     private static final int FLAG_SLIDER_SHOW_BORDER = 0x01;
     // if set, value is printed along with change of bar
     private static final int FLAG_SLIDER_SHOW_VALUE = 0x02;
@@ -96,7 +96,7 @@ public class TouchSlider {
     private static final int FLAG_SLIDER_IS_INVERSE = 0x08;
     // if set, bar (+ ASCII) value will only be set by callback handler, not by touch
     private static final int FLAG_SLIDER_VALUE_BY_CALLBACK = 0x10;
-    private static final int FLAG_SLIDER_IS_ONLY_OUTPUT = 0x20;
+    private static final int FLAG_SLIDER_IS_ONLY_OUTPUT = 0x20; // No slider aOnChangeHandler available on the client
 
     int mCurrentTouchValue; // Value of slider for use at client. It is physical length adjusted by mMaxValue and mMinValue
     /*
@@ -144,7 +144,9 @@ public class TouchSlider {
 
     private static final int SUBFUNCTION_SLIDER_SET_VALUE = 0x0C;
 
+
     private static final int SUBFUNCTION_SLIDER_SET_CALLBACK = 0x20;
+    private static final int SUBFUNCTION_SLIDER_SET_FLAGS = 0x30;
 
     // static functions
     private static final int FUNCTION_SLIDER_ACTIVATE_ALL = 0x58;
@@ -230,7 +232,7 @@ public class TouchSlider {
         mCaptionLayoutInfo = new TextLayoutInfo();
 
         if ((mOptions & FLAG_SLIDER_IS_HORIZONTAL) == 0) {
-            // vertical slider
+            // set value size defaults for vertical slider
             mValueLayoutInfo.mSize = mRPCView.mRequestedCanvasHeight / 20;
             mCaptionLayoutInfo.mSize = mRPCView.mRequestedCanvasHeight / 20;
             // use different defaults for caption
@@ -947,6 +949,13 @@ public class TouchSlider {
                             if (MyLog.isINFO()) {
                                 MyLog.i(LOG_TAG, "Set long border width=" + tSlider.mLongBorderWidth + ", short=" + tSlider.mShortBorderWidth
                                         + ", color=" + RPCView.shortToColorString(aParameters[4]) + tSliderCaption + tSliderNumber);
+                            }
+                            break;
+
+                        case SUBFUNCTION_SLIDER_SET_FLAGS:
+                            tSlider.mOptions = aParameters[2];
+                            if (MyLog.isINFO()) {
+                                MyLog.i(LOG_TAG, "Set Options / Flags to 0x" + Integer.toHexString(tSlider.mOptions) + tSliderCaption                                        + tSliderNumber);
                             }
                             break;
 
