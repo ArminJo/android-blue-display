@@ -328,27 +328,28 @@ public class TouchButton {
     void drawText() {
         mIsActive = true;
         if (mIsRedGreen) {
-            if (mValue != 0) {
-                // TRUE
-                if (mRawTextForValueTrue != null) {
-                    // select and prepare text for value true
+            /*
+             * Position red green text, it may have changed before
+             */
+            if (mRawTextForValueTrue != null) { // No need to reposition, if we have only one text for both values
+                if (mValue != 0) {
+                    // select and prepare text for value TRUE
                     handleText(mRawTextForValueTrue);
-                }
-            } else {
-                // FALSE
-                if (mRawTextForValueTrue != null) {
-                    // not needed if only one text for both values
+                } else {
+                    // select and prepare text for value FALSE
                     handleText(mRawTextForValueFalse);
                 }
             }
         }
+
         if (mTextSize > 0) { // don't render anything if text size == 0
             if (mTextStrings.length == 1) {
+                // Draw mTextStrings[0], set by handleText()
                 mRPCView.drawTextWithBackground(mTextPositionX, mTextPositionY, mTextStrings[0], mTextSize,
                         mTextColor, mButtonColor);
             } else {
-                int TPosY = mTextPositionY;
                 // Multiline text
+                int TPosY = mTextPositionY;
                 for (String mTextString : mTextStrings) {
                     // try to position the string in the middle of the box
                     int tLength = (int) ((RPCView.TEXT_WIDTH_FACTOR * mTextSize * mTextString.length()) + 0.5);
@@ -398,7 +399,8 @@ public class TouchButton {
      *
      * @return true if any active button touched
      */
-    boolean checkIfTouchInButton(int aTouchPositionX, int aTouchPositionY, boolean aDoCallbackOnlyForAutorepeatButton) {
+    boolean checkIfTouchInButton(int aTouchPositionX, int aTouchPositionY,
+                                 boolean aDoCallbackOnlyForAutorepeatButton) {
         if (mIsActive && mCallbackAddress != 0 && checkIfTouchInButtonArea(aTouchPositionX, aTouchPositionY)) {
             if (!aDoCallbackOnlyForAutorepeatButton || mIsAutorepeatButton) {
                 /*
@@ -466,7 +468,8 @@ public class TouchButton {
     /**
      * @return number of button if touched else -1
      */
-    static int checkAllButtons(int aTouchPositionX, int aTouchPositionY, boolean aDoCallbackOnlyForAutorepeatButton) {
+    static int checkAllButtons(int aTouchPositionX, int aTouchPositionY,
+                               boolean aDoCallbackOnlyForAutorepeatButton) {
         // walk through list of active elements
         for (TouchButton tButton : sButtonList) {
             if (tButton.mIsActive
@@ -536,7 +539,8 @@ public class TouchButton {
         }
     };
 
-    public static void interpretCommand(final RPCView aRPCView, int aCommand, int[] aParameters, int aParamsLength,
+    public static void interpretCommand(final RPCView aRPCView, int aCommand,
+                                        int[] aParameters, int aParamsLength,
                                         byte[] aDataBytes, int aDataLength) {
         int tButtonNumber = -1; // to have it initialized ;-)
         TouchButton tButton = null;
@@ -690,6 +694,7 @@ public class TouchButton {
             case FUNCTION_BUTTON_SET_TEXT_AND_DRAW_BUTTON:
                 aRPCView.myConvertChars(aDataBytes, RPCView.sCharsArray, aDataLength);
                 tString = new String(RPCView.sCharsArray, 0, aDataLength);
+                tButton.mRawTextForValueFalse = tString; // store it as value for false for use at red green button
                 tButton.handleText(tString);
 
                 if (MyLog.isINFO()) {
