@@ -1523,6 +1523,7 @@ public class RPCView extends View {
                             mRequestedCanvasHeight = aParameters[3];
                             setMaxScaleFactor();
                             setFlags(aParameters[1]);
+                            handleScreenOrientationFlags(aParameters[1] >> 8); // These flags are contained in upper byte
                             break;
 
                         case SUBFUNCTION_GLOBAL_SET_CODEPAGE:
@@ -1568,36 +1569,7 @@ public class RPCView extends View {
                             break;
 
                         case SUBFUNCTION_GLOBAL_SET_SCREEN_ORIENTATION_LOCK:
-                            int tClientRequestedOrientation = aParameters[1];
-                            if (tClientRequestedOrientation == FLAG_SCREEN_ORIENTATION_LOCK_UNLOCK) {
-                                // unlock
-                                mBlueDisplayContext.mOrientationisLockedByClient = false;
-                                mBlueDisplayContext.setScreenOrientation(mBlueDisplayContext.mPreferredScreenOrientation);
-
-                                if (MyLog.isINFO()) {
-                                    MyLog.i(LOG_TAG,
-                                            "Unlocked screen orientation to preferred orientation="
-                                                    + mBlueDisplayContext
-                                                    .getScreenOrientationRotationString(mBlueDisplayContext.mPreferredScreenOrientation));
-                                }
-                            } else {
-                                mBlueDisplayContext.mOrientationisLockedByClient = true;
-                                int tNewOrientation = tClientRequestedOrientation; // Protocol uses the same enumeration as Android
-
-                                // may be overwritten by "current" below
-                                String tRequestedOrientation = mBlueDisplayContext.getScreenOrientationRotationString(tNewOrientation);
-
-                                if (tClientRequestedOrientation == FLAG_SCREEN_ORIENTATION_LOCK_CURRENT) {
-                                    tRequestedOrientation = "current";
-                                    tNewOrientation = mBlueDisplayContext.getCurrentOrientation(mBlueDisplayContext
-                                            .getResources().getConfiguration().orientation);
-                                }
-
-                                if (MyLog.isINFO()) {
-                                    MyLog.i(LOG_TAG, "Requested orientation lock=" + tRequestedOrientation);
-                                }
-                                mBlueDisplayContext.setScreenOrientation(tNewOrientation);
-                            }
+                            handleScreenOrientationFlags(aParameters[1]);
                             break;
 
                         case SUBFUNCTION_GLOBAL_SET_SCREEN_BRIGHTNESS:
@@ -2361,6 +2333,38 @@ public class RPCView extends View {
         }
         // long tEnd = System.nanoTime();
         // Log.i(LOG_TAG, "Interpret=" + (tEnd - tStart));
+    }
+
+    private void handleScreenOrientationFlags(int aClientRequestedOrientation) {
+        if (aClientRequestedOrientation == FLAG_SCREEN_ORIENTATION_LOCK_UNLOCK) {
+            // unlock
+            mBlueDisplayContext.mOrientationisLockedByClient = false;
+            mBlueDisplayContext.setScreenOrientation(mBlueDisplayContext.mPreferredScreenOrientation);
+
+            if (MyLog.isINFO()) {
+                MyLog.i(LOG_TAG,
+                        "Unlocked screen orientation to preferred orientation="
+                                + mBlueDisplayContext
+                                .getScreenOrientationRotationString(mBlueDisplayContext.mPreferredScreenOrientation));
+            }
+        } else {
+            mBlueDisplayContext.mOrientationisLockedByClient = true;
+            int tNewOrientation = aClientRequestedOrientation; // Protocol uses the same enumeration as Android
+
+            // may be overwritten by "current" below
+            String tRequestedOrientation = mBlueDisplayContext.getScreenOrientationRotationString(tNewOrientation);
+
+            if (aClientRequestedOrientation == FLAG_SCREEN_ORIENTATION_LOCK_CURRENT) {
+                tRequestedOrientation = "current";
+                tNewOrientation = mBlueDisplayContext.getCurrentOrientation(mBlueDisplayContext
+                        .getResources().getConfiguration().orientation);
+            }
+
+            if (MyLog.isINFO()) {
+                MyLog.i(LOG_TAG, "Requested orientation lock=" + tRequestedOrientation);
+            }
+            mBlueDisplayContext.setScreenOrientation(tNewOrientation);
+        }
     }
 
     /*
