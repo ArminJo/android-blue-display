@@ -808,21 +808,20 @@ public class TouchButton {
                         break;
 
                     case SUBFUNCTION_BUTTON_SET_AUTOREPEAT_TIMING:
-                        if (tButton.mIsAutorepeatButton) {
-                            if (MyLog.isINFO()) {
-                                MyLog.i(LOG_TAG, "Set autorepeat timing. 1.delay=" + aParameters[2] + ", 1.rate=" + aParameters[3]
-                                        + ", 1.count=" + aParameters[4] + ", 2.rate=" + aParameters[5] + ". " + tButtonText);
-                            }
-                            tButton.mMillisFirstAutorepeatDelay = aParameters[2];
-                            tButton.mMillisFirstAutorepeatRate = aParameters[3];
-                            tButton.mFirstAutorepeatCount = aParameters[4];
-                            tButton.mMillisSecondAutorepeatRate = aParameters[5];
-                        } else {
-                            MyLog.w(LOG_TAG, "Refused to set autorepeat timing for non autorepeat button. 1.delay=" + aParameters[2]
-                                    + ", 1.rate=" + aParameters[3] + ", 1.count=" + aParameters[4] + ", 2.rate=" + aParameters[5] + ". "
-                                    + tButtonText);
+                        /*
+                         * Implicitly set button type to autorepeat
+                         */
+                        tButton.mIsAutorepeatButton = true;
+                        if (MyLog.isINFO()) {
+                            MyLog.i(LOG_TAG, "Set autorepeat timing. 1.delay=" + aParameters[2] + ", 1.rate=" + aParameters[3]
+                                    + ", 1.count=" + aParameters[4] + ", 2.rate=" + aParameters[5] + ". " + tButtonText);
                         }
+                        tButton.mMillisFirstAutorepeatDelay = aParameters[2];
+                        tButton.mMillisFirstAutorepeatRate = aParameters[3];
+                        tButton.mFirstAutorepeatCount = aParameters[4];
+                        tButton.mMillisSecondAutorepeatRate = aParameters[5];
                         break;
+
                     case SUBFUNCTION_BUTTON_SET_FLAGS:
                         tButton.handleFlags(aParameters[2]);
                         if (MyLog.isINFO()) {

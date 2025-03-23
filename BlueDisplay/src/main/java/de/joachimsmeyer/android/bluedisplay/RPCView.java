@@ -1598,57 +1598,6 @@ public class RPCView extends View {
                     }
                     break;
 
-                case FUNCTION_WRITE_SETTINGS:
-                    tSubcommand = aParameters[0];
-                    switch (tSubcommand) {
-                        case FLAG_WRITE_SETTINGS_SET_SIZE_AND_COLORS_AND_FLAGS:
-                            mTextPrintTextSize = aParameters[1];
-                            mTextExpandedPrintColor = shortToLongColor(aParameters[2]);
-                            mPrintTextStroke1Fill.setTextSize(mTextPrintTextSize * mScaleFactor);
-                            mPrintTextStroke1Fill.setColor(shortToLongColor(aParameters[2]));
-                            mTextExpandedPrintBackgroundColor = shortToLongColor(aParameters[3]);
-                            mTextPrintDoClearScreenOnWrap = aParameters[4] > 0;
-                            if (MyLog.isINFO()) {
-                                MyLog.i(LOG_TAG, "Set printf size=" + aParameters[1] + " color=" + shortToColorString(aParameters[2])
-                                        + " backgroundcolor=" + shortToColorString(aParameters[3]) + " clearOnWrap="
-                                        + mTextPrintDoClearScreenOnWrap);
-                            }
-                            break;
-
-                        case FLAG_WRITE_SETTINGS_SET_POSITION:
-                            /*
-                             * Sets the Y position and the X start position after a newline
-                             * Positions are in pixel
-                             */
-                            mTextPrintTextCurrentPosX = aParameters[1];
-                            mTextPrintTextStartPosX = mTextPrintTextCurrentPosX;
-                            mTextPrintTextCurrentPosY = aParameters[2];
-                            if (MyLog.isINFO()) {
-                                MyLog.i(LOG_TAG, "Set printf start position to: " + mTextPrintTextCurrentPosX + " / "
-                                        + mTextPrintTextCurrentPosY);
-                            }
-                            break;
-
-                        case FLAG_WRITE_SETTINGS_SET_LINE_COLUMN:
-                            /*
-                             * Sets the Y position and the X start position after a newline
-                             * Positions are in character units :-)
-                             */
-                            mTextPrintTextCurrentPosX = (int) ((aParameters[1] * mTextPrintTextSize * TEXT_WIDTH_FACTOR) + 0.5);
-                            mTextPrintTextStartPosX = mTextPrintTextCurrentPosX;
-                            mTextPrintTextCurrentPosY = aParameters[2] * mTextPrintTextSize;
-                            if (MyLog.isINFO()) {
-                                MyLog.i(LOG_TAG, "Set printf start position to: " + aParameters[1] + " / " + aParameters[2] + " = "
-                                        + mTextPrintTextCurrentPosX + " / " + mTextPrintTextCurrentPosY);
-                            }
-                            break;
-
-                        default:
-                            MyLog.e(LOG_TAG, "Write settings: unknown subcommand 0x" + Integer.toHexString(tSubcommand)
-                                    + " received. paramsLength=" + aParamsLength + " dataLength=" + aDataLength);
-                    }
-                    break;
-
                 case FUNCTION_SENSOR_SETTINGS:
                     boolean tDoActivate = aParameters[1] != 0;
                     int tFilterFlag = Sensors.FLAG_SENSOR_NO_FILTER;
@@ -2053,8 +2002,60 @@ public class RPCView extends View {
                     MyLog.w(LOG_TAG, "DebugString=\"" + tStringParameter + "\"");
                     break;
 
+
+                case FUNCTION_WRITE_SETTINGS:
+                    tSubcommand = aParameters[0];
+                    switch (tSubcommand) {
+                        case FLAG_WRITE_SETTINGS_SET_SIZE_AND_COLORS_AND_FLAGS:
+                            mTextPrintTextSize = aParameters[1];
+                            mTextExpandedPrintColor = shortToLongColor(aParameters[2]);
+                            mPrintTextStroke1Fill.setTextSize(mTextPrintTextSize * mScaleFactor);
+                            mPrintTextStroke1Fill.setColor(shortToLongColor(aParameters[2]));
+                            mTextExpandedPrintBackgroundColor = shortToLongColor(aParameters[3]);
+                            mTextPrintDoClearScreenOnWrap = aParameters[4] > 0;
+                            if (MyLog.isINFO()) {
+                                MyLog.i(LOG_TAG, "Set printf size=" + aParameters[1] + " color=" + shortToColorString(aParameters[2])
+                                        + " backgroundcolor=" + shortToColorString(aParameters[3]) + " clearOnWrap="
+                                        + mTextPrintDoClearScreenOnWrap);
+                            }
+                            break;
+
+                        case FLAG_WRITE_SETTINGS_SET_POSITION:
+                            /*
+                             * Sets the Y position and the X start position after a newline
+                             * Positions are in pixel
+                             */
+                            mTextPrintTextCurrentPosX = aParameters[1];
+                            mTextPrintTextStartPosX = mTextPrintTextCurrentPosX;
+                            mTextPrintTextCurrentPosY = aParameters[2];
+                            if (MyLog.isINFO()) {
+                                MyLog.i(LOG_TAG, "Set printf start position to: " + mTextPrintTextCurrentPosX + " / "
+                                        + mTextPrintTextCurrentPosY);
+                            }
+                            break;
+
+                        case FLAG_WRITE_SETTINGS_SET_LINE_COLUMN:
+                            /*
+                             * Sets the Y position and the X start position after a newline
+                             * Positions are in character units :-)
+                             */
+                            mTextPrintTextCurrentPosX = (int) ((aParameters[1] * mTextPrintTextSize * TEXT_WIDTH_FACTOR) + 0.5);
+                            mTextPrintTextStartPosX = mTextPrintTextCurrentPosX;
+                            mTextPrintTextCurrentPosY = aParameters[2] * mTextPrintTextSize;
+                            if (MyLog.isINFO()) {
+                                MyLog.i(LOG_TAG, "Set printf start position to: " + aParameters[1] + " / " + aParameters[2] + " = "
+                                        + mTextPrintTextCurrentPosX + " / " + mTextPrintTextCurrentPosY);
+                            }
+                            break;
+
+                        default:
+                            MyLog.e(LOG_TAG, "Write settings: unknown subcommand 0x" + Integer.toHexString(tSubcommand)
+                                    + " received. paramsLength=" + aParamsLength + " dataLength=" + aDataLength);
+                    }
+                    break;
+
                 /*
-                 * Writes string with fixed font and do line and page wrapping for print emulation
+                 * Writes string at previously set position and do line and page wrapping for print emulation
                  * Do an automatic break before a new word, which will not fit on the remainder of line!
                  * \r is interpreted as a space
                  */
@@ -2154,8 +2155,8 @@ public class RPCView extends View {
                                 mCanvas.drawRect(tXStartScaled, tYStartScaled, tXStartScaled + tTextLength, tYStartScaled + tScaledTextPrintTextSize,
                                         mTextBackgroundStroke1Fill);
                                 // Draw char / string which has to be flushed
-                                drawText(tStringParameter, tPrintBufferStartIndex, tCurrentCharacterIndex - 1, tXStartScaled, tYStartScaled + tAscend,
-                                        tScaledTextPrintTextSize, mTextExpandedPrintColor);
+                                drawText(tStringParameter, tPrintBufferStartIndex, tCurrentCharacterIndex - 1, tXStartScaled,
+                                        tYStartScaled + tAscend, tScaledTextPrintTextSize, mTextExpandedPrintColor);
                             }
                             tPrintBufferStartIndex = tCurrentCharacterIndex;
                             if (doFlushAndNewline) {
@@ -2202,9 +2203,8 @@ public class RPCView extends View {
                     mTextPaint.setTextSize(tScaledTextSize); // will be used below
                     int tExpandedColor = shortToLongColor(tColor);
 
-                    // ascend for background color. + mScaleFactor for upper margin
-                    tAscend = (tScaledTextSize * TEXT_ASCEND_FACTOR) + mScaleFactor;
-                    tDescend = tScaledTextSize * TEXT_DESCEND_FACTOR;
+                    // ascend for draw
+                    tAscend = tScaledTextSize * TEXT_ASCEND_FACTOR;
 
                     int tDataLength = aDataLength;
                     if (aCommand == FUNCTION_DRAW_CHAR) {
@@ -2264,24 +2264,25 @@ public class RPCView extends View {
                              * Multiline text
                              */
                             if (tDrawBackgroundExtend) {
-                                // draw background for whole rest of line
-                                mCanvas.drawRect(tXStartScaled, tYStartScaled - tAscend, mCurrentCanvasPixelWidth, tYStartScaled + tDescend,
+                                // draw background for whole rest of line. mScaleFactor for lower margin
+                                mCanvas.drawRect(tXStartScaled, tYStartScaled, mCurrentCanvasPixelWidth, tYStartScaled + tScaledTextSize + mScaleFactor,
                                         mTextBackgroundStroke1Fill);
                             } else if (tDrawBackground) {
                                 // draw background only for string except for single newline
                                 if (tStartIndex != tNewlineIndex) {
                                     float tTextLength = mTextPaint.measureText(tStringParameter, tStartIndex, tNewlineIndex);
-                                    // draw background
-                                    mCanvas.drawRect(tXStartScaled, tYStartScaled - tAscend, tXStartScaled + tTextLength, tYStartScaled + tDescend,
+                                    // draw background. mScaleFactor for lower margin
+                                    mCanvas.drawRect(tXStartScaled, tYStartScaled, tXStartScaled + tTextLength, tYStartScaled + tScaledTextSize + mScaleFactor,
                                             mTextBackgroundStroke1Fill);
+
                                 }
                             }
                             // check for single newline
                             if (tStartIndex != tNewlineIndex) {
-                                // draw string
-                                drawText(tStringParameter, tStartIndex, tNewlineIndex, tXStartScaled, tYStartScaled, tScaledTextSize,
+                                // no single newline, draw string
+                                drawText(tStringParameter, tStartIndex, tNewlineIndex, tXStartScaled, tYStartScaled + tAscend, tScaledTextSize,
                                         tExpandedColor);
-                                tYStartScaled += tScaledTextSize + mScaleFactor; // + Margin
+                                tYStartScaled += tScaledTextSize + mScaleFactor; // + Margin between lines
                             }
                             // search for next newline
                             tStartIndex = tNewlineIndex + 1;
@@ -2307,12 +2308,13 @@ public class RPCView extends View {
                          */
                         if (tDrawBackground) {
                             float tTextLength = mTextPaint.measureText(tStringParameter);
-                            // draw background
-                            mCanvas.drawRect(tXStartScaled, tYStartScaled - tAscend, tXStartScaled + tTextLength, tYStartScaled + tDescend, mTextBackgroundStroke1Fill);
+                            // draw background. mScaleFactor for lower margin
+                            mCanvas.drawRect(tXStartScaled, tYStartScaled, tXStartScaled + tTextLength, tYStartScaled + tScaledTextSize + mScaleFactor,
+                                    mTextBackgroundStroke1Fill);
                         }
 
                         // draw char / string
-                        drawText(tStringParameter, tXStartScaled, tYStartScaled, tScaledTextSize, tExpandedColor);
+                        drawText(tStringParameter, tXStartScaled, tYStartScaled + tAscend, tScaledTextSize, tExpandedColor);
                     }
                     break;
 
@@ -2425,13 +2427,12 @@ public class RPCView extends View {
     }
 
     public void drawText(String aText, int aStartIndex, int aEndIndexNotIncluded,
-                         float aScaledPosX,
-                         float aScaledPosY, float aScaledTextSize, int aColor) {
+                         float aScaledPosX, float aScaledPosY, float aScaledTextSize, int aColor) {
         drawText(aText.substring(aStartIndex, aEndIndexNotIncluded), aScaledPosX, aScaledPosY, aScaledTextSize, aColor);
     }
 
     /*
-     * Not used yet
+     * For internal button and slider usage, no ascend compensation for draw position here
      */
     public void drawTextWithBackground(float aPosX, float aPosY, String aText,
                                        float aTextSize, int aColor, int aBGColor) {
@@ -2443,7 +2444,9 @@ public class RPCView extends View {
 
         // draw background
         // ascend for background color. + mScaleFactor for upper margin
-        float tAscend = (aTextSize * TEXT_ASCEND_FACTOR) + mScaleFactor;
+//        float tAscend = (aTextSize * TEXT_ASCEND_FACTOR) + mScaleFactor;
+        // ascend for background color
+        float tAscend = (aTextSize * TEXT_ASCEND_FACTOR);
         float tDescend = aTextSize * TEXT_DESCEND_FACTOR;
         float tTextLength = mTextPaint.measureText(aText);
         mTextBackgroundStroke1Fill.setColor(aBGColor);
