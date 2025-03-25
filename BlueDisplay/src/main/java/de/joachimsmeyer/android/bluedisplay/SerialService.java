@@ -108,6 +108,11 @@ public class SerialService {
 
     public final static int EVENT_FIRST_SENSOR_ACTION_CODE = 0x30;
 
+    public final static int EVENT_SPEAKING_DONE = 0x40;
+    public final static int EVENT_SPEAKING_OK = 0x00;
+    public final static int EVENT_SPEAKING_NOT_AVAILABLE = 0x01;
+    public final static int EVENT_SPEAKING_ERROR = 0x02;
+
     public final static int EVENT_REQUESTED_DATA_CANVAS_SIZE = 0x60;
 
     private final BlueDisplay mBlueDisplayContext;
@@ -294,6 +299,50 @@ public class SerialService {
         if (MyLog.isINFO()) {
             String tType = RPCView.sActionMappings.get(tEventType);
             MyLog.i(LOG_TAG, "Send Type=0x" + Integer.toHexString(tEventType) + "|" + tType + " X=" + aX + " Y=" + aY);
+        }
+
+        mStatisticNumberOfSentBytes += tEventLength;
+        mStatisticNumberOfSentCommands++;
+
+        writeEvent(mSendByteBuffer, tEventLength);
+    }
+
+    public void writeOneIntegerEvent(int aEventType, int aValue) {
+        int tEventLength = 5;
+        int tEventType = aEventType & 0xFF;
+
+        // assemble data buffer
+        int tIndex = 0;
+        mSendByteBuffer[tIndex++] = (byte) tEventLength; // gross message length in bytes including sync token
+        mSendByteBuffer[tIndex++] = (byte) tEventType; // Function token
+
+        short tXPos = (short) aValue;
+        mSendByteBuffer[tIndex++] = (byte) (tXPos & 0xFF); // LSB
+        mSendByteBuffer[tIndex++] = (byte) ((tXPos >> 8) & 0xFF); // MSB
+
+        mSendByteBuffer[tIndex] = SYNC_TOKEN;
+        if (MyLog.isINFO()) {
+            String tType = RPCView.sActionMappings.get(tEventType);
+            MyLog.i(LOG_TAG, "Send Type=0x" + Integer.toHexString(tEventType) + "|" + tType + " Value=" + aValue);
+        }
+
+        mStatisticNumberOfSentBytes += tEventLength;
+        mStatisticNumberOfSentCommands++;
+
+        writeEvent(mSendByteBuffer, tEventLength);
+    }
+    public void writeNoDataEvent(int aEventType) {
+        int tEventLength = 3;
+        int tEventType = aEventType & 0xFF;
+
+        // assemble data buffer
+        int tIndex = 0;
+        mSendByteBuffer[tIndex++] = (byte) tEventLength; // gross message length in bytes including sync token
+        mSendByteBuffer[tIndex++] = (byte) tEventType; // Function token
+        mSendByteBuffer[tIndex] = SYNC_TOKEN;
+        if (MyLog.isINFO()) {
+            String tType = RPCView.sActionMappings.get(tEventType);
+            MyLog.i(LOG_TAG, "Send Type=0x" + Integer.toHexString(tEventType) + "|" + tType);
         }
 
         mStatisticNumberOfSentBytes += tEventLength;
@@ -654,8 +703,8 @@ public class SerialService {
     /*
      * state between two searchCommand() calls
      */
-    private byte searchStateCommand;
-    private byte searchStateCommandReceived; // The command we received, for which data we wait now
+    private int searchStateCommand;
+    private int searchStateCommandReceived; // The command we received, for which data we wait now
     private int searchStateParamsLength; // Parameter length for the above command
     private int searchStateInputLengthToWaitFor = MIN_COMMAND_SIZE; // If available data is less than length, do nothing.
     private long sTimestampOfLastDataWait = 0;
@@ -700,6 +749,9 @@ public class SerialService {
     /*
      * Get byte from buffer, clear buffer, increment pointer and handle wrap around
      */
+    int getUnsignedByteFromBuffer(){
+        return convertByteToInt(getByteFromBuffer());
+    }
     byte getByteFromBuffer() {
         byte tByte = mBigReceiveBuffer[mReceiveBufferOutIndex];
 
@@ -773,11 +825,11 @@ public class SerialService {
         // mStatisticNanoTimeForCommands with it
         long tNanosForChart = 0;
         inBufferReadingLock = true;
-        byte tCommand = 0;
+        int tCommand = 0;
         int tParamsLength = 0;
         byte tByte;
         int i;
-        byte tCommandReceived;
+        int tCommandReceived;
         int tLengthReceived;
         int tStartIn = mReceiveBufferInIndex;
         int tStartOut = mReceiveBufferOutIndex;
@@ -828,7 +880,7 @@ public class SerialService {
                 /*
                  * Read command token from InputStream
                  */
-                tCommandReceived = getByteFromBuffer();
+                tCommandReceived = convertByteToInt(getByteFromBuffer());
 
                 /*
                  * Read parameter/data length
@@ -1159,6 +1211,12 @@ public class SerialService {
     }
 
     public static float convertByteToFloat(byte aByte) {
+        if (aByte < 0) {
+            return aByte + 256;
+        }
+        return aByte;
+    }
+    public static int convertByteToInt(byte aByte) {
         if (aByte < 0) {
             return aByte + 256;
         }

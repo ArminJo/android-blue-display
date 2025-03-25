@@ -345,14 +345,17 @@ public class TouchSlider {
      */
     void setFormatString() {
         int tNumberOfDigits = 2;
-        if (mMaxValue > 99999 || mMinValue < 9999) {
-            tNumberOfDigits = 6;
-        } else if (mMaxValue > 9999 || mMinValue < 999) {
-            tNumberOfDigits = 5;
-        } else if (mMaxValue > 999 || mMinValue < 99) {
-            tNumberOfDigits = 4;
-        } else if (mMaxValue > 99 || mMinValue < 9) {
+        if (mMaxValue > 99 || mMinValue < -9) {
             tNumberOfDigits = 3;
+        }
+        if (mMaxValue > 999 || mMinValue < -99) {
+            tNumberOfDigits = 4;
+        }
+        if (mMaxValue > 9999 || mMinValue < -999) {
+            tNumberOfDigits = 5;
+        }
+        if (mMaxValue > 99999 || mMinValue < -9999) {
+            tNumberOfDigits = 6;
         }
         mValueFormatString = "%" + tNumberOfDigits + "d";
         if (mValueUnitString != null) {
@@ -764,7 +767,7 @@ public class TouchSlider {
                     tSlider.setFormatString();
 
                     if (MyLog.isINFO()) {
-                        MyLog.i(LOG_TAG, "Set ValueUnitString=\"" + tSlider.mValueUnitString + "\" -> \"" + tSlider.mValueFormatString
+                        MyLog.i(LOG_TAG, "Set ValueUnitString=\"" + tSlider.mValueUnitString + "\" to effective format string \"" + tSlider.mValueFormatString
                                 + "\"" + tSliderCaption + tSliderNumber);
                     }
                     break;
@@ -955,7 +958,7 @@ public class TouchSlider {
                         case SUBFUNCTION_SLIDER_SET_FLAGS:
                             tSlider.mOptions = aParameters[2];
                             if (MyLog.isINFO()) {
-                                MyLog.i(LOG_TAG, "Set Options / Flags to 0x" + Integer.toHexString(tSlider.mOptions) + tSliderCaption                                        + tSliderNumber);
+                                MyLog.i(LOG_TAG, "Set Options / Flags to 0x" + Integer.toHexString(tSlider.mOptions) + tSliderCaption + tSliderNumber);
                             }
                             break;
 

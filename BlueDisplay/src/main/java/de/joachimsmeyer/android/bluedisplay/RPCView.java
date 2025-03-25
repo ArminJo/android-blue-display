@@ -28,8 +28,12 @@
  */
 package de.joachimsmeyer.android.bluedisplay;
 
+import static android.speech.tts.TextToSpeech.LANG_NOT_SUPPORTED;
+import static android.speech.tts.TextToSpeech.SUCCESS;
+
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.content.pm.ActivityInfo;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -42,11 +46,15 @@ import android.graphics.Typeface;
 import android.hardware.Sensor;
 import android.media.AudioManager;
 import android.media.ToneGenerator;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
 import android.os.SystemClock;
+import android.speech.tts.TextToSpeech;
+import android.speech.tts.UtteranceProgressListener;
+import android.speech.tts.Voice;
 import android.util.Log;
 import android.util.SparseArray;
 import android.view.GestureDetector.SimpleOnGestureListener;
@@ -61,6 +69,9 @@ import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.charset.Charset;
 import java.util.Arrays;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import java.util.TimeZone;
 
 class LineInfo {
@@ -91,6 +102,9 @@ public class RPCView extends View {
     ToneGenerator mToneGenerator;
     int mLastSystemVolume;
     int mLastRequestedToneVolume;
+
+    TextToSpeech mTextToSpeech;
+    boolean mTextToSpeechIsInitialized;
 
     private static final int MAX_CHART_LINE_WIDTH = 1800;
 
@@ -265,8 +279,10 @@ public class RPCView extends View {
     private final static int SUBFUNCTION_GLOBAL_SET_LONG_TOUCH_DOWN_TIMEOUT = 0x08;
     private final static int SUBFUNCTION_GLOBAL_SET_SCREEN_ORIENTATION_LOCK = 0x0C;
     private final static int SUBFUNCTION_GLOBAL_SET_SCREEN_BRIGHTNESS = 0x0D;
-    private final static int FLAG_SCREEN_ORIENTATION_LOCK_CURRENT = 0x02;
-    private final static int FLAG_SCREEN_ORIENTATION_LOCK_UNLOCK = 0x03;
+
+    // 2 codes which are different from Android enumerations
+    private final static int FLAG_SCREEN_ORIENTATION_LOCK_UNLOCK = 0x00;
+    private final static int FLAG_SCREEN_ORIENTATION_LOCK_LANDSCAPE = 0x03;
 
     // results in a redraw callback
     private final static int FUNCTION_REQUEST_MAX_CANVAS_SIZE = 0x09;
@@ -283,6 +299,9 @@ public class RPCView extends View {
     private final static int SUBFUNCTION_GET_INFO_UTC_TIME = 0x01;
 
     private final static int FUNCTION_PLAY_TONE = 0x0F;
+    private final static int FUNCTION_TALK_SET_LOCALE = 0x80;
+    private final static int FUNCTION_TALK_SET_VOICE = 0x81; // One of the Voice strings printed in log at level Info at BD application startup
+    private final static int FUNCTION_TALK_STRING = 0x88;
 
     // used for Sync
     private final static int FUNCTION_NOP = 0x7F;
@@ -378,6 +397,7 @@ public class RPCView extends View {
         sActionMappings.put(SerialService.EVENT_FIRST_SENSOR_ACTION_CODE + Sensor.TYPE_LINEAR_ACCELERATION, "LinAcceleration");
         sActionMappings.put(SerialService.EVENT_FIRST_SENSOR_ACTION_CODE + Sensor.TYPE_MAGNETIC_FIELD, "Magnetic");
         sActionMappings.put(SerialService.EVENT_NOP, "nop (for sync)");
+        sActionMappings.put(SerialService.EVENT_SPEAKING_DONE, "speaking done");
         sActionMappings.put(SerialService.EVENT_REQUESTED_DATA_CANVAS_SIZE, "return canvas size and timestamp");
     }
 
@@ -468,6 +488,81 @@ public class RPCView extends View {
         mLastSystemVolume = mBlueDisplayContext.mAudioManager.getStreamVolume(AudioManager.STREAM_SYSTEM);
         mToneGenerator = new ToneGenerator(AudioManager.STREAM_SYSTEM, (mLastSystemVolume * ToneGenerator.MAX_VOLUME)
                 / mBlueDisplayContext.mMaxSystemVolume);
+
+
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
+            if (MyLog.isINFO()) {
+                MyLog.i(LOG_TAG, "TextToSpeech not available for Android " + Build.VERSION.RELEASE + " < 5 (Lollipop)");
+            }
+        } else {
+            // For Text To Speech
+            mTextToSpeech = new TextToSpeech(mBlueDisplayContext, new TextToSpeech.OnInitListener() {
+                @Override
+                public void onInit(int status) {
+                    if (status == SUCCESS) {
+                        List<TextToSpeech.EngineInfo> tEnginesList = mTextToSpeech.getEngines();
+                        boolean tIsGoogleTTSAvailable = false;
+                        for (TextToSpeech.EngineInfo tEngine : tEnginesList) {
+                            if (tEngine.name.equals("com.google.android.tts")) {
+                                tIsGoogleTTSAvailable = true;
+                                if (MyLog.isINFO()) {
+                                    MyLog.i(LOG_TAG, "Google TextToSpeech is available.");
+                                }
+                            } else {
+                                if (MyLog.isDEBUG()) {
+                                    MyLog.d(LOG_TAG, "TextToSpeech engine " + tEngine.name + " is available.");
+                                }
+                            }
+                        }
+                        if (tIsGoogleTTSAvailable) {
+                            // Use Google TTS
+                            mTextToSpeech.setEngineByPackageName("com.google.android.tts");
+                            mTextToSpeech.setLanguage(Locale.US);
+                            mTextToSpeechIsInitialized = true;
+                            if (MyLog.isINFO()) {
+                                MyLog.i(LOG_TAG, "Default voice is: " + mTextToSpeech.getDefaultVoice().getName());
+                                Set<Voice> tVoicesSet = mTextToSpeech.getVoices();
+                                MyLog.i(LOG_TAG, "Available voices are:");
+                                int i = 1; // I can see 472 voices :-)
+                                for (Voice tVoice : tVoicesSet) {
+                                    MyLog.i(LOG_TAG, i + " " + tVoice.getName());
+                                    i++;
+                                }
+                            }
+//                    } else {
+//                        // Fallback to another TTS engine (if available)
+//                        fallbackToOtherTTS(mBlueDisplayContext);
+                        }
+                        mTextToSpeech.setOnUtteranceProgressListener(new UtteranceProgressListener() {
+                            @Override
+                            public void onStart(String utteranceId) {
+                                // Called when TTS starts speaking
+                                Log.i(LOG_TAG, "TextToSpeech started.");
+                            }
+
+                            @Override
+                            public void onDone(String aUtteranceId) {
+                                // Called when TTS finishes speaking
+                                if (MyLog.isINFO()) {
+                                    MyLog.i(LOG_TAG, "TextToSpeech finished speaking: " + aUtteranceId);
+                                }
+                                mBlueDisplayContext.mSerialService.writeOneIntegerEvent(SerialService.EVENT_SPEAKING_DONE, SerialService.EVENT_SPEAKING_OK);
+                            }
+
+                            @Override
+                            public void onError(String utteranceId) {
+                                // Called if an error occurs during TTS
+                                Log.e(LOG_TAG, "TextToSpeech error occurred.");
+                                mBlueDisplayContext.mSerialService.writeOneIntegerEvent(SerialService.EVENT_SPEAKING_DONE, SerialService.EVENT_SPEAKING_ERROR);
+                            }
+                        });
+                    } else {
+                        Log.e(LOG_TAG, "TextToSpeech initialization failed. TTS engine \"com.google.android.tts\" not found.");
+                    }
+                }
+            });
+        }
+
 
         mTextPaint = new Paint();
         mTextPaint.setTypeface(Typeface.MONOSPACE);
@@ -1142,9 +1237,9 @@ public class RPCView extends View {
      */
     private char[] mCharMappingArray = new char[128];
 
-    public void myConvertChars(byte[] aData, char[] aChars, int aDataLength) {
+    public void myConvertChars(byte[] aInputData, char[] aOutputChars, int aDataLength) {
         for (int i = 0; i < aDataLength; i++) {
-            aChars[i] = myConvertChar(aData[i]);
+            aOutputChars[i] = myConvertChar(aInputData[i]);
         }
     }
 
@@ -1393,6 +1488,87 @@ public class RPCView extends View {
                         MyLog.i(LOG_TAG, "Play tone index=" + tToneIndex + " duration=" + tDurationMillis);
                     }
                     break;
+
+                case FUNCTION_TALK_STRING:
+                    myConvertChars(aDataBytes, sCharsArray, aDataLength);
+                    tStringParameter = new String(sCharsArray, 0, aDataLength);
+                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
+                        if (MyLog.isINFO()) {
+                            MyLog.i(LOG_TAG, "talkString \"" + tStringParameter + "\" - not available for Android version "
+                                    + Build.VERSION.RELEASE + " < 5.0 (Lollipop)");
+                            mBlueDisplayContext.mSerialService.writeOneIntegerEvent(SerialService.EVENT_SPEAKING_DONE, SerialService.EVENT_SPEAKING_NOT_AVAILABLE);
+                        }
+                        return;
+                    }
+                    if (!mTextToSpeechIsInitialized) {
+                        MyLog.e(LOG_TAG, "TextToSpeech engine \"com.google.android.tts\" not available. String=" + tStringParameter);
+                        mBlueDisplayContext.mSerialService.writeOneIntegerEvent(SerialService.EVENT_SPEAKING_DONE, SerialService.EVENT_SPEAKING_NOT_AVAILABLE);
+                        return;
+                    }
+
+                    if (MyLog.isINFO()) {
+                        MyLog.i(LOG_TAG, "talkString \"" + tStringParameter + "\" utteranceId=" + TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID);
+                    }
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                        if (mTextToSpeech.speak(tStringParameter, TextToSpeech.QUEUE_ADD, null, TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID) != SUCCESS) {
+                            mBlueDisplayContext.mSerialService.writeOneIntegerEvent(SerialService.EVENT_SPEAKING_DONE, SerialService.EVENT_SPEAKING_ERROR);
+                        }
+                    }
+                    break;
+
+                case FUNCTION_TALK_SET_LOCALE:
+                    myConvertChars(aDataBytes, sCharsArray, aDataLength);
+                    tStringParameter = new String(sCharsArray, 0, aDataLength);
+                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
+                        if (MyLog.isINFO()) {
+                            MyLog.i(LOG_TAG, "talkSetLocale: \"" + tStringParameter + "\" - not available for Android version "
+                                    + Build.VERSION.RELEASE + " < 5.0 (Lollipop)");
+                        }
+                        return;
+                    } else {
+                        Locale tLocale = Locale.forLanguageTag(tStringParameter);
+                        if (mTextToSpeech.isLanguageAvailable(tLocale) == LANG_NOT_SUPPORTED) {
+                            MyLog.w(LOG_TAG, "talkSetLocale: the locale \"" + tStringParameter + "\" is not supported");
+                        } else {
+                            mTextToSpeech.setLanguage(tLocale);
+                            if (MyLog.isINFO()) {
+                                MyLog.i(LOG_TAG, "Set Locale to \"" + tStringParameter + "\", Voice is \"" + mTextToSpeech.getVoice().getName() + "\"");
+                            }
+                        }
+                    }
+                    break;
+
+                /*
+                 * One of the Voice strings printed in log at level Info at BD application startup
+                 */
+                case FUNCTION_TALK_SET_VOICE:
+                    myConvertChars(aDataBytes, sCharsArray, aDataLength);
+                    tStringParameter = new String(sCharsArray, 0, aDataLength);
+                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
+                        if (MyLog.isINFO()) {
+                            MyLog.i(LOG_TAG, "talkSetVoice \"" + tStringParameter + "\" - not available for Android version "
+                                    + Build.VERSION.RELEASE + " < 5.0 (Lollipop)");
+                        }
+                        return;
+                    } else {
+                        Set<Voice> tVoicesSet = mTextToSpeech.getVoices();
+                        boolean tFoundVoice = false;
+                        for (Voice tVoice : tVoicesSet) {
+                            if (tVoice.getName().equals(tStringParameter)) {
+                                mTextToSpeech.setVoice(tVoice);
+                                tFoundVoice = true;
+                                if (MyLog.isINFO()) {
+                                    MyLog.i(LOG_TAG, "Set voice to \"" + tStringParameter + "\"");
+                                }
+                                break;
+                            }
+                        }
+                        if (!tFoundVoice) {
+                            MyLog.w(LOG_TAG, "Voice \"" + tStringParameter + "\" not found");
+                        }
+                    }
+                    break;
+
 
                 case FUNCTION_GET_NUMBER:
                 case FUNCTION_GET_NUMBER_WITH_SHORT_PROMPT:
@@ -2337,9 +2513,12 @@ public class RPCView extends View {
         // Log.i(LOG_TAG, "Interpret=" + (tEnd - tStart));
     }
 
+    /*
+     * Handles BlueDisplay orientations, which are a bit different from Android ones
+     */
     private void handleScreenOrientationFlags(int aClientRequestedOrientation) {
         if (aClientRequestedOrientation == FLAG_SCREEN_ORIENTATION_LOCK_UNLOCK) {
-            // unlock
+            // unlock is BlueDisplay code (0x00), set preferred Orientation here
             mBlueDisplayContext.mOrientationisLockedByClient = false;
             mBlueDisplayContext.setScreenOrientation(mBlueDisplayContext.mPreferredScreenOrientation);
 
@@ -2351,12 +2530,18 @@ public class RPCView extends View {
             }
         } else {
             mBlueDisplayContext.mOrientationisLockedByClient = true;
-            int tNewOrientation = aClientRequestedOrientation; // Protocol uses the same enumeration as Android
+
+            // Convert BlueDisplay enumeration to Android one
+            if (aClientRequestedOrientation == FLAG_SCREEN_ORIENTATION_LOCK_LANDSCAPE) {
+                aClientRequestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE;
+            }
+            // Here we have only Android enumerations
+            int tNewOrientation = aClientRequestedOrientation;
 
             // may be overwritten by "current" below
             String tRequestedOrientation = mBlueDisplayContext.getScreenOrientationRotationString(tNewOrientation);
 
-            if (aClientRequestedOrientation == FLAG_SCREEN_ORIENTATION_LOCK_CURRENT) {
+            if (aClientRequestedOrientation == ActivityInfo.SCREEN_ORIENTATION_LOCKED) { // android and BD emumerations are the same
                 tRequestedOrientation = "current";
                 tNewOrientation = mBlueDisplayContext.getCurrentOrientation(mBlueDisplayContext
                         .getResources().getConfiguration().orientation);
@@ -2398,7 +2583,8 @@ public class RPCView extends View {
         }
     }
 
-    public void fillRectRel(float aXStart, float aYStart, float aWidth, float aHeight, int aColor) {
+    public void fillRectRel(float aXStart, float aYStart, float aWidth, float aHeight,
+                            int aColor) {
         mPaintStroke1Fill.setColor(aColor);
         mCanvas.drawRect(aXStart * mScaleFactor, aYStart * mScaleFactor, (aXStart + aWidth) * mScaleFactor, (aYStart + aHeight)
                 * mScaleFactor, mPaintStroke1Fill);

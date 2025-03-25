@@ -42,7 +42,7 @@ public class MyLog {
 
     // Debugging
     static final boolean isDevelopmentTesting = false; // set manually to true
-    // static final boolean isDevelopmentTesting = true; // set manually to true
+//     static final boolean isDevelopmentTesting = true; // set manually to true
     public static final String LOGLEVEL_KEY = "loglevel";
     static int mLoglevel = Log.INFO; // 6=ERROR 5=WARN, 4=INFO, 3=DEBUG, 2=VERBOSE
 

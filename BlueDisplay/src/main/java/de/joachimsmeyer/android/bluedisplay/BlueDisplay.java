@@ -506,7 +506,7 @@ public class BlueDisplay extends Activity {
                 tOrientationString = "unspecified/auto";
                 break;
             case ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE:
-                tOrientationString = "landscape";
+                tOrientationString = "BD landscape";
                 break;
             case ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE:
                 tOrientationString = "both/sensor landscape";
@@ -520,8 +520,20 @@ public class BlueDisplay extends Activity {
             case ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT:
                 tOrientationString = "both/sensor portrait";
                 break;
-            case ActivityInfo.SCREEN_ORIENTATION_REVERSE_PORTRAIT:
-                tOrientationString = "reverse portrait";
+            case ActivityInfo.SCREEN_ORIENTATION_USER:
+                tOrientationString = "user preference";
+                break;
+            case ActivityInfo.SCREEN_ORIENTATION_SENSOR:
+                tOrientationString = "force sensor";
+                break;
+            case ActivityInfo.SCREEN_ORIENTATION_NOSENSOR:
+                tOrientationString = "ignore sensor";
+                break;
+            case ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR:
+                tOrientationString = "sensor with 180 degree";
+                break;
+            case ActivityInfo.SCREEN_ORIENTATION_LOCKED:
+                tOrientationString = "lock current";
                 break;
 
             default:
@@ -531,6 +543,9 @@ public class BlueDisplay extends Activity {
         return tOrientationString;
     }
 
+    /*
+     * Here
+     */
     void setCurrentScreenOrientationAndRotationVariables(int aNewScreenOrientation) {
         mCurrentRotation = getWindowManager().getDefaultDisplay().getRotation();
         mCurrentScreenOrientation = aNewScreenOrientation;

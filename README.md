@@ -137,7 +137,8 @@ RC car control display
 ![RC car control display](https://github.com/ArminJo/android-blue-display/blob/gh-pages/screenshots/RCCarControl.png)
 
 # Revision History
-### Version 4.4.2 / 22
+### Version 5.0.0 / 22
+- Text Y and X position is upper left corner of character.
 - Screen orientation flags now also possible in setFlagsAndSize().
 
 ### Version 4.4.1 / 21
