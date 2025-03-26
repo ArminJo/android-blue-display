@@ -300,9 +300,10 @@ public class RPCView extends View {
     private final static int SUBFUNCTION_GET_INFO_UTC_TIME = 0x01;
 
     private final static int FUNCTION_PLAY_TONE = 0x0F;
-    private final static int FUNCTION_TALK_SET_LOCALE = 0x80;
-    private final static int FUNCTION_TALK_SET_VOICE = 0x81; // One of the Voice strings printed in log at level Info at BD application startup
-    private final static int FUNCTION_TALK_STRING = 0x88;
+    private final static int FUNCTION_SPEAK_SET_LOCALE = 0x80;
+    private final static int FUNCTION_SPEAK_SET_VOICE = 0x81; // One of the Voice strings printed in log at level Info at BD application startup
+    private final static int FUNCTION_SPEAK_STRING_FLUSH = 0x88;
+    private final static int FUNCTION_SPEAK_STRING_ADD = 0x89;
 
     // used for Sync
     private final static int FUNCTION_NOP = 0x7F;
@@ -1477,7 +1478,8 @@ public class RPCView extends View {
                     }
                     break;
 
-                case FUNCTION_TALK_STRING:
+                case FUNCTION_SPEAK_STRING_FLUSH:
+                case FUNCTION_SPEAK_STRING_ADD:
                     myConvertChars(aDataBytes, sCharsArray, aDataLength);
                     tStringParameter = new String(sCharsArray, 0, aDataLength);
                     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
@@ -1494,27 +1496,31 @@ public class RPCView extends View {
                     }
 
                     if (MyLog.isINFO()) {
-                        MyLog.i(LOG_TAG, "talkString \"" + tStringParameter + "\"");
+                        MyLog.i(LOG_TAG, "speakString \"" + tStringParameter + "\"");
                     }
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                        if (mTextToSpeech.speak(tStringParameter, TextToSpeech.QUEUE_ADD, null, "BlueDisplaySpeak") != SUCCESS) {
+                        int tQueueMode = TextToSpeech.QUEUE_FLUSH;
+                        if (aCommand == FUNCTION_SPEAK_STRING_ADD) {
+                            tQueueMode = TextToSpeech.QUEUE_ADD;
+                        }
+                        if (mTextToSpeech.speak(tStringParameter, tQueueMode, null, "BlueDisplaySpeak") != SUCCESS) {
                             mBlueDisplayContext.mSerialService.writeOneIntegerEvent(SerialService.EVENT_SPEAKING_DONE, SerialService.EVENT_SPEAKING_ERROR);
                         }
                     }
                     break;
 
-                case FUNCTION_TALK_SET_LOCALE:
+                case FUNCTION_SPEAK_SET_LOCALE:
                     myConvertChars(aDataBytes, sCharsArray, aDataLength);
                     tStringParameter = new String(sCharsArray, 0, aDataLength);
                     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
                         if (MyLog.isINFO()) {
-                            MyLog.i(LOG_TAG, "talkSetLocale: \"" + tStringParameter + "\" - not available for Android version " + Build.VERSION.RELEASE + " < 5.0 (Lollipop)");
+                            MyLog.i(LOG_TAG, "speakSetLocale: \"" + tStringParameter + "\" - not available for Android version " + Build.VERSION.RELEASE + " < 5.0 (Lollipop)");
                         }
                         return;
                     } else {
                         Locale tLocale = Locale.forLanguageTag(tStringParameter);
                         if (mTextToSpeech.isLanguageAvailable(tLocale) == LANG_NOT_SUPPORTED) {
-                            MyLog.w(LOG_TAG, "talkSetLocale: the locale \"" + tStringParameter + "\" is not supported");
+                            MyLog.w(LOG_TAG, "speakSetLocale: the locale \"" + tStringParameter + "\" is not supported");
                         } else {
                             mTextToSpeech.setLanguage(tLocale);
                             if (MyLog.isINFO()) {
@@ -1527,12 +1533,12 @@ public class RPCView extends View {
                 /*
                  * One of the Voice strings printed in log at level Info at BD application startup
                  */
-                case FUNCTION_TALK_SET_VOICE:
+                case FUNCTION_SPEAK_SET_VOICE:
                     myConvertChars(aDataBytes, sCharsArray, aDataLength);
                     tStringParameter = new String(sCharsArray, 0, aDataLength);
                     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
                         if (MyLog.isINFO()) {
-                            MyLog.i(LOG_TAG, "talkSetVoice \"" + tStringParameter + "\" - not available for Android version " + Build.VERSION.RELEASE + " < 5.0 (Lollipop)");
+                            MyLog.i(LOG_TAG, "speakSetVoice \"" + tStringParameter + "\" - not available for Android version " + Build.VERSION.RELEASE + " < 5.0 (Lollipop)");
                         }
                         return;
                     } else {

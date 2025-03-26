@@ -34,26 +34,29 @@ GUI callback, touch and sensor events are sent back to Arduino.
 <br/>
 
 # Features
-- Touch button + slider objects with tone feedback.
-- Button and slider callback as well as touch and sensor events are sent back to Arduino.
-- Graphic + text output as well as basic printf implementation.
-- Draw chart from byte or short values. Enables clearing of last drawn chart.
-- Play system tones.
-- Automatic and manually scaling of display region.
+- **Graphic + text** output as well as **printf implementation**.
+- **Touch button + slider** objects with tone feedback and 16 bit values.
+- Draw **chart** from byte or short values. Enables clearing of last drawn chart.
+- **Voice output** with Android TextToSpeech for Android > 5.0 (Lollipop).
+- **Touch and sensor events** are sent to Arduino.
+- Automatic and manually **scaling of display region**.
+- Sliders can have arbitrary start and end values.
+- Buttons can be **Red/Green toggle** button with different text for both states.
+- Buttons can be **autorepeat buttons** with 2 different repeat rates.
 - Easy mapping of any UTF-8 characters like Ohm, Celsius etc..
-- Up to 115200 Baud using HC-05 modules or OTG cable.
-- USB OTG connection can be used instead of Bluetooth.
-- Local display of received and sent command log for debugging purposes.
-- Hex and ASCII output of received Bluetooth data at log level verbose.
-- Debug messages shown as toasts.
-- Swipe from the left border opens the options menu.
-- C++ Libraries for [Arduino and ARM (STM)](https://github.com/ArminJo/Arduino-BlueDisplay).
+- Up to **115200 Baud** using **HC-05** modules or** USB OTG**.
+- **USB OTG connection** can be used instead of Bluetooth.
+- Local display of received and sent commands for debugging purposes.
+- Hex and ASCII output of received Bluetooth data at **log level** verbose.
+- **Debug messages as toasts**
+- Swipe from the left border opens the **options menu**.
+- **C++ libraries** for [Arduino and ARM (STM)](https://github.com/ArminJo/Arduino-BlueDisplay).
 
 <br/>
 
 # The Arduino library with lot of examples can be found [here](https://github.com/ArminJo/Arduino-BlueDisplay).
 You can load the library with *Tools -> Manage Libraries...* or *Ctrl+Shift+I*. Use "BlueDisplay" as filter string.
-The library includes examples for easy initializing a HC-05 and for a simple DSO with 0.3 megasamples/sec.
+The library includes examples for easy initializing a HC-05 and for a simple DSO with 0.3 mega samples/sec.
 
 <br/>
 
@@ -138,6 +141,7 @@ RC car control display
 
 # Revision History
 ### Version 5.0.0 / 22
+- Voice output with Android TextToSpeech for Android > 5.0 (Lollipop).
 - Text Y and X position is upper left corner of character.
 - Screen orientation flags now also possible in setFlagsAndSize().
 
