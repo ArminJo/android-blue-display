@@ -88,6 +88,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
+import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.graphics.Insets;
 import android.hardware.SensorManager;
@@ -106,6 +107,7 @@ import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
+import android.view.OrientationEventListener;
 import android.view.Surface;
 import android.view.View;
 import android.view.Window;
@@ -116,19 +118,18 @@ import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.util.Objects;
+
 public class BlueDisplay extends Activity {
 
     // Intent request codes
     public static final int REQUEST_CONNECT_DEVICE = 1;
     private static final int REQUEST_ENABLE_BT = 2;
-//    static final int REQUEST_PERMISSION_USB = 2;
 
     static final String LOG_TAG = "BlueDisplay";
 
     // Message types sent from the BluetoothSerialSocket Handler
     public static final int MESSAGE_TIMEOUT_AFTER_CONNECT = 1;
-    //    public static final int MESSAGE_READ = 2;
-//    public static final int MESSAGE_WRITE = 3;
     public static final int MESSAGE_BT_CONNECT = 2;
     public static final int MESSAGE_BT_DISCONNECT = 3;
     public static final int MESSAGE_USB_CONNECT = 4;
@@ -202,12 +203,31 @@ public class BlueDisplay extends Activity {
     public static final String AUTO_CONNECT_DEVICE_NAME_KEY = "autoconnect_device_name";
 
     private static final String SCREENORIENTATION_KEY = "screenorientation";
+
+    /*
+     * one of ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+     */
     int mPreferredScreenOrientation;
+    /*
+     * Initialized with mPreferredScreenOrientation and optionally set and locked by client
+     * Otherwise set by onConfigurationChanged() to Portrait or Landscape
+     * One of ActivityInfo.SCREEN_ORIENTATION_*
+     * Not used by Blue Display internally
+     */
     protected int mCurrentScreenOrientation;
-    // rotation is 1 or 0 for landscape (usb connector right) depending on model
-    protected int mCurrentRotation; // = getWindowManager().getDefaultDisplay().getRotation() - is stored here for convenience
-    // reason
     protected boolean mOrientationisLockedByClient = false;
+
+    /*
+     * Surface.Rotation is 1 for 0 degree, 1 for 90 degree, 2 for 180 degree and 3 for 270 degree from default orientation,
+     * which is Portrait for mobiles and Landscape for Tablets.
+     * Thus rotation is 1 or 0 for landscape (usb connector right) depending on default orientation of model
+     * On my mobile, 0 = Portrait, 1 = Landscape, 2 = reverse Portrait, 3 = reverse Landscape
+     *
+     * = getWindowManager().getDefaultDisplay().getRotation()
+     * Used by onSensorChanged(), to adjust X + Y values relative to rotation of canvas.
+     */
+    protected int mCurrentRotation;
+    protected int mLastRotation = OrientationEventListener.ORIENTATION_UNKNOWN; // to detect changes in Rotation
 
     MenuItem mMenuItemConnect;
     // private MenuItem mMenuItemStartStopLogging;
@@ -246,6 +266,43 @@ public class BlueDisplay extends Activity {
         mRPCView.setFocusableInTouchMode(true);
         mRPCView.requestFocus();
 
+        /*
+         * Only to detect direct switching from 0 to 180 and from 90 to 270 degrees and vice versa which does not call
+         * onConfigurationChanged().
+         * If configuration changed, this is called after onConfigurationChanged(), onSizeChanged() and redrawing the canvas.
+         */
+        OrientationEventListener mOrientationEventListener = new OrientationEventListener(this, SensorManager.SENSOR_DELAY_NORMAL) {
+            @Override
+            public void onOrientationChanged(int mAngle) {
+                // mAngle ranges from 0 to 359 degrees
+                if (mAngle == OrientationEventListener.ORIENTATION_UNKNOWN) { // == -1
+                    return;
+                }
+                /*
+                 * Process only, if orientation can change <br>
+                 * angle 0 is Surface.ROTATION_0 <br>
+                 * angle 90 is Surface.ROTATION_270<br>
+                 * angle 180 is Surface.ROTATION_180<br>
+                 * angle 270 is Surface.ROTATION_90
+                 */
+                if (!mOrientationisLockedByClient) {
+                    mCurrentRotation = getWindowManager().getDefaultDisplay().getRotation();
+                    if (mLastRotation != mCurrentRotation) {
+                        if (MyLog.isINFO()) {
+                            Log.i(LOG_TAG, "+ ON onOrientationChanged(" + mAngle + "), rotation changed from "
+                                    + mLastRotation + " to " + mCurrentRotation);
+                        }
+                        setTopAndLeftInsets();
+                        mLastRotation = mCurrentRotation; // Mapping rotation to orientation depends on the natural orientation of the device
+                    }
+                }
+            }
+        };
+
+        if (mOrientationEventListener.canDetectOrientation()) {
+            mOrientationEventListener.enable();
+        }
+
         // Set default values only once after installation
         PreferenceManager.setDefaultValues(this, R.xml.preferences, false);
         // read preferences, needed for auto Bluetooth connection
@@ -283,8 +340,24 @@ public class BlueDisplay extends Activity {
     }
 
     /*
+     * Handle left and top inset - determining the screen position of canvas origin -, which may have been changed
+     */
+    public void setTopAndLeftInsets() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            Insets tInsets = getWindowManager().getCurrentWindowMetrics().getWindowInsets().
+                    getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+            mRPCView.mCurrentLeftInset = tInsets.left;
+            mRPCView.mCurrentTopInset = tInsets.top;
+            if (MyLog.isINFO()) {
+                Log.i(LOG_TAG, "Set TopInset=" + mRPCView.mCurrentTopInset + " LeftInset=" + mRPCView.mCurrentLeftInset);
+            }
+        }
+    }
+
+    /*
      * Get Bluetooth interface
      */
+    @SuppressLint("MissingPermission")
     void initBluetooth() {
         mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
         if (mBluetoothAdapter == null) {
@@ -307,15 +380,7 @@ public class BlueDisplay extends Activity {
                         BluetoothDevice device = mBluetoothAdapter.getRemoteDevice(mMacAddressToConnect);
                         // Attempt to connect to the device
                         mBTSerialSocket.connect(device);
-//                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-//                            if (checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-//                                mDeviceNameToConnect = " No connect permission";
-//                            } else {
-//                                mDeviceNameToConnect = device.getName();
-//                            }
-//                        } else {
                         mDeviceNameToConnect = device.getName();
-//                        }
                     }
                 } else {
                     launchDeviceListActivity();
@@ -362,14 +427,14 @@ public class BlueDisplay extends Activity {
                     requestPermissions(new String[]{Manifest.permission.BLUETOOTH_CONNECT}, 1);
                 }
                 Intent enableIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
-//                if (checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-//                    MyLog.e(LOG_TAG, "Cannot activate Bluetooth, because no BLUETOOTH_CONNECT granted by user");
-//                    mInTryToEnableEnableBT = false;
-//                    finish();
-//                } else {
-                startActivityForResult(enableIntent, REQUEST_ENABLE_BT);
-                mInTryToEnableEnableBT = true;
-//                }
+                if (checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                    MyLog.e(LOG_TAG, "Cannot activate Bluetooth, because no BLUETOOTH_CONNECT granted by user");
+                    mInTryToEnableEnableBT = false;
+                    finish();
+                } else {
+                    startActivityForResult(enableIntent, REQUEST_ENABLE_BT);
+                    mInTryToEnableEnableBT = true;
+                }
             }
         }
         boolean tOldAutoConnectBTValue = mAutoConnectBT; // mAutoConnectBT is overwritten by readPreferences()
@@ -445,22 +510,10 @@ public class BlueDisplay extends Activity {
         unregisterReceiver(mUSBSerialSocket.mUSBReceiver);
     }
 
-    @Override
-    public void onConfigurationChanged(Configuration newConfig) {
-        super.onConfigurationChanged(newConfig);
-
-        int tNewScreenOrientation = getCurrentOrientation(newConfig.orientation);
-        if (MyLog.isINFO()) {
-            Log.i(LOG_TAG, "+ ON ConfigurationChanged, new orientation is "
-                    + getScreenOrientationRotationString(tNewScreenOrientation));
-        }
-        setCurrentScreenOrientationAndRotationVariables(tNewScreenOrientation);
-    }
-
     /*
      * Get current orientation - 1 for Portrait and 2 for Landscape, 8 for reverse Landscape and 9 for reverse Portrait
      */
-    int getCurrentOrientation(int aConfigurationOrientation) {
+    int getCurrentOrientationFromConfigurationOrientation(int aConfigurationOrientation) {
         int tCurrentScreenOrientation;
         if (aConfigurationOrientation == Configuration.ORIENTATION_PORTRAIT) {
             tCurrentScreenOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
@@ -495,11 +548,6 @@ public class BlueDisplay extends Activity {
         }
     }
 
-    void setScreenOrientation(int aNewScreenOrientation) {
-        setCurrentScreenOrientationAndRotationVariables(aNewScreenOrientation);
-        // really set orientation for device
-        setRequestedOrientation(aNewScreenOrientation);
-    }
 
     String getScreenOrientationRotationString(int aNewScreenOrientation) {
         String tOrientationString;
@@ -545,17 +593,16 @@ public class BlueDisplay extends Activity {
         return tOrientationString;
     }
 
-    /*
-     * Here
-     */
-    void setCurrentScreenOrientationAndRotationVariables(int aNewScreenOrientation) {
-        mCurrentRotation = getWindowManager().getDefaultDisplay().getRotation();
+    void setScreenOrientation(int aNewScreenOrientation) {
         mCurrentScreenOrientation = aNewScreenOrientation;
-        String tCurrentScreenOrientationRotationString = getScreenOrientationRotationString(aNewScreenOrientation) + "="
-                + aNewScreenOrientation + " | " + (90 * mCurrentRotation) + " degrees";
+
+        mCurrentRotation = getWindowManager().getDefaultDisplay().getRotation();
         if (MyLog.isINFO()) {
-            Log.i(LOG_TAG, "Orientation is now: " + tCurrentScreenOrientationRotationString);
+            Log.i(LOG_TAG, "Orientation is now: " + getScreenOrientationRotationString(aNewScreenOrientation) + "="
+                    + aNewScreenOrientation + " | " + (90 * mCurrentRotation) + " degrees");
         }
+        // really set orientation for device
+        setRequestedOrientation(mCurrentScreenOrientation);
     }
 
     /*
@@ -614,7 +661,7 @@ public class BlueDisplay extends Activity {
                 } else {
                     // Connect request here -> try to connect and set item according to result
                     mUSBSerialSocket.connect(); // this sends connect message which switches the connect menu item
-                    // // USB connect does not affect the GUI, so do it manually
+                    // USB connect does not affect the GUI, so do it manually
                     // setMenuItemConnect(mUSBSerialSocket.mIsConnected);
                 }
             } else {
@@ -651,9 +698,6 @@ public class BlueDisplay extends Activity {
             startActivity(tPreferencesIntent);
             return true;
 
-            // case R.id.menu_show_graph_testpage:
-            // mRPCView.showGraphTestpage();
-            // return true;
         } else if (item.getItemId() == R.id.menu_show_testpage) {
             mRPCView.showTestpage();
             return true;
@@ -840,6 +884,7 @@ public class BlueDisplay extends Activity {
     /*
      * Handles result from started activities
      */
+    @SuppressLint("MissingPermission")
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
         if (MyLog.isDEBUG()) {
@@ -853,7 +898,7 @@ public class BlueDisplay extends Activity {
                  */
                 if (resultCode == Activity.RESULT_OK) {
                     // Get the device MAC address
-                    String tMacAddress = data.getExtras().getString(DeviceListActivity.EXTRA_DEVICE_ADDRESS);
+                    String tMacAddress = Objects.requireNonNull(data.getExtras()).getString(DeviceListActivity.EXTRA_DEVICE_ADDRESS, "empty");
                     if (tMacAddress.length() < 10) {
                         // MAC Address not specified (no last device) chose a reasonable one
                         if (mMacAddressConnected != null && mMacAddressConnected.length() > 10) {
@@ -872,15 +917,7 @@ public class BlueDisplay extends Activity {
                     // Attempt to connect to the device
                     mBTSerialSocket.connect(device);
                     mMacAddressToConnect = tMacAddress;
-//                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-//                        if (checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-//                            mDeviceNameToConnect = " No connect permission";
-//                        } else {
-//                            mDeviceNameToConnect = device.getName();
-//                        }
-//                    } else {
                     mDeviceNameToConnect = device.getName();
-//                    }
                 }
                 break;
 
@@ -944,14 +981,15 @@ public class BlueDisplay extends Activity {
      * Show input dialog requested by client
      */
     @SuppressLint("InflateParams")
-    public void showInputDialog(boolean aDoNumber, final int aCallbackAddress, String tShortPrompt, float aInitialValue) {
+    public void showInputDialog(boolean aDoNumber, final int aCallbackAddress, String
+            tShortPrompt, float aInitialValue) {
         LayoutInflater tLayoutInflater = LayoutInflater.from(this);
         View tInputView = tLayoutInflater.inflate(R.layout.input_data, null);
 
-        if (tShortPrompt != null && tShortPrompt.length() > 0) {
+        if (tShortPrompt != null && !tShortPrompt.isEmpty()) {
             final TextView tTitle = tInputView.findViewById(R.id.title_input_data);
             String tPromptLeading = getResources().getString(R.string.title_input_data_prompt_leading);
-            if (tPromptLeading.length() == 0 && tShortPrompt.length() > 1) {
+            if (tPromptLeading.isEmpty() && tShortPrompt.length() > 1) {
                 // convert first character to upper case
                 tShortPrompt = Character.toUpperCase(tShortPrompt.charAt(0)) + tShortPrompt.substring(1);
             }

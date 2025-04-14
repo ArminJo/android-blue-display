@@ -40,14 +40,12 @@ public class MyLog {
     // to prevent "The content of the adapter has changed but ListView did not receive a notification"
     static boolean mStopLoggingSinceLogIsDisplayed = false;
 
-    // Debugging
-    static final boolean isDevelopmentTesting = false; // set manually to true
-//     static final boolean isDevelopmentTesting = true; // set manually to true
     public static final String LOGLEVEL_KEY = "loglevel";
     static int mLoglevel = Log.INFO; // 6=ERROR 5=WARN, 4=INFO, 3=DEBUG, 2=VERBOSE
 
     public static boolean isDEVELOPMENT_TESTING() {
-        return (isDevelopmentTesting);
+        return false;
+//        return true;
     }
 
     public static void setLoglevel(int aLoglevel) {

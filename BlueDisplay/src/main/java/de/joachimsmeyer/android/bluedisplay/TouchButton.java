@@ -122,7 +122,7 @@ public class TouchButton {
     // Flags for button settings contained in flags parameter
     private static final int FLAG_BUTTON_DO_BEEP_ON_TOUCH = 0x01;
     // Red if value == 0 else green
-    private static final int FLAG_BUTTON_TYPE_TOGGLE_RED_GREEN = 0x02;
+    private static final int FLAG_BUTTON_TYPE_TOGGLE = 0x02;
     private static final int FLAG_BUTTON_TYPE_AUTOREPEAT = 0x04;
     private static final int BUTTON_FLAG_MANUAL_REFRESH = 0x08;
 
@@ -260,7 +260,7 @@ public class TouchButton {
             }
             mDoBeep = true;
         }
-        if ((aFlags & FLAG_BUTTON_TYPE_TOGGLE_RED_GREEN) == 0) {
+        if ((aFlags & FLAG_BUTTON_TYPE_TOGGLE) == 0) {
             mIsRedGreen = false;
         } else {
             mIsRedGreen = true;

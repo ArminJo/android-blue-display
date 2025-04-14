@@ -98,6 +98,8 @@ public class RPCView extends View {
     // the maximum display area available for this orientation
     protected int mCurrentViewPixelHeight; // Display Height - StatusBar - TitleBar
     protected int mCurrentViewPixelWidth; // Display Width
+    public int mCurrentTopInset = 0; // must be taken into account for drawing and touch origin
+    public int mCurrentLeftInset = 0; // must be taken into account for drawing and touch origin
     boolean mSendPendingConnectMessage = false;
     ToneGenerator mToneGeneratorForAbsoluteVolumes;
     ToneGenerator mToneGenerator;
@@ -680,21 +682,22 @@ public class RPCView extends View {
         resetTouchFlags(0);
     }
 
+    /*
+     * Is called on start and on changing orientation from Portrait to Landscape and back
+     */
     @Override
     public void onSizeChanged(int aWidth, int aHeight, int aOldWidth, int aOldHeight) {
-        /*
-         * Is called on start and on changing orientation from Portrait to Landscape and back
-         * but NOT from Landscape to Reverse Landscape!
-         */
-
         /*
          * Correct sizes with system bars insets
          */
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            Insets tInsets = null;
-            tInsets = mBlueDisplayContext.getWindowManager().getCurrentWindowMetrics().getWindowInsets().getInsets(WindowInsets.Type.systemBars());
+            // This suppresses the code in the mOrientationEventListener, which is called afterwards and not required in this case
+            mBlueDisplayContext.mCurrentRotation = mBlueDisplayContext.getWindowManager().getDefaultDisplay().getRotation();
+            mBlueDisplayContext.mLastRotation = mBlueDisplayContext.mCurrentRotation; // Mapping rotation to orientation depends on the natural orientation of the device
+            Insets tInsets = mBlueDisplayContext.getWindowManager().getCurrentWindowMetrics().getWindowInsets().
+                    getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
             if (MyLog.isDEBUG()) {
-                Log.d(LOG_TAG, "systemBarsInsets =" + tInsets); // Only logcat output here
+                Log.d(LOG_TAG, "Insets = " + tInsets); // Only logcat output here
             }
             aWidth -= tInsets.right + tInsets.left;
             aHeight -= tInsets.bottom + tInsets.top;
@@ -705,6 +708,10 @@ public class RPCView extends View {
         if (MyLog.isINFO()) {
             Log.i(LOG_TAG, "++ ON SizeChanged width=" + aWidth + " height=" + aHeight + " old width=" + aOldWidth + " old height=" + aOldHeight); // Only logcat output here
         }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            mBlueDisplayContext.setTopAndLeftInsets();
+        }
+
 
         setMaxScaleFactor();
 
@@ -746,11 +753,10 @@ public class RPCView extends View {
             int tSumWaitDelay = 0;
             do {
                 tResult = mBlueDisplayContext.mSerialService.searchCommand(this);
-                float tCurrentLeftInset = 0;
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    tCurrentLeftInset = mBlueDisplayContext.getWindowManager().getCurrentWindowMetrics().getWindowInsets().getInsets(WindowInsets.Type.systemBars()).left;
+                canvas.drawBitmap(mBitmap, mCurrentLeftInset, mCurrentTopInset, mBitmapPaint); // must be done at every call
+                if (MyLog.isDEVELOPMENT_TESTING()) {
+                    Log.v(LOG_TAG, "Using TopInset=" + mCurrentTopInset + " LeftInset=" + mCurrentLeftInset);
                 }
-                canvas.drawBitmap(mBitmap, tCurrentLeftInset, 0, mBitmapPaint); // must be done at every call
                 int tBytesInBuffer = mBlueDisplayContext.mSerialService.getBufferBytesAvailable();
                 if (tResult == SerialService.RPCVIEW_DO_DRAW_AND_CALL_AGAIN) {
                     // We have more data in buffer, but want to show the bitmap now (between 4 and 20 ms on my Nexus7/6.0.1),
@@ -828,16 +834,16 @@ public class RPCView extends View {
         if (tMaskedAction == MotionEvent.ACTION_MOVE) {
             for (int i = 0; i < tPointerCount && i < MAX_POINTER; i++) {
                 if (mLastTouchPositionX[i] != aEvent.getX(i) || mLastTouchPositionY[i] != aEvent.getY(i)) {
-                    mLastTouchPositionX[i] = aEvent.getX(i);
-                    mLastTouchPositionY[i] = aEvent.getY(i);
+                    mLastTouchPositionX[i] = Math.max(aEvent.getX(i) - mCurrentLeftInset, 0);
+                    mLastTouchPositionY[i] = Math.max(aEvent.getY(i) - mCurrentTopInset, 0);
                     // Found new action index
                     tActionIndex = i;
                     break;
                 }
             }
         }
-        float tCurrentX = aEvent.getX(tActionIndex);
-        float tCurrentY = aEvent.getY(tActionIndex);
+        float tCurrentX = Math.max(aEvent.getX(tActionIndex) - mCurrentLeftInset, 0);
+        float tCurrentY = Math.max(aEvent.getY(tActionIndex) - mCurrentTopInset, 0);
         int tCurrentXScaled = (int) ((tCurrentX / mScaleFactor) + 0.5);
         int tCurrentYScaled = (int) ((tCurrentY / mScaleFactor) + 0.5);
 
@@ -2481,7 +2487,7 @@ public class RPCView extends View {
 
             if (aClientRequestedOrientation == ActivityInfo.SCREEN_ORIENTATION_LOCKED) { // android and BD emumerations are the same
                 tRequestedOrientation = "current";
-                tNewOrientation = mBlueDisplayContext.getCurrentOrientation(mBlueDisplayContext.getResources().getConfiguration().orientation);
+                tNewOrientation = mBlueDisplayContext.getCurrentOrientationFromConfigurationOrientation(mBlueDisplayContext.getResources().getConfiguration().orientation);
             }
 
             if (MyLog.isINFO()) {

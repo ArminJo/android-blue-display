@@ -156,7 +156,7 @@ RC car control display
 - Targeted Android 12 / 32
 - Support for new function disableAutorepeatUntilEndOfTouch().
 - Added Flag `FLAG_SLIDER_VALUE_CAPTION_TAKE_DEFAULT_MARGIN`. Margin is set to RequestedCanvasHeight / 60.
-- Inproved color handling for red / green button.
+- Inproved color handling for Red/Green toggle button.
 
 ### Version 4.3.1 / 18
 - Fixed Permission bug for Andoid 12 / 32

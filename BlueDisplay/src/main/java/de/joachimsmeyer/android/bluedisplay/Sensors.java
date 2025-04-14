@@ -1,6 +1,6 @@
 /*
  * 	Sensors.java
- * 
+ *
  *  Android axis are defined for "natural" screen orientation, which is portrait for my devices:
  *  See https://source.android.com/devices/sensors/sensor-types
  *    When the device lies flat on a table and its left side is down and right side is up or pushed on its left side toward the right,
@@ -28,10 +28,10 @@
  *
  *  If FLAG_SENSOR_SIMPLE_FILTER is set on sensor registering, then sensor values are sent via BT only if values changed.
  *  To avoid noise (event value is solely switching between 2 values), values are skipped too if they are equal last or second last value.
- * 
+ *
  *  Copyright (C) 2015-2020  Armin Joachimsmeyer
  *  armin.joachimsmeyer@gmail.com
- *  
+ *
  * 	This file is part of BlueDisplay.
  *  BlueDisplay is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -45,21 +45,19 @@
 
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/gpl.html>.
- *  
+ *
  *  This is the view which interprets the global and graphic commands received by serial service.
  *  It also handles touch events and swipe as well as long touch detection.
- *  
+ *
  */
 
 package de.joachimsmeyer.android.bluedisplay;
 
-import android.content.pm.ActivityInfo;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.util.Log;
-import android.view.OrientationEventListener;
 import android.view.Surface;
 
 import java.util.ArrayList;
@@ -101,7 +99,7 @@ public class Sensors implements SensorEventListener {
         /*
          * Sensor values are sent only if value changed. To avoid noise (event value is solely switching between 2 values), values
          * are skipped if they are equal last or second last value.
-         * 
+         *
          * @return true if current value is no "noise"
          */
         boolean checkIfValueIsNoNoise(SensorEvent aEvent) {
@@ -127,50 +125,10 @@ public class Sensors implements SensorEventListener {
 
     SensorManager mSensorManager;
 
-    public OrientationEventListener mOrientationEventListener;
-    boolean isOrientationEventListenerEnabled = false;
-
     public Sensors(BlueDisplay aContext, SensorManager aSensorManager) {
         mBlueDisplayContext = aContext;
         mSensorManager = aSensorManager;
         getAllAvailableSensors();
-
-        /*
-         * To detect direct switching from 0 to 180 and from 90 to 270 degrees and vice versa which does not call
-         * onConfigurationChanged(). Used by onSensorChanged, to adjust X + Y values relative to rotation of canvas.
-         */
-        mOrientationEventListener = new OrientationEventListener(mBlueDisplayContext, SensorManager.SENSOR_DELAY_NORMAL) {
-            @Override
-            public void onOrientationChanged(int mAngle) {
-                if (mAngle > 0) {
-                    /*
-                     * Process only, if orientation can change <br>
-                     * angle 0 is Surface.ROTATION_0 <br>
-                     * angle 90 is Surface.ROTATION_270<br>
-                     * angle 180 is Surface.ROTATION_180<br>
-                     * angle 270 is Surface.ROTATION_90
-                     */
-                    if (!mBlueDisplayContext.mOrientationisLockedByClient
-                            || mBlueDisplayContext.mCurrentScreenOrientation == ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-                            || mBlueDisplayContext.mCurrentScreenOrientation == ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT) {
-                        if ((315 < mAngle || mAngle < 45 && mBlueDisplayContext.mCurrentRotation != Surface.ROTATION_0)
-                                || (45 < mAngle && mAngle < 135 && mBlueDisplayContext.mCurrentRotation != Surface.ROTATION_270)
-                                || (135 < mAngle && mAngle < 225 && mBlueDisplayContext.mCurrentRotation != Surface.ROTATION_180)
-                                || (225 < mAngle && mAngle < 315 && mBlueDisplayContext.mCurrentRotation != Surface.ROTATION_90)) {
-                            if (MyLog.isDEBUG()) {
-                                MyLog.d(LOG_TAG, "Trigger reading of rotation. Angle=" + mAngle);
-                            }
-                            if (mBlueDisplayContext.mCurrentRotation != mBlueDisplayContext.getWindowManager().getDefaultDisplay()
-                                    .getRotation()) {
-                                // Safety net, on my 5.1 tablet it seems, that we do not get here.
-                                mBlueDisplayContext
-                                        .setCurrentScreenOrientationAndRotationVariables(mBlueDisplayContext.mCurrentScreenOrientation);
-                            }
-                        }
-                    }
-                }
-            }
-        };
     }
 
     public void getAllAvailableSensors() {
@@ -187,7 +145,8 @@ public class Sensors implements SensorEventListener {
     /*
      * Activate or deactivate sensor. To be called from interpret command.
      */
-    public void setSensor(int aSensorType, boolean DoActivate, int aSensorRate, int aFilterFlag) {
+    public void setSensor(int aSensorType, boolean DoActivate, int aSensorRate,
+                          int aFilterFlag) {
         if (MyLog.isINFO()) {
             MyLog.i(LOG_TAG, "SetSensor sensor=" + aSensorType + " DoActivate=" + DoActivate + " rate=" + aSensorRate);
         }
@@ -204,17 +163,6 @@ public class Sensors implements SensorEventListener {
                 }
                 tSensorInfo.isActive = DoActivate;
                 tSensorInfo.mFilterFlag = aFilterFlag;
-                if (!isOrientationEventListenerEnabled) {
-                    if (mOrientationEventListener.canDetectOrientation()) {
-                        if (MyLog.isINFO()) {
-                            MyLog.i(LOG_TAG, "Enable OrientationEventListener");
-                        }
-                        mOrientationEventListener.enable();
-                        isOrientationEventListenerEnabled = true;
-                    } else {
-                        MyLog.w(LOG_TAG, "Can't detect orientation");
-                    }
-                }
             }
         }
     }
@@ -234,16 +182,10 @@ public class Sensors implements SensorEventListener {
                 }
             }
         }
-        if (!isOrientationEventListenerEnabled && mOrientationEventListener.canDetectOrientation()) {
-            mOrientationEventListener.enable();
-            isOrientationEventListenerEnabled = true;
-        }
     }
 
     public void deregisterAllActiveSensorListeners() {
         mSensorManager.unregisterListener(this);
-        mOrientationEventListener.disable();
-        isOrientationEventListenerEnabled = false;
     }
 
     boolean isSensorEnabledAndEventValuesNoNoise(SensorEvent aEvent) {
