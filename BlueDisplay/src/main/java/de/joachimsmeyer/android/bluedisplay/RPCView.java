@@ -71,6 +71,7 @@ import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.charset.Charset;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -299,7 +300,7 @@ public class RPCView extends View {
     private final static int FUNCTION_GET_INFO = 0x0E;
     // Sub functions for FUNCTION_GET_INFO
     private final static int SUBFUNCTION_GET_INFO_LOCAL_TIME = 0x00;
-    private final static int SUBFUNCTION_GET_INFO_UTC_TIME = 0x01;
+    private final static int SUBFUNCTION_GET_INFO_GMT_TIME = 0x01;
 
     private final static int FUNCTION_PLAY_TONE = 0x0F;
     private final static int FUNCTION_SPEAK_SET_LOCALE = 0x80;
@@ -1646,22 +1647,23 @@ public class RPCView extends View {
 
                     switch (tSubcommand) {
                         case SUBFUNCTION_GET_INFO_LOCAL_TIME:
-                        case SUBFUNCTION_GET_INFO_UTC_TIME:
+                        case SUBFUNCTION_GET_INFO_GMT_TIME:
                             /*
                              * send useDaylightTime flag, distance to UTC and requested timestamp
                              */
-                            tFunctionName = "UTC time";
+                            TimeZone tDefaultTimeZone = TimeZone.getDefault();
+                            long tTimestamp = System.currentTimeMillis();
+                            int tGmtOffset = tDefaultTimeZone.getOffset(tTimestamp);  // get difference to GMT including DST
+
                             if (tSubcommand == SUBFUNCTION_GET_INFO_LOCAL_TIME) {
                                 tFunctionName = "local time";
+                                tTimestamp += tGmtOffset;
+                            } else {
+                                tFunctionName = "GMT time"; // UTC is a time standard not a time zone, but both share the same current time
                             }
                             int tUseDaylightTime = 0;
-                            if (TimeZone.getDefault().useDaylightTime()) {
+                            if (tDefaultTimeZone.inDaylightTime(new Date())) {
                                 tUseDaylightTime = 1;
-                            }
-                            int tGmtOffset = TimeZone.getDefault().getRawOffset(); // + TimeZone.getDefault().getDSTSavings(); // 1 hour if DST enabled, which is always true :-(
-                            long tTimestamp = System.currentTimeMillis();
-                            if (tSubcommand == SUBFUNCTION_GET_INFO_LOCAL_TIME) {
-                                tTimestamp += tGmtOffset;
                             }
                             long tTimestampSeconds = tTimestamp / 1000L;
                             if (MyLog.isINFO()) {
