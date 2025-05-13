@@ -408,8 +408,7 @@ public class SerialService {
          */
         TimeZone tDefaultTimeZone = TimeZone.getDefault();
         long tTimestamp = System.currentTimeMillis();
-        tTimestamp += tDefaultTimeZone.getRawOffset(); // 1 hour
-//        tTimestamp += tDefaultTimeZone.getDSTSavings(); // 1 hour if DST enabled, which is always true :-(
+        tTimestamp += tDefaultTimeZone.getOffset(tTimestamp);  // get difference to GMT including DST
         long tTimestampSeconds = tTimestamp / 1000L;
         mSendByteBuffer[tIndex++] = (byte) (tTimestampSeconds & 0xFF); // LSB
         mSendByteBuffer[tIndex++] = (byte) ((tTimestampSeconds >> 8) & 0xFF);
@@ -421,7 +420,9 @@ public class SerialService {
             // this does not respect the 24 hour setting of android :-(
             // DateFormat tDateFormat = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.MEDIUM, Locale.GERMAN);
             DateFormat tDateFormat = new SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.getDefault());
+            tDateFormat.setTimeZone(TimeZone.getTimeZone("GMT")); // Print as GMT Time
             Date tDate = new Date(tTimestamp);
+            MyLog.i(LOG_TAG, "tDefaultTimeZone=" + tDefaultTimeZone);
             MyLog.i(LOG_TAG, "Send Type=0x" + Integer.toHexString(tEventType) + "|" + tType + " X=" + aX + " Y=" + aY
                     + " Timestamp=" + tTimestampSeconds + " Date=" + tDateFormat.format(tDate));
         }
