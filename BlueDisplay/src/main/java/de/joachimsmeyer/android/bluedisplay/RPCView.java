@@ -70,6 +70,7 @@ import android.widget.Toast;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.charset.Charset;
+import java.text.SimpleDateFormat;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
@@ -523,10 +524,10 @@ public class RPCView extends View {
                             mTextToSpeech.setEngineByPackageName("com.google.android.tts");
                             mTextToSpeech.setLanguage(Locale.US);
                             mTextToSpeechIsInitialized = true;
-                            if (MyLog.isINFO()) {
-                                MyLog.i(LOG_TAG, "Default voice is: " + mTextToSpeech.getDefaultVoice().getName());
+                            if (MyLog.isDEBUG()) {
+                                MyLog.d(LOG_TAG, "Default voice is: " + mTextToSpeech.getDefaultVoice().getName());
                                 Set<Voice> tVoicesSet = mTextToSpeech.getVoices();
-                                MyLog.i(LOG_TAG, "Available voices are:");
+                                MyLog.d(LOG_TAG, "Available voices are:");
                                 int i = 1; // I can see 472 voices :-)
                                 for (Voice tVoice : tVoicesSet) {
                                     MyLog.i(LOG_TAG, i + " " + tVoice.getName());
@@ -1653,8 +1654,8 @@ public class RPCView extends View {
                              */
                             TimeZone tDefaultTimeZone = TimeZone.getDefault();
                             long tTimestamp = System.currentTimeMillis();
-                            int tGmtOffset = tDefaultTimeZone.getOffset(tTimestamp);  // get difference to GMT including DST
 
+                            int tGmtOffset = tDefaultTimeZone.getOffset(tTimestamp);  // get difference to GMT including DST
                             if (tSubcommand == SUBFUNCTION_GET_INFO_LOCAL_TIME) {
                                 tFunctionName = "local time";
                                 tTimestamp += tGmtOffset;
@@ -1667,7 +1668,10 @@ public class RPCView extends View {
                             }
                             long tTimestampSeconds = tTimestamp / 1000L;
                             if (MyLog.isINFO()) {
-                                MyLog.i(LOG_TAG, "Get " + tFunctionName + " callback=0x" + Integer.toHexString(tCallbackAddress) + tCallbackAddressStringAdjustedForClientDebugging);
+                                SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+                                sdf.setTimeZone(tDefaultTimeZone);
+                                String formattedDate = sdf.format(new Date(tTimestamp));
+                                MyLog.i(LOG_TAG, "Get " + tFunctionName + " date="+ formattedDate + " callback=0x" + Integer.toHexString(tCallbackAddress) + tCallbackAddressStringAdjustedForClientDebugging);
                             }
                             mBlueDisplayContext.mSerialService.writeInfoCallbackEvent(SerialService.EVENT_INFO_CALLBACK, tSubcommand, tUseDaylightTime, tGmtOffset, tCallbackAddress, tTimestampSeconds);
 

@@ -134,9 +134,11 @@ public class SerialService {
     }
 
     /*
-     * Called by BT or USB driver thread.
-     * Handle statistics, buffer overflow, buffer wrap around
+     * Called by BT or USB driver thread after reading up to 4096 bytes from input to buffer.
+     * Handle in mReceiveBufferInIndex, statistics, buffer overflow, buffer wrap around
      * and signal BlueDisplay.MESSAGE_UPDATE_VIEW.
+     * @param aReadLength - The number of bytes copied into buffer by BT or USB driver thread.
+     *                      It is added to mReceiveBufferInIndex.
      */
     void handleReceived(int aReadLength) {
 
@@ -150,8 +152,12 @@ public class SerialService {
             int tBytesInBuffer = getBufferBytesAvailable();
             if (tOldInIndex < tOutIndex && mReceiveBufferInIndex > tOutIndex) {
                 // input index overtakes out index
-                MyLog.e(LOG_TAG, "Buffer overflow! new InIndex=" + mReceiveBufferInIndex
-                        + " OutIndex=" + tOutIndex + " ReadLength=" + aReadLength);
+                MyLog.e(LOG_TAG, "Buffer overflow! New InIndex=" + mReceiveBufferInIndex
+                        + " is greater than OutIndex=" + tOutIndex + " after adding " + aReadLength + "bytes. Reset buffer now. Buffer size=" + SerialService.SIZE_OF_IN_BUFFER);
+                // Reset corrupted buffer
+                mReceiveBufferInIndex = 0;
+                mReceiveBufferOutIndex = 0;
+                mInputBufferWrapAroundIndex = SIZE_OF_IN_BUFFER;
             }
 
             // check for wrap around
@@ -266,10 +272,10 @@ public class SerialService {
 
     void writeEvent(byte[] aEventDataBuffer, int aEventDataLength) {
         // Check USB connection this way, because the mDeviceConnected flag is set by a message, which may not be processed yet.
-        if(mBlueDisplayContext.mUSBSerialSocket != null && mBlueDisplayContext.mUSBSerialSocket.mIsConnected) {
+        if (mBlueDisplayContext.mUSBSerialSocket != null && mBlueDisplayContext.mUSBSerialSocket.mIsConnected) {
             mBlueDisplayContext.mUSBSerialSocket.writeEvent(aEventDataBuffer, aEventDataLength);
         } else if (mBlueDisplayContext.mDeviceConnected) {
-                mBlueDisplayContext.mBTSerialSocket.writeEvent(aEventDataBuffer, aEventDataLength);
+            mBlueDisplayContext.mBTSerialSocket.writeEvent(aEventDataBuffer, aEventDataLength);
         } else {
             if (MyLog.isINFO()) {
                 MyLog.i(LOG_TAG, "Do not send event, because client is not (yet) connected");
@@ -331,6 +337,7 @@ public class SerialService {
 
         writeEvent(mSendByteBuffer, tEventLength);
     }
+
     public void writeNoDataEvent(int aEventType) {
         int tEventLength = 3;
         int tEventType = aEventType & 0xFF;
@@ -422,7 +429,7 @@ public class SerialService {
             DateFormat tDateFormat = new SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.getDefault());
             tDateFormat.setTimeZone(TimeZone.getTimeZone("GMT")); // Print as GMT Time
             Date tDate = new Date(tTimestamp);
-            MyLog.i(LOG_TAG, "tDefaultTimeZone=" + tDefaultTimeZone);
+            MyLog.d(LOG_TAG, "tDefaultTimeZone=" + tDefaultTimeZone);
             MyLog.i(LOG_TAG, "Send Type=0x" + Integer.toHexString(tEventType) + "|" + tType + " X=" + aX + " Y=" + aY
                     + " Timestamp=" + tTimestampSeconds + " Date=" + tDateFormat.format(tDate));
         }
@@ -647,6 +654,9 @@ public class SerialService {
 
     }
 
+    /*
+     * Only used for SUBFUNCTION_GET_INFO_LOCAL_TIME and SUBFUNCTION_GET_INFO_GMT_TIME
+     */
     public void writeInfoCallbackEvent(int aEventType, int aSubFunction, int aByteInfo, int aShortInfo, int aCallbackAddress,
                                        long aLongInfo) {
         int tEventLength = CALLBACK_DATA_SIZE;
@@ -677,10 +687,15 @@ public class SerialService {
         mSendByteBuffer[tIndex] = SYNC_TOKEN;
         if (MyLog.isINFO()) {
             String tType = RPCView.sActionMappings.get(tEventType);
+            // this does not respect the 24 hour setting of android :-(
+            // DateFormat tDateFormat = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.MEDIUM, Locale.GERMAN);
+            DateFormat tDateFormat = new SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.getDefault());
+            tDateFormat.setTimeZone(TimeZone.getTimeZone("GMT")); // Print as GMT Time
+            Date tDate = new Date(aLongInfo * 1000);
             MyLog.i(LOG_TAG,
                     "Send Type=0x" + Integer.toHexString(tEventType) + "|" + tType + " SubFunction=" + aSubFunction + " ByteInfo="
                             + (aByteInfo & 0xFF) + " ShortInfo=" + (aShortInfo & 0xFFFF) + " CallbackAddress=0x"
-                            + Integer.toHexString(aCallbackAddress) + " LongInfo=" + aLongInfo);
+                            + Integer.toHexString(aCallbackAddress) + " LongInfo=" + aLongInfo + " Timestamp=" + aLongInfo + " Date=" + tDateFormat.format(tDate));
         }
 
         mStatisticNumberOfSentBytes += tEventLength;
@@ -750,9 +765,10 @@ public class SerialService {
     /*
      * Get byte from buffer, clear buffer, increment pointer and handle wrap around
      */
-    int getUnsignedByteFromBuffer(){
+    int getUnsignedByteFromBuffer() {
         return convertByteToInt(getByteFromBuffer());
     }
+
     byte getByteFromBuffer() {
         byte tByte = mBigReceiveBuffer[mReceiveBufferOutIndex];
 
@@ -1217,6 +1233,7 @@ public class SerialService {
         }
         return aByte;
     }
+
     public static int convertByteToInt(byte aByte) {
         if (aByte < 0) {
             return aByte + 256;
