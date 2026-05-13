@@ -111,14 +111,18 @@ public class RPCView extends View {
     TextToSpeech mTextToSpeech;
     boolean mTextToSpeechIsInitialized;
 
-    private static final int MAX_CHART_LINE_WIDTH = 1800;
+    private static final int MAX_CHART_LINE_WIDTH = 3200;
+    private static final int NUMBER_OF_LINES_SUPPORTED = 16; // we use the upper 4 bit to encode the line number - 16 lines possible
 
-    // 4 values for one line - 16 lines possible
-    public static float[][] mChartScreenBuffer = new float[16][MAX_CHART_LINE_WIDTH * 4];
-    public static int[] mChartScreenBufferValidDataLength = new int[16];
+    // mCanvas.drawLines() requires 4 int values for one line (start x/y and end x/y)
+    public static float[][] mChartScreenBuffer = new float[NUMBER_OF_LINES_SUPPORTED][MAX_CHART_LINE_WIDTH * 4];
+    public static int[] mChartScreenBufferValidDataLength = new int[NUMBER_OF_LINES_SUPPORTED];
+    public static boolean[] mChartScreenBufferContainsOldData = new boolean[NUMBER_OF_LINES_SUPPORTED];
     public static Bitmap mBitmap;
     private final Paint mBitmapPaint; // only used for onDraw() to draw bitmap
     private final Paint mInfoPaint; // for internal info text like touch coordinates
+
+    static final boolean USE_ROUNDING_FOR_LINES = true;
 
     static final float TEXT_ASCEND_FACTOR = 0.76f;
     static final float TEXT_DESCEND_FACTOR = 0.24f;
@@ -317,7 +321,7 @@ public class RPCView extends View {
      */
     public final static int FUNCTION_CLEAR_DISPLAY = 0x10;
     public final static int FUNCTION_DRAW_DISPLAY = 0x11;
-    public final static int FUNCTION_CLEAR_DISPLAY_OPTIONAL = 0x12; // used for skipping commands in buffer
+    public final static int FUNCTION_CLEAR_DISPLAY_AND_SKIP_OPTIONAL = 0x12; // used for skipping commands in buffer
     // with 3 parameter
     private final static int FUNCTION_DRAW_PIXEL = 0x14;
     // 6 parameter
@@ -356,8 +360,8 @@ public class RPCView extends View {
     private final static int FUNCTION_GET_NUMBER_WITH_SHORT_PROMPT = 0x64;
     private final static int FUNCTION_GET_TEXT_WITH_SHORT_PROMPT = 0x65;
 
-    private final static int FUNCTION_DRAW_PATH = 0x68;
-    private final static int FUNCTION_FILL_PATH = 0x69;
+    private final static int FUNCTION_DRAW_PATH = 0x68; // Not yet implemented in Arduino library
+    private final static int FUNCTION_FILL_PATH = 0x69; // Not yet implemented in Arduino library
     final static int FUNCTION_DRAW_CHART = 0x6A;
     final static int FUNCTION_DRAW_CHART_WITHOUT_DIRECT_RENDERING = 0x6B;
 
@@ -1671,7 +1675,7 @@ public class RPCView extends View {
                                 SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
                                 sdf.setTimeZone(tDefaultTimeZone);
                                 String formattedDate = sdf.format(new Date(tTimestamp));
-                                MyLog.i(LOG_TAG, "Get " + tFunctionName + " date="+ formattedDate + " callback=0x" + Integer.toHexString(tCallbackAddress) + tCallbackAddressStringAdjustedForClientDebugging);
+                                MyLog.i(LOG_TAG, "Get " + tFunctionName + " date=" + formattedDate + " callback=0x" + Integer.toHexString(tCallbackAddress) + tCallbackAddressStringAdjustedForClientDebugging);
                             }
                             mBlueDisplayContext.mSerialService.writeInfoCallbackEvent(SerialService.EVENT_INFO_CALLBACK, tSubcommand, tUseDaylightTime, tGmtOffset, tCallbackAddress, tTimestampSeconds);
 
@@ -1775,10 +1779,7 @@ public class RPCView extends View {
                     mBlueDisplayContext.mSensorEventListener.setSensor(aParameters[0], tDoActivate, aParameters[2], tFilterFlag);
                     break;
 
-                case FUNCTION_CLEAR_DISPLAY_OPTIONAL:
-                    // Do nothing, it is interpreted directly at SearchCommand as sync point for skipping command buffer
-                    break;
-
+                case FUNCTION_CLEAR_DISPLAY_AND_SKIP_OPTIONAL:
                 case FUNCTION_CLEAR_DISPLAY:
                     // clear screen
                     if (MyLog.isINFO()) {
@@ -1840,10 +1841,15 @@ public class RPCView extends View {
 
                     float tLineStroke = mScaleFactor;
 
-                    tXStartScaled = Math.round(tXStartScaled);
-                    tYStartScaled = Math.round(tYStartScaled);
-                    tXEndScaled = Math.round(tXEndScaled);
-                    tYEndScaled = Math.round(tYEndScaled);
+                    /*
+                     * ??? Round values to avoid starting or ending at half pixel ???
+                     */
+                    if (USE_ROUNDING_FOR_LINES) { // for fast testing of the effects of rounding
+                        tXStartScaled = Math.round(tXStartScaled);
+                        tYStartScaled = Math.round(tYStartScaled);
+                        tXEndScaled = Math.round(tXEndScaled);
+                        tYEndScaled = Math.round(tYEndScaled);
+                    }
                     if (tXStartScaled == tXEndScaled || tYStartScaled == tYEndScaled) {
                         // Use NON anti aliased Paint for horizontal or vertical lines, these can be cleared without residual
                         tResultingPaint = mPaintStrokeAndColorSettable;
@@ -1964,7 +1970,7 @@ public class RPCView extends View {
                     }
 
                     // can not use tDeleteColor here, because it is a converted value
-                    if (tDeleteOldLine) {
+                    if (tDeleteOldLine && (mChartScreenBufferContainsOldData[tChartIndex])) {
                         /*
                          * delete old chart line
                          */
@@ -1994,21 +2000,32 @@ public class RPCView extends View {
                      */
                     int tSourceIndex = 0;
                     int tDestinationIndex = 0;
-                    float tYValue = (SerialService.convertByteToFloat(aDataBytes[tSourceIndex++]) * mScaleFactor * tYScaleFactor) + tYStartScaled;
+                    float tXValueScaledOfCurrentLine = tXStartScaled; // the start of the multi pixel data entity
+                    float tYValueScaledOfCurrentLine = (SerialService.convertByteToFloat(aDataBytes[tSourceIndex++]) * mScaleFactor * tYScaleFactor) + tYStartScaled;
                     for (int i = 0; i < aDataLength - 1; i++) {
                         // Each line is taken from 4 consecutive values in the pts array
-                        // Start of line / pixel
-                        mChartScreenBuffer[tChartIndex][tDestinationIndex++] = tXStartScaled;
-                        mChartScreenBuffer[tChartIndex][tDestinationIndex++] = tYValue;
+                        // Start of current line / pixel
+                        if (USE_ROUNDING_FOR_LINES) { // for fast testing of the effects of rounding
+                            mChartScreenBuffer[tChartIndex][tDestinationIndex++] = Math.round(tXValueScaledOfCurrentLine);
+                            mChartScreenBuffer[tChartIndex][tDestinationIndex++] = Math.round(tYValueScaledOfCurrentLine);
+                        } else {
+                            mChartScreenBuffer[tChartIndex][tDestinationIndex++] = tXValueScaledOfCurrentLine;
+                            mChartScreenBuffer[tChartIndex][tDestinationIndex++] = tYValueScaledOfCurrentLine;
+                        }
                         /*
                          * Get values of next point
                          */
-                        tYValue = (SerialService.convertByteToFloat(aDataBytes[tSourceIndex++]) * mScaleFactor * tYScaleFactor) + tYStartScaled;
-                        tXStartScaled += tAdjustedXScaleFactor;
+                        tYValueScaledOfCurrentLine = (SerialService.convertByteToFloat(aDataBytes[tSourceIndex++]) * mScaleFactor * tYScaleFactor) + tYStartScaled;
+                        tXValueScaledOfCurrentLine += tAdjustedXScaleFactor;
                         if (tChartMode == CHART_MODE_LINE) {
                             // Write next point as end of current line
-                            mChartScreenBuffer[tChartIndex][tDestinationIndex++] = tXStartScaled;
-                            mChartScreenBuffer[tChartIndex][tDestinationIndex++] = tYValue;
+                            if (USE_ROUNDING_FOR_LINES) { // for fast testing of the effects of rounding
+                                mChartScreenBuffer[tChartIndex][tDestinationIndex++] = Math.round(tXValueScaledOfCurrentLine);
+                                mChartScreenBuffer[tChartIndex][tDestinationIndex++] = Math.round(tYValueScaledOfCurrentLine);
+                            } else {
+                                mChartScreenBuffer[tChartIndex][tDestinationIndex++] = tXValueScaledOfCurrentLine;
+                                mChartScreenBuffer[tChartIndex][tDestinationIndex++] = tYValueScaledOfCurrentLine;
+                            }
                         }
                     }
                     if (tChartMode == CHART_MODE_LINE) {
@@ -2017,13 +2034,26 @@ public class RPCView extends View {
                         mChartScreenBufferValidDataLength[tChartIndex] = (aDataLength - 1) * 4; // for optional deletion of this line
                     } else {
                         // CHART_MODE_PIXEL here. Store last point
-                        mChartScreenBuffer[tChartIndex][tDestinationIndex++] = tXStartScaled;
-                        mChartScreenBuffer[tChartIndex][tDestinationIndex] = tYValue;
+                        if (USE_ROUNDING_FOR_LINES) { // for fast testing of the effects of rounding
+                            mChartScreenBuffer[tChartIndex][tDestinationIndex++] = Math.round(tXValueScaledOfCurrentLine);
+                            mChartScreenBuffer[tChartIndex][tDestinationIndex] = Math.round(tYValueScaledOfCurrentLine);
+                        } else {
+                            mChartScreenBuffer[tChartIndex][tDestinationIndex++] = tXValueScaledOfCurrentLine;
+                            mChartScreenBuffer[tChartIndex][tDestinationIndex] = tYValueScaledOfCurrentLine;
+                        }
                         mCanvas.drawPoints(mChartScreenBuffer[tChartIndex], 0, aDataLength * 2, mPaintStrokeAndColorSettable);
                         mChartScreenBufferValidDataLength[tChartIndex] = aDataLength * 2; // for optional deletion of this line
                     }
+
+                    mChartScreenBufferContainsOldData[tChartIndex] = true;
                     break;
 
+                /*
+                 * Not yet implemented in Arduino library
+                 * First parameter is Color
+                 * Second parameter is StrokeWidth, but only necessary for draw path
+                 * Data (aDataInts) contains x/y coordinates of path points
+                 */
                 case FUNCTION_DRAW_PATH:
                 case FUNCTION_FILL_PATH:
                     tColor = shortToLongColor(aParameters[0]);
@@ -2041,7 +2071,7 @@ public class RPCView extends View {
                         tResultingPaint = mPaintStroke1Fill;
                     }
                     if (MyLog.isDEBUG()) {
-                        MyLog.d(LOG_TAG, tFunctionName + "(" + tXStartScaled + ", " + tYStartScaled + ") color=" + shortToColorString(aParameters[0]) + " length=" + aDataLength + tAdditionalInfo);
+                        MyLog.d(LOG_TAG, tFunctionName + "(" + shortToColorString(aParameters[0]) + ", " + aParameters[1] + ") length=" + aDataLength + tAdditionalInfo);
                     }
 
                     /*
@@ -2086,6 +2116,12 @@ public class RPCView extends View {
                             tYEndScaled = tmp;
                         }
                     }
+                    if (USE_ROUNDING_FOR_LINES) { // for fast testing of the effects of rounding
+                        tXStartScaled = Math.round(tXStartScaled);
+                        tXEndScaled = Math.round(tXEndScaled);
+                        tYStartScaled = Math.round(tYStartScaled);
+                        tYEndScaled = Math.round(tYEndScaled);
+                    }
 
                     tColor = shortToLongColor(aParameters[4]);
 
@@ -2113,6 +2149,11 @@ public class RPCView extends View {
 
                     if (MyLog.isDEBUG()) {
                         MyLog.d(LOG_TAG, tFunctionName + "(" + aParameters[0] + ", " + aParameters[1] + ", " + aParameters[2] + ", " + aParameters[3] + ") , color=" + shortToColorString(aParameters[4]) + tAdditionalInfo);
+                    }
+                    if (aCommand == FUNCTION_DRAW_RECT_REL && (aParameters[2] == 1 || aParameters[3] == 1)) {
+                        // XWidth is 1 -> draw a vertical line
+                        mCanvas.drawLine(tXStartScaled, tYStartScaled, tXEndScaled, tYEndScaled, tResultingPaint);
+                        break;
                     }
                     mCanvas.drawRect(tXStartScaled, tYStartScaled, tXEndScaled, tYEndScaled, tResultingPaint);
                     break;
@@ -2241,6 +2282,7 @@ public class RPCView extends View {
                                 // draw char / string
                                 drawText(tStringParameter, tPrintBufferStartIndex, aDataLength, tXStartScaled, tYStartScaled + tAscend, tScaledTextPrintTextSize, mTextExpandedPrintColor);
                                 mTextPrintTextCurrentPosX += Math.round(tTextLength / mScaleFactor); // Advance to start position for next write
+
                             }
                             break;
                         }
@@ -2532,7 +2574,8 @@ public class RPCView extends View {
         }
     }
 
-    public void fillRectRel(float aXStart, float aYStart, float aWidth, float aHeight, int aColor) {
+    public void fillRectRel(float aXStart, float aYStart, float aWidth, float aHeight,
+                            int aColor) {
         mPaintStroke1Fill.setColor(aColor);
         mCanvas.drawRect(aXStart * mScaleFactor, aYStart * mScaleFactor, (aXStart + aWidth) * mScaleFactor, (aYStart + aHeight) * mScaleFactor, mPaintStroke1Fill);
     }
@@ -2542,7 +2585,8 @@ public class RPCView extends View {
         mCanvas.drawRect(aXStart * mScaleFactor, aYStart * mScaleFactor, aXEnd * mScaleFactor, aYEnd * mScaleFactor, mPaintStroke1Fill);
     }
 
-    public void drawText(String aText, float aScaledPosX, float aScaledPosY, float aScaledTextSize, int aColor) {
+    public void drawText(String aText, float aScaledPosX, float aScaledPosY,
+                         float aScaledTextSize, int aColor) {
         mTextPaint.setTextSize(aScaledTextSize);
         mTextPaint.setColor(aColor);
 
@@ -2557,14 +2601,16 @@ public class RPCView extends View {
         mCanvas.drawText(aText, aScaledPosX, aScaledPosY, mTextPaint);
     }
 
-    public void drawText(String aText, int aStartIndex, int aEndIndexNotIncluded, float aScaledPosX, float aScaledPosY, float aScaledTextSize, int aColor) {
+    public void drawText(String aText, int aStartIndex, int aEndIndexNotIncluded,
+                         float aScaledPosX, float aScaledPosY, float aScaledTextSize, int aColor) {
         drawText(aText.substring(aStartIndex, aEndIndexNotIncluded), aScaledPosX, aScaledPosY, aScaledTextSize, aColor);
     }
 
     /*
      * For internal button and slider usage, no ascend compensation for draw position here
      */
-    public void drawTextWithBackground(float aPosX, float aPosY, String aText, float aTextSize, int aColor, int aBGColor) {
+    public void drawTextWithBackground(float aPosX, float aPosY, String aText, float aTextSize,
+                                       int aColor, int aBGColor) {
         aPosX *= mScaleFactor;
         aPosY *= mScaleFactor;
         aTextSize *= mScaleFactor;
@@ -2602,8 +2648,15 @@ public class RPCView extends View {
         Sensors.disableAllSensors();
         resetFlags();
         initCharMappingArray();
+        resetChartHistory();
         if (MyLog.isINFO()) {
             MyLog.i(LOG_TAG, "Reset all");
+        }
+    }
+
+    private void resetChartHistory() {
+        for (int i = 0; i < NUMBER_OF_LINES_SUPPORTED; i++) {
+            mChartScreenBufferContainsOldData[i] = false;
         }
     }
 
@@ -2651,7 +2704,8 @@ public class RPCView extends View {
     /*
      * do length correction for a 1 pixel line; draw 4 lines for tYStart = 2
      */
-    public void drawLengthCorrectedLine(float aStartX, float aStartY, float aStopX, float aStopY, int aScaleFactor, Paint aPaint, Canvas aCanvas) {
+    public void drawLengthCorrectedLine(float aStartX, float aStartY, float aStopX,
+                                        float aStopY, int aScaleFactor, Paint aPaint, Canvas aCanvas) {
         if (aStartX > aStopX) {
             // change X direction to positive
             float tTemp = aStartX;
@@ -2726,7 +2780,8 @@ public class RPCView extends View {
     /*
      * Start at bottom of page with a Box
      */
-    void testBDFunctions(int aStartX, int aStartY, int aCanvasHeight, boolean aCompatibilityMode) {
+    void testBDFunctions(int aStartX, int aStartY, int aCanvasHeight,
+                         boolean aCompatibilityMode) {
 
         int tModeCharacter = 0x4E; // Character 'N'
         if (aCompatibilityMode) {
@@ -2942,6 +2997,7 @@ public class RPCView extends View {
         tPathParameters[4] = 450 / aScaleDivisor + aStartX;
         tPathParameters[5] = 330 / aScaleDivisor + aStartY;
         interpretCommand(FUNCTION_FILL_PATH, tParameters, 1, null, tPathParameters, 6);
+        // black border
         tParameters[0] = 0x00; // Color black
         tParameters[1] = 1; // Stroke width for Draw...
         interpretCommand(FUNCTION_DRAW_PATH, tParameters, 2, null, tPathParameters, 6);
@@ -3378,7 +3434,8 @@ public class RPCView extends View {
         return (int) (tYPos + tTextSize);
     }
 
-    private void drawStarForTests(Canvas tCanvas, Paint aPaint, Paint aFillPaint, float tX, float tY, int tOffsetCenter, int tLength, int tOffsetDiagonal, int tLengthDiagonal) {
+    private void drawStarForTests(Canvas tCanvas, Paint aPaint, Paint aFillPaint, float tX,
+                                  float tY, int tOffsetCenter, int tLength, int tOffsetDiagonal, int tLengthDiagonal) {
 
         tLength--;
         tLengthDiagonal += tOffsetDiagonal - 1;
@@ -3438,7 +3495,9 @@ public class RPCView extends View {
         tCanvas.drawPoint(tX, tY, aFillPaint);
     }
 
-    private void drawStarCorrectedForTests(Canvas tCanvas, Paint aPaint, Paint aFillPaint, int aZoom, float aX, float aY, int tOffsetCenter, int tLength, int tOffsetDiagonal, int tLengthDiagonal) {
+    private void drawStarCorrectedForTests(Canvas tCanvas, Paint aPaint, Paint aFillPaint,
+                                           int aZoom, float aX, float aY, int tOffsetCenter, int tLength, int tOffsetDiagonal,
+                                           int tLengthDiagonal) {
         int tX = (int) aX;
         int tY = (int) aY;
 
@@ -3476,7 +3535,8 @@ public class RPCView extends View {
         tCanvas.drawPoint(tX, tY, aFillPaint);
     }
 
-    private void drawCorrectedLineWithStartPixelForTests(int aStartX, int aStartY, int aStopX, int aStopY, int aScaleFactor, Paint aPaint, Canvas tCanvas, Paint aFillPaint) {
+    private void drawCorrectedLineWithStartPixelForTests(int aStartX, int aStartY, int aStopX,
+                                                         int aStopY, int aScaleFactor, Paint aPaint, Canvas tCanvas, Paint aFillPaint) {
         drawLengthCorrectedLine(aStartX, aStartY, aStopX, aStopY, aScaleFactor, aPaint, tCanvas);
         tCanvas.drawPoint(aStartX, aStartY, aFillPaint);
     }

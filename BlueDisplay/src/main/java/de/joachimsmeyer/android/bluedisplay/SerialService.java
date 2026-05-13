@@ -50,18 +50,19 @@ public class SerialService {
     /*
      * The big receive ring buffer
      */
-    public static final int SIZE_OF_IN_BUFFER = 10 * 4096;
+    public static final int WORK_SIZE_OF_IN_BUFFER = 10 * 4096;
+
+    // usable size plus space for one times adding driver data
+    public static final int SIZE_OF_IN_BUFFER = WORK_SIZE_OF_IN_BUFFER + Math.max(BluetoothSerialSocket.BT_READ_MAX_SIZE, SerialInputOutputManager.BUFSIZ);
     public static final int MIN_MESSAGE_SIZE = 4; // was former 5 (data message with one byte), but this makes problems with receiving empty data blocks
     public static final int MIN_COMMAND_SIZE = 4; // command message with no parameter
 
     public volatile byte[] mBigReceiveBuffer = new byte[SIZE_OF_IN_BUFFER];
     /*
      * Current end of buffer content. Last content byte + 1. Ranges from SIZE_OF_IN_BUFFER -
-     * max(BluetoothSerialSocket.BT_READ_MAX_SIZE,SerialInputOutputManager.BUFSIZE) to SIZE_OF_IN_BUFFER
+     * max(BluetoothSerialSocket.BT_READ_MAX_SIZE, SerialInputOutputManager.BUFSIZE) to SIZE_OF_IN_BUFFER
      */
-    volatile int mInputBufferWrapAroundIndex = SIZE_OF_IN_BUFFER;
-
-    volatile int mReceiveBufferInIndex; // first free byte
+    volatile int mReceiveBufferInIndex; // Last content byte + 1 or first free byte
     volatile int mReceiveBufferOutIndex; // first unprocessed byte
 
     byte[] mDataBuffer = new byte[4096]; // Buffer to hold data for one data command
@@ -84,7 +85,7 @@ public class SerialService {
     public int mStatisticNumberOfReceivedChartCommands;
     public int mStatisticNumberOfSentBytes;
     public int mStatisticNumberOfSentCommands;
-    public int mStatisticNumberOfBufferWrapAround;
+    public int mStatisticNumberOfBufferOverflow;
     public long mStatisticNanoTimeForCommands;
     public long mStatisticNanoTimeForChart;
 
@@ -133,63 +134,80 @@ public class SerialService {
         resetStatistics();
     }
 
-    /*
-     * Called by BT or USB driver thread after reading up to 4096 bytes from input to buffer.
-     * Handle in mReceiveBufferInIndex, statistics, buffer overflow, buffer wrap around
+    /**
+     * Called by BT or USB driver thread after copying up to 4096 bytes from input to buffer.
+     * Handle mReceiveBufferInIndex, statistics, FUNCTION_SKIP_AND_CLEAR_DISPLAY and buffer overflow
      * and signal BlueDisplay.MESSAGE_UPDATE_VIEW.
+     *
      * @param aReadLength - The number of bytes copied into buffer by BT or USB driver thread.
-     *                      It is added to mReceiveBufferInIndex.
+     *                    It is added to mReceiveBufferInIndex.
      */
     void handleReceived(int aReadLength) {
-
         if (aReadLength == 0) {
             MyLog.w(LOG_TAG, "Read length = 0");
         } else {
-            int tOldInIndex = mReceiveBufferInIndex;
-            int tOutIndex = mReceiveBufferOutIndex;
             mStatisticNumberOfReceivedBytes += aReadLength;
+            int tOldReceiveBufferInIndex = mReceiveBufferInIndex;
             mReceiveBufferInIndex += aReadLength;
-            int tBytesInBuffer = getBufferBytesAvailable();
-            if (tOldInIndex < tOutIndex && mReceiveBufferInIndex > tOutIndex) {
-                // input index overtakes out index
-                MyLog.e(LOG_TAG, "Buffer overflow! New InIndex=" + mReceiveBufferInIndex
-                        + " is greater than OutIndex=" + tOutIndex + " after adding " + aReadLength + "bytes. Reset buffer now. Buffer size=" + SerialService.SIZE_OF_IN_BUFFER);
-                // Reset corrupted buffer
-                mReceiveBufferInIndex = 0;
-                mReceiveBufferOutIndex = 0;
-                mInputBufferWrapAroundIndex = SIZE_OF_IN_BUFFER;
-            }
 
-            // check for wrap around
-            if (mReceiveBufferInIndex >= SerialService.SIZE_OF_IN_BUFFER
-                    - Math.max(BluetoothSerialSocket.BT_READ_MAX_SIZE, SerialInputOutputManager.BUFSIZ)) {
-                /*
-                 * Not enough space after current mReceiveBufferInIndex for a complete reading of 4096 bytes from driver. Buffer
-                 * wrap around. Start new input at start of buffer and note new end of buffer in mInputBufferWrapAroundIndex
-                 */
-                mInputBufferWrapAroundIndex = mReceiveBufferInIndex;
-                mReceiveBufferInIndex = 0;
-                mStatisticNumberOfBufferWrapAround++;
-                if (MyLog.isVERBOSE()) {
-                    // Output length
-                    Log.v(LOG_TAG, "Buffer wrap around. Bytes in buffer=" + (mInputBufferWrapAroundIndex - tOutIndex));
+            /*
+             * Check for buffer end reached i.e. no space for a new complete reading of 4096 bytes from driver.
+             * -> shift new received data to start
+             */
+            if (mReceiveBufferInIndex >= SerialService.WORK_SIZE_OF_IN_BUFFER) {
+                int tUnprocessedDataLength = mReceiveBufferInIndex - mReceiveBufferOutIndex;
+                if (tUnprocessedDataLength < SerialService.WORK_SIZE_OF_IN_BUFFER) {
+                    /*
+                     * Delete already processed data at buffer start / compress buffer
+                     * mReceiveBufferOutIndex -> 0
+                     */
+                    System.arraycopy(mBigReceiveBuffer, mReceiveBufferOutIndex, mBigReceiveBuffer, 0, tUnprocessedDataLength);
+                    mReceiveBufferInIndex = tUnprocessedDataLength;
+                    mReceiveBufferOutIndex = 0;
+                    if (MyLog.isDEBUG()) {
+                        Log.d(LOG_TAG, "Buffer overflow -> compress it by " + tUnprocessedDataLength + " bytes");
+                    }
+                } else {
+                    /*
+                     * Here all data is unprocessed :-(
+                     * Check data for last FUNCTION_CLEAR_DISPLAY_AND_SKIP_OPTIONAL and skip content before
+                     * or keep only new data
+                     */
+                    int tSkipIndex = scanBufferForLastSkipAndClearDisplayCommand(mReceiveBufferOutIndex, tUnprocessedDataLength);
+                    if (tSkipIndex != 0) {
+                        // Here we have commands to skip
+                        mReceiveBufferInIndex = (mReceiveBufferOutIndex + tUnprocessedDataLength) - tSkipIndex;
+                        System.arraycopy(mBigReceiveBuffer, tSkipIndex, mBigReceiveBuffer, 0, mReceiveBufferInIndex);
+                        mReceiveBufferOutIndex = 0;
+                        if (MyLog.isINFO()) {
+                            // use Log..w to make it more visible
+                            Log.w(LOG_TAG, "Buffer overflow -> skip " + (tSkipIndex - mReceiveBufferOutIndex) + " bytes in buffer");
+                        }
+                    } else {
+                        // No skip command found, discard all except the new data.
+                        System.arraycopy(mBigReceiveBuffer, tOldReceiveBufferInIndex, mBigReceiveBuffer, 0, aReadLength);
+                        mReceiveBufferInIndex = aReadLength;
+                        mReceiveBufferOutIndex = 0;
+                        Log.w(LOG_TAG, "Buffer overflow -> keep only new data. Bytes in buffer=" + mReceiveBufferInIndex);
+                    }
+                    mStatisticNumberOfBufferOverflow++;
                 }
             }
-            if (MyLog.isVERBOSE()) {
-                // Output length
-                Log.v(LOG_TAG, "Read length=" + aReadLength + " BufferInIndex=" + mReceiveBufferInIndex);
-            }
+        }
+        if (MyLog.isVERBOSE()) {
+            // Output length
+            Log.v(LOG_TAG, "Read length=" + aReadLength + " BufferInIndex=" + mReceiveBufferInIndex);
+        }
 
-            if (mRequireUpdateViewMessage) {
-                mHandler.sendEmptyMessage(BlueDisplay.MESSAGE_UPDATE_VIEW);
-                mRequireUpdateViewMessage = false;
-                if (MyLog.isDEVELOPMENT_TESTING()) {
-                    Log.v(LOG_TAG, "Send MESSAGE_UPDATE_VIEW. Bytes in buffer=" + tBytesInBuffer);
-                }
-            } else {
-                if (MyLog.isDEVELOPMENT_TESTING() && MyLog.isVERBOSE()) {
-                    Log.v(LOG_TAG, "No required to send message MESSAGE_UPDATE_VIEW. Bytes in buffer=" + tBytesInBuffer);
-                }
+        if (mRequireUpdateViewMessage) {
+            mHandler.sendEmptyMessage(BlueDisplay.MESSAGE_UPDATE_VIEW);
+            mRequireUpdateViewMessage = false;
+            if (MyLog.isDEVELOPMENT_TESTING() && MyLog.isINFO()) {
+                Log.v(LOG_TAG, "Send MESSAGE_UPDATE_VIEW. Bytes in buffer=" + mReceiveBufferInIndex);
+            }
+        } else {
+            if (MyLog.isDEVELOPMENT_TESTING() && MyLog.isVERBOSE()) {
+                Log.v(LOG_TAG, "No required to send message MESSAGE_UPDATE_VIEW. Bytes in buffer=" + mReceiveBufferInIndex);
             }
         }
     }
@@ -206,7 +224,7 @@ public class SerialService {
         mStatisticNumberOfReceivedChartCommands = 0;
         mStatisticNumberOfSentBytes = 0;
         mStatisticNumberOfSentCommands = 0;
-        mStatisticNumberOfBufferWrapAround = 0;
+        mStatisticNumberOfBufferOverflow = 0;
         mStatisticNanoTimeForCommands = 0;
         mStatisticNanoTimeForChart = 0;
     }
@@ -222,7 +240,7 @@ public class SerialService {
         }
         tReturn += mStatisticNumberOfSentBytes + " bytes, " + mStatisticNumberOfSentCommands + " commands sent\n";
 
-        tReturn += "Buffer wrap arounds=" + mStatisticNumberOfBufferWrapAround + "\n";
+        tReturn += "Buffer overflows=" + mStatisticNumberOfBufferOverflow + "\n";
         int tInputBufferOutIndex = mReceiveBufferOutIndex;
         int tBytesInBuffer = getBufferBytesAvailable();
         String tSearchStateDataLengthToWaitForString = "";
@@ -707,7 +725,7 @@ public class SerialService {
     /*
      * internal state for searchCommand()
      */
-    // to signal searchCommand(), that searchState must be loaded, because a command with yet missing data was processed.
+// to signal searchCommand(), that searchState must be loaded, because a command with yet missing data was processed.
     private boolean searchStateMustBeLoaded = false;
 
     /*
@@ -733,10 +751,6 @@ public class SerialService {
         if (mReceiveBufferOutIndex == mReceiveBufferInIndex) {
             // buffer empty
             return 0;
-        }
-        // check for wrap around
-        if (mReceiveBufferInIndex < mReceiveBufferOutIndex) {
-            return (mInputBufferWrapAroundIndex - (mReceiveBufferOutIndex - mReceiveBufferInIndex));
         }
         return (mReceiveBufferInIndex - mReceiveBufferOutIndex);
     }
@@ -805,11 +819,6 @@ public class SerialService {
         // clear processed content
         mBigReceiveBuffer[mReceiveBufferOutIndex] = 0x00;
         mReceiveBufferOutIndex++;
-        if (mReceiveBufferOutIndex >= mInputBufferWrapAroundIndex) {
-            // do output wrap around and reset mInputBufferWrapAroundIndex
-            mInputBufferWrapAroundIndex = SIZE_OF_IN_BUFFER;
-            mReceiveBufferOutIndex = 0;
-        }
         return tByte;
     }
 
@@ -819,15 +828,15 @@ public class SerialService {
     public static final int RPCVIEW_DO_DRAW = 2; // The canvas should be rendered, and we have no more commands -> draw and request
     // new trigger.
     public static final int RPCVIEW_DO_DRAW_AND_CALL_AGAIN = 3; // The canvas should be rendered, but we may have more data, so try
-    // it again
+// it again
 
-    // after rendering -> call invalidate().
+// after rendering -> call invalidate().
 
     /**
      * Search the input buffer for valid commands and call interpretCommand() as long as there is data available.
      *
      * @param aRPCView pointer to RPCView object
-     * @return true if we have more data in the buffer but want to redraw now, e.g. after a FUNCTION_DRAW_CHART command.
+     * @return RPCVIEW_DO_... if we have more data in the buffer but want to redraw now, e.g. after a FUNCTION_DRAW_CHART command.
      */
     int searchCommand(RPCView aRPCView) {
         if (inBufferReadingLock || (mReceiveBufferOutIndex == mReceiveBufferInIndex)) {
@@ -1006,12 +1015,6 @@ public class SerialService {
                         if (tBufferBytesAvailable > 0) {
                             // We still have bytes in the buffer, so call again
                             tRetval = RPCVIEW_DO_DRAW_AND_CALL_AGAIN;
-                            if (tBufferBytesAvailable > 2000) {
-                                /*
-                                 * Scan for clear screen command and skip content until this clear screen command
-                                 */
-                                scanBufferForClearDisplayOptionalCommandAndSkip(tBufferBytesAvailable);
-                            }
                         }
                         // break in order to draw a chart directly
                         break;
@@ -1165,59 +1168,26 @@ public class SerialService {
     }
 
     /*
-     * Scan for next clear screen command. return true if found
+     * Scan for last FUNCTION_SKIP_AND_CLEAR_DISPLAY command and return its index.
      */
-    private void scanBufferForClearDisplayOptionalCommandAndSkip(int aBytesToScan) {
-        int tByteCount = 0;
-        // initialize
-        int tBufferIndex = mReceiveBufferOutIndex;
-        int tSyncInputBufferWrapAroundIndex = mInputBufferWrapAroundIndex;
+    private int scanBufferForLastSkipAndClearDisplayCommand(int aBufferStartScanIndex, int aBytesToScan) {
+        int tBufferScanIndex = aBufferStartScanIndex;
+        int tFoundIndex = 0;
 
-        while (tByteCount < (aBytesToScan - 1)) {
-            // store sync values
-            int tIndexOfSyncToken = tBufferIndex;
-            int tWrapAroundIndexOfSyncToken = tSyncInputBufferWrapAroundIndex;
-
-            // get byte
-            byte tByte = mBigReceiveBuffer[tBufferIndex];
-
-            // advance pointers for next byte
-            tByteCount++;
-            tBufferIndex++;
-            // wrap around
-            if (tBufferIndex >= mInputBufferWrapAroundIndex) {
-                tBufferIndex = 0;
-                // not totally threadsafe ;-)
-                tSyncInputBufferWrapAroundIndex = SIZE_OF_IN_BUFFER;
-            }
-
-            // double check
-            if (tByte == SYNC_TOKEN) {
-                tByte = mBigReceiveBuffer[tBufferIndex];
-                if (tByte == RPCView.FUNCTION_CLEAR_DISPLAY_OPTIONAL) {
-                    /*
-                     * Found clear display optional -> skip buffer content and change command to clear buffer.
-                     */
-                    mBigReceiveBuffer[tBufferIndex] = RPCView.FUNCTION_CLEAR_DISPLAY;
-                    mReceiveBufferOutIndex = tIndexOfSyncToken;
-                    mInputBufferWrapAroundIndex = tWrapAroundIndexOfSyncToken;
-                    Log.w(LOG_TAG, "Skip " + (tByteCount - 2)
-                            + " bytes until next CLEAR_DISPLAY_OPTIONAL command. Bytes in buffer==" + aBytesToScan + "->"
-                            + getBufferBytesAvailable());
-                    break;
-                }
-
-                // not the right command -> advance pointers for next byte
-                tBufferIndex++;
-                tByteCount++;
-                // wrap around
-                if (tBufferIndex >= mInputBufferWrapAroundIndex) {
-                    tBufferIndex = 0;
-                    // not totally threadsafe ;-)
-                    tSyncInputBufferWrapAroundIndex = SIZE_OF_IN_BUFFER;
+        while (tBufferScanIndex <= (aBufferStartScanIndex + aBytesToScan - 6)) {
+            // Check for FUNCTION_SKIP_AND_CLEAR_DISPLAY
+            if (mBigReceiveBuffer[tBufferScanIndex] == SYNC_TOKEN) {
+                if (((mBigReceiveBuffer[tBufferScanIndex + 1] == RPCView.FUNCTION_CLEAR_DISPLAY_AND_SKIP_OPTIONAL)
+                        && (mBigReceiveBuffer[tBufferScanIndex + 2] == 2) /* lsb of length 2 | one parameter */
+                        && (mBigReceiveBuffer[tBufferScanIndex + 3] == 0) /* msb of length 2 | one parameter */
+                        && (tBufferScanIndex == ((aBufferStartScanIndex + aBytesToScan) - 6))) || (mBigReceiveBuffer[tBufferScanIndex + 6] == SYNC_TOKEN) /* sync token of next command if next command*/
+                ) {
+                    tFoundIndex = tBufferScanIndex;
                 }
             }
+            tBufferScanIndex++;
         }
+        return tFoundIndex;
     }
 
     public static int convert2BytesToInt(byte aLSB, byte aMSB) {

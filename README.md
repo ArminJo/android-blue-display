@@ -5,7 +5,7 @@ Convert your smartphone into an Android remote touch display for your Arduino or
 
 [![Badge License: GPLv3](https://img.shields.io/badge/License-GPLv3-brightgreen.svg)](https://www.gnu.org/licenses/gpl-3.0)
  &nbsp; &nbsp;
-[![Badge Version](https://img.shields.io/github/v/release/ArminJo/android-blue-display?include_prereleases&color=yellow&logo=DocuSign&logoColor=white)](https://github.com/ArminJo/android-blue-display/releases/latest)
+[![Badge Version](https://img.shields.io/github/v/release/ArminJo/android-blue-display?color=yellow&logo=DocuSign&logoColor=white)](https://github.com/ArminJo/android-blue-display/releases/latest)
  &nbsp; &nbsp;
 [![Badge Commits since latest](https://img.shields.io/github/commits-since/ArminJo/android-blue-display/latest?color=yellow)](https://github.com/ArminJo/android-blue-display/commits/master)
  &nbsp; &nbsp;
@@ -140,6 +140,9 @@ RC car control display
 ![RC car control display](https://github.com/ArminJo/android-blue-display/blob/gh-pages/screenshots/RCCarControl.png)
 
 # Revision History
+### Version 5.1.0 / 23
+- Chart history is deleted on reconnect.
+
 ### Version 5.0.0 / 22
 - Voice output with Android TextToSpeech for Android > 5.0 (Lollipop).
 - Text Y and X position is upper left corner of character.

@@ -191,7 +191,7 @@ public class Sensors implements SensorEventListener {
     boolean isSensorEnabledAndEventValuesNoNoise(SensorEvent aEvent) {
         for (SensorInfo tSensorInfo : sAvailableSensorList) {
             Sensor tSensor = tSensorInfo.mSensor;
-            if (tSensor.getType() == tSensor.getType() && tSensorInfo.isActive) {
+            if (aEvent.sensor.getType() == tSensor.getType() && tSensorInfo.isActive) {
                 // Sensor found and active, do optional noise check
                 if (tSensorInfo.mFilterFlag != FLAG_SENSOR_SIMPLE_FILTER || tSensorInfo.checkIfValueIsNoNoise(aEvent)) {
                     return true;
@@ -203,8 +203,8 @@ public class Sensors implements SensorEventListener {
 
     @Override
     public void onSensorChanged(SensorEvent aEvent) {
-        int tSensorType = aEvent.sensor.getType();
         if (isSensorEnabledAndEventValuesNoNoise(aEvent)) {
+            int tSensorType = aEvent.sensor.getType();
             if (MyLog.isVERBOSE()) {
                 Log.v(LOG_TAG, "onSensorChanged sensorType=" + tSensorType);
             }

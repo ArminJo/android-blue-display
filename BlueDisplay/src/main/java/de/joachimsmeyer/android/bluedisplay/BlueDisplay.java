@@ -427,7 +427,8 @@ public class BlueDisplay extends Activity {
                     requestPermissions(new String[]{Manifest.permission.BLUETOOTH_CONNECT}, 1);
                 }
                 Intent enableIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
-                if (checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
+                        && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
                     MyLog.e(LOG_TAG, "Cannot activate Bluetooth, because no BLUETOOTH_CONNECT granted by user");
                     mInTryToEnableEnableBT = false;
                     finish();
