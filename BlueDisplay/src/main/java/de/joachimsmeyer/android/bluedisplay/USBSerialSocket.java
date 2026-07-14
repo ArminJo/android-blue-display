@@ -113,12 +113,12 @@ public class USBSerialSocket implements SerialInputOutputManager.Listener {
                     disconnect();
                 }
             } else if (aIntent.getAction().equals(ACTION_USB_ATTACHED)) {
-                MyLog.d(LOG_TAG, "USB attached received");
+                MyLog.d(LOG_TAG, "USB_attached intent received");
                 // Not needed to connect since the application is restarted (BlueDisplay OnCreate is called)
                 // MyLog.i(LOG_TAG, "USB attached received -> call connect()");
                 // connect(); // this leads to a read error
             } else if (aIntent.getAction().equals(ACTION_USB_DETACHED)) {
-                MyLog.d(LOG_TAG, "USB detached received");
+                MyLog.d(LOG_TAG, "USB_detached intent received");
                 // The driver get the detached info faster ( by IOException ), so this is redundant.
                 // MyLog.i(LOG_TAG, "USB detached received -> call disconnect()");
                 // disconnect();

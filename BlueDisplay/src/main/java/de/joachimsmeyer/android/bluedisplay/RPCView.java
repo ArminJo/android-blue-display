@@ -320,6 +320,7 @@ public class RPCView extends View {
      * Display functions
      */
     public final static int FUNCTION_CLEAR_DISPLAY = 0x10;
+    public final static int FUNCTION_CLEAR_DISPLAY_AREA = 0x13;
     public final static int FUNCTION_DRAW_DISPLAY = 0x11;
     public final static int FUNCTION_CLEAR_DISPLAY_AND_SKIP_OPTIONAL = 0x12; // used for skipping commands in buffer
     // with 3 parameter
@@ -780,7 +781,8 @@ public class RPCView extends View {
                             Thread.sleep(20);
                             tSumWaitDelay += 20;
                             if (tBytesInBuffer == mBlueDisplayContext.mSerialService.getBufferBytesAvailable() && tSumWaitDelay > 1000) {
-                                MyLog.e(LOG_TAG, "Read delay > 1000 ms for missing bytes. Maybe android is busy / rendering a lot? Bytes in buffer=" + mBlueDisplayContext.mSerialService.getBufferBytesAvailable());
+                                // number of bytes in buffer did not change here, so no data was received to complete the command
+                                MyLog.e(LOG_TAG, "Read delay > 1000 ms for missing bytes for command. Maybe android is busy / rendering a lot? Bytes in buffer=" + mBlueDisplayContext.mSerialService.getBufferBytesAvailable());
                                 tResult = SerialService.RPCVIEW_DO_NOTHING; // Just request new trigger
                             }
                         } catch (InterruptedException e) {
@@ -1781,11 +1783,20 @@ public class RPCView extends View {
 
                 case FUNCTION_CLEAR_DISPLAY_AND_SKIP_OPTIONAL:
                 case FUNCTION_CLEAR_DISPLAY:
+                case FUNCTION_CLEAR_DISPLAY_AREA:
                     // clear screen
-                    if (MyLog.isINFO()) {
-                        MyLog.i(LOG_TAG, "Clear screen color=" + shortToColorString(aParameters[0]));
-                    }
                     mCanvas.drawColor(shortToLongColor(aParameters[0]));
+                    if (aCommand == FUNCTION_CLEAR_DISPLAY_AREA) {
+                        if (MyLog.isINFO()) {
+                            MyLog.i(LOG_TAG, "Clear display with color=" + shortToColorString(aParameters[0]));
+                        }
+                    } else {
+                        if (MyLog.isINFO()) {
+                            MyLog.i(LOG_TAG, "Clear display with color=" + shortToColorString(aParameters[0]) + " and deactivate all buttons and sliders");
+                        }
+                        TouchButton.deactivateAllButtons();
+                        TouchSlider.deactivateAllSliders();
+                    }
                     break;
 
                 case FUNCTION_DRAW_PIXEL:
@@ -2514,14 +2525,14 @@ public class RPCView extends View {
     private void handleScreenOrientationFlags(int aClientRequestedOrientation) {
         if (aClientRequestedOrientation == FLAG_SCREEN_ORIENTATION_LOCK_UNLOCK) {
             // unlock is BlueDisplay code (0x00), set preferred Orientation here
-            mBlueDisplayContext.mOrientationisLockedByClient = false;
+            mBlueDisplayContext.mOrientationIsLockedByClient = false;
             mBlueDisplayContext.setScreenOrientation(mBlueDisplayContext.mPreferredScreenOrientation);
 
             if (MyLog.isINFO()) {
                 MyLog.i(LOG_TAG, "Unlocked screen orientation to preferred orientation=" + mBlueDisplayContext.getScreenOrientationRotationString(mBlueDisplayContext.mPreferredScreenOrientation));
             }
         } else {
-            mBlueDisplayContext.mOrientationisLockedByClient = true;
+            mBlueDisplayContext.mOrientationIsLockedByClient = true;
 
             // Convert BlueDisplay enumeration to Android one
             if (aClientRequestedOrientation == FLAG_SCREEN_ORIENTATION_LOCK_LANDSCAPE) {
@@ -2642,7 +2653,7 @@ public class RPCView extends View {
     }
 
     protected void resetAll() {
-        mBlueDisplayContext.mOrientationisLockedByClient = false;
+        mBlueDisplayContext.mOrientationIsLockedByClient = false;
         TouchButton.resetButtons(this);
         TouchSlider.resetSliders();
         Sensors.disableAllSensors();

@@ -48,7 +48,7 @@ public class SerialService {
     private static final String LOG_TAG = "SerialService";
 
     /*
-     * The big receive ring buffer
+     * The big receive-data ring buffer
      */
     public static final int WORK_SIZE_OF_IN_BUFFER = 10 * 4096;
 
@@ -85,6 +85,7 @@ public class SerialService {
     public int mStatisticNumberOfReceivedChartCommands;
     public int mStatisticNumberOfSentBytes;
     public int mStatisticNumberOfSentCommands;
+    public int mStatisticNumberOfBufferSkip;
     public int mStatisticNumberOfBufferOverflow;
     public long mStatisticNanoTimeForCommands;
     public long mStatisticNanoTimeForChart;
@@ -157,48 +158,54 @@ public class SerialService {
             if (mReceiveBufferInIndex >= SerialService.WORK_SIZE_OF_IN_BUFFER) {
                 int tUnprocessedDataLength = mReceiveBufferInIndex - mReceiveBufferOutIndex;
                 if (tUnprocessedDataLength < SerialService.WORK_SIZE_OF_IN_BUFFER) {
-                    /*
+                    if (MyLog.isINFO()) {
+                        // use Log.d to make it more visible
+                        Log.d(LOG_TAG, "Buffer full after reading " + aReadLength + " bytes -> remove processed data and keep " + tUnprocessedDataLength + " unprocessed bytes");
+                    }                    /*
                      * Delete already processed data at buffer start / compress buffer
                      * mReceiveBufferOutIndex -> 0
                      */
                     System.arraycopy(mBigReceiveBuffer, mReceiveBufferOutIndex, mBigReceiveBuffer, 0, tUnprocessedDataLength);
                     mReceiveBufferInIndex = tUnprocessedDataLength;
                     mReceiveBufferOutIndex = 0;
-                    if (MyLog.isDEBUG()) {
-                        Log.d(LOG_TAG, "Buffer overflow -> compress it by " + tUnprocessedDataLength + " bytes");
-                    }
-                } else {
-                    /*
-                     * Here all data is unprocessed :-(
-                     * Check data for last FUNCTION_CLEAR_DISPLAY_AND_SKIP_OPTIONAL and skip content before
-                     * or keep only new data
-                     */
-                    int tSkipIndex = scanBufferForLastSkipAndClearDisplayCommand(mReceiveBufferOutIndex, tUnprocessedDataLength);
-                    if (tSkipIndex != 0) {
-                        // Here we have commands to skip
-                        mReceiveBufferInIndex = (mReceiveBufferOutIndex + tUnprocessedDataLength) - tSkipIndex;
-                        System.arraycopy(mBigReceiveBuffer, tSkipIndex, mBigReceiveBuffer, 0, mReceiveBufferInIndex);
-                        mReceiveBufferOutIndex = 0;
-                        if (MyLog.isINFO()) {
-                            // use Log..w to make it more visible
-                            Log.w(LOG_TAG, "Buffer overflow -> skip " + (tSkipIndex - mReceiveBufferOutIndex) + " bytes in buffer");
-                        }
-                    } else {
-                        // No skip command found, discard all except the new data.
-                        System.arraycopy(mBigReceiveBuffer, tOldReceiveBufferInIndex, mBigReceiveBuffer, 0, aReadLength);
-                        mReceiveBufferInIndex = aReadLength;
-                        mReceiveBufferOutIndex = 0;
-                        Log.w(LOG_TAG, "Buffer overflow -> keep only new data. Bytes in buffer=" + mReceiveBufferInIndex);
-                    }
-                    mStatisticNumberOfBufferOverflow++;
                 }
             }
-        }
-        if (MyLog.isVERBOSE()) {
-            // Output length
-            Log.v(LOG_TAG, "Read length=" + aReadLength + " BufferInIndex=" + mReceiveBufferInIndex);
-        }
 
+            /*
+             * Check again, because we may have a new mReceiveBufferInIndex, which is still too big
+             */
+            if (mReceiveBufferInIndex >= SerialService.WORK_SIZE_OF_IN_BUFFER) {
+                int tUnprocessedDataLength = mReceiveBufferInIndex - mReceiveBufferOutIndex;
+                /*
+                 * Here all data is unprocessed :-(
+                 * Check data for last FUNCTION_CLEAR_DISPLAY_AND_SKIP_OPTIONAL and skip content before
+                 * or keep only new data
+                 */
+                int tSkipIndex = scanBufferForLastSkipAndClearDisplayCommand(mReceiveBufferOutIndex, tUnprocessedDataLength);
+                if (tSkipIndex != 0) {
+                    if (MyLog.isINFO()) {
+                        // use Log.w to make it more visible
+                        Log.w(LOG_TAG, "Buffer overflow -> skip " + (tSkipIndex - mReceiveBufferOutIndex) + " bytes in buffer until last clearDisplayAndSkipOptional");
+                    }
+                    // Here we have commands to skip
+                    mReceiveBufferInIndex = (mReceiveBufferOutIndex + tUnprocessedDataLength) - tSkipIndex;
+                    System.arraycopy(mBigReceiveBuffer, tSkipIndex, mBigReceiveBuffer, 0, mReceiveBufferInIndex);
+                    mStatisticNumberOfBufferSkip++;
+                } else {
+                    Log.w(LOG_TAG, "Buffer overflow -> remove all old and keep only new data of " + aReadLength + " bytes.");
+                    // No skip command found, discard all except the new data.
+                    mReceiveBufferInIndex = aReadLength;
+                    System.arraycopy(mBigReceiveBuffer, tOldReceiveBufferInIndex, mBigReceiveBuffer, 0, mReceiveBufferInIndex);
+                    mStatisticNumberOfBufferOverflow++;
+                }
+                mReceiveBufferOutIndex = 0;
+            }
+
+            if (MyLog.isVERBOSE()) {
+                // Output length
+                Log.v(LOG_TAG, "Read length=" + aReadLength + " BufferInIndex=" + mReceiveBufferInIndex);
+            }
+        }
         if (mRequireUpdateViewMessage) {
             mHandler.sendEmptyMessage(BlueDisplay.MESSAGE_UPDATE_VIEW);
             mRequireUpdateViewMessage = false;
@@ -224,6 +231,7 @@ public class SerialService {
         mStatisticNumberOfReceivedChartCommands = 0;
         mStatisticNumberOfSentBytes = 0;
         mStatisticNumberOfSentCommands = 0;
+        mStatisticNumberOfBufferSkip = 0;
         mStatisticNumberOfBufferOverflow = 0;
         mStatisticNanoTimeForCommands = 0;
         mStatisticNanoTimeForChart = 0;
@@ -240,7 +248,7 @@ public class SerialService {
         }
         tReturn += mStatisticNumberOfSentBytes + " bytes, " + mStatisticNumberOfSentCommands + " commands sent\n";
 
-        tReturn += "Buffer overflows=" + mStatisticNumberOfBufferOverflow + "\n";
+        tReturn += "Buffer overflows=" + mStatisticNumberOfBufferOverflow + ", buffer skips=" + mStatisticNumberOfBufferSkip + "\n";
         int tInputBufferOutIndex = mReceiveBufferOutIndex;
         int tBytesInBuffer = getBufferBytesAvailable();
         String tSearchStateDataLengthToWaitForString = "";
@@ -278,7 +286,7 @@ public class SerialService {
     /*
      * Signal connection to Arduino. First write a NOP command (12 * 0x00) for synchronizing, i.e. the client receive buffer is filled up once.
      * Then send EVENT_CONNECTION_BUILD_UP, which calls the connect and redraw callback, which were specified at initCommunication(), on the
-     * client. The very first call for USB sends 0 as current size values. In response we first get a NOP command for syncing the
+     * client. The very first call for USB sends 0 as current size values. In response, we first get a NOP command for syncing the
      * host, and then the commands of the client ConnectCallback() function.
      */
     void signalBlueDisplayConnection() {
@@ -442,7 +450,7 @@ public class SerialService {
         mSendByteBuffer[tIndex] = SYNC_TOKEN;
         if (MyLog.isINFO()) {
             String tType = RPCView.sActionMappings.get(tEventType);
-            // this does not respect the 24 hour setting of android :-(
+            // this does not respect the 24-hour setting of android :-(
             // DateFormat tDateFormat = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.MEDIUM, Locale.GERMAN);
             DateFormat tDateFormat = new SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.getDefault());
             tDateFormat.setTimeZone(TimeZone.getTimeZone("GMT")); // Print as GMT Time
@@ -506,7 +514,7 @@ public class SerialService {
     }
 
     /*
-     * send 16 bit button index, 16 bit filler, 32 bit callback address and 32 bit FLOAT value
+     * send 16 bit button index, 16-bit filler, 32-bit callback address and 32-bit FLOAT value
      */
     public void writeNumberCallbackEvent(int aEventType, int aCallbackAddress, float aValue) {
         int tEventLength = CALLBACK_DATA_SIZE;
@@ -586,7 +594,7 @@ public class SerialService {
     }
 
     /*
-     * send sensor event type and xyz 32 bit FLOAT values
+     * send sensor event type and xyz 32-bit FLOAT values
      */
     public void writeSensorEvent(int aEventType, float aValueX, float aValueY, float aValueZ) {
         int tEventLength = CALLBACK_DATA_SIZE;
@@ -705,7 +713,7 @@ public class SerialService {
         mSendByteBuffer[tIndex] = SYNC_TOKEN;
         if (MyLog.isINFO()) {
             String tType = RPCView.sActionMappings.get(tEventType);
-            // this does not respect the 24 hour setting of android :-(
+            // this does not respect the 24-hour setting of android :-(
             // DateFormat tDateFormat = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.MEDIUM, Locale.GERMAN);
             DateFormat tDateFormat = new SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.getDefault());
             tDateFormat.setTimeZone(TimeZone.getTimeZone("GMT")); // Print as GMT Time
@@ -846,7 +854,7 @@ public class SerialService {
             }
             return RPCVIEW_DO_NOTHING;
         }
-        int tRetval = RPCVIEW_DO_WAIT;
+        int tReturnValue = RPCVIEW_DO_WAIT;
         long tStartOfSearchCommand = System.nanoTime(); // We require it as nanos, because we compute the
         // mStatisticNanoTimeForCommands with it
         long tNanosForChart = 0;
@@ -864,7 +872,7 @@ public class SerialService {
          * While reprogramming the client we also interpret this data, since it is sent over the same Serial line. But in this case
          * we tend to misinterpreting the data, since it is not meant for BlueDisplay. Sometimes we misinterpret it as a command
          * with a big chunk of data, but the data will of course not be delivered. So we introduced a 2 seconds timeout for data to
-         * arrive. Otherwise we start a fresh scan.
+         * arrive. Otherwise, we start a fresh scan.
          */
         long tCurrentNanos = System.nanoTime();
         if (searchStateInputLengthToWaitFor > MIN_MESSAGE_SIZE && getBufferBytesAvailable() < searchStateInputLengthToWaitFor) {
@@ -921,7 +929,7 @@ public class SerialService {
                     if (MyLog.isVERBOSE()) {
                         MyLog.v(LOG_TAG, "Data: length=" + tLengthReceived + " at ptr=" + (mReceiveBufferOutIndex - 1));
                     }
-                    // Plausi
+                    // Plausibility check
                     if (tLengthReceived > mDataBuffer.length) {
                         MyLog.e(LOG_TAG,
                                 "DataLength of " + tLengthReceived + " wrong. Command=0x" + Integer.toHexString(tCommandReceived)
@@ -937,7 +945,7 @@ public class SerialService {
                         MyLog.v(LOG_TAG, "Command=0x" + Integer.toHexString(tCommandReceived) + " ParameterLength="
                                 + tLengthReceived + " at ptr=" + (mReceiveBufferOutIndex - 1));
                     }
-                    // Plausi
+                    // Plausibility check
                     if (tLengthReceived > MAX_NUMBER_OF_PARAMS * 2) {
                         MyLog.e(LOG_TAG, "ParameterLength of " + tLengthReceived + "/0x" + Integer.toHexString(tLengthReceived)
                                 + " wrong. Command=0x" + Integer.toHexString(tCommandReceived) + " Out=" + mReceiveBufferOutIndex);
@@ -1002,7 +1010,7 @@ public class SerialService {
                  */
                 searchStateInputLengthToWaitFor = MIN_COMMAND_SIZE;
                 aRPCView.interpretCommand(tCommand, mParameters, tParamsLength, mDataBuffer, null, tLengthReceived);
-                tRetval = RPCVIEW_DO_DRAW;
+                tReturnValue = RPCVIEW_DO_DRAW;
                 if (tCommand == RPCView.FUNCTION_DRAW_CHART || tCommand == RPCView.FUNCTION_DRAW_CHART_WITHOUT_DIRECT_RENDERING
                         || tCommand == RPCView.FUNCTION_DRAW_SCALED_CHART
                         || tCommand == RPCView.FUNCTION_DRAW_SCALED_CHART_WITHOUT_DIRECT_RENDERING) {
@@ -1014,7 +1022,7 @@ public class SerialService {
                         int tBufferBytesAvailable = getBufferBytesAvailable();
                         if (tBufferBytesAvailable > 0) {
                             // We still have bytes in the buffer, so call again
-                            tRetval = RPCVIEW_DO_DRAW_AND_CALL_AGAIN;
+                            tReturnValue = RPCVIEW_DO_DRAW_AND_CALL_AGAIN;
                         }
                         // break in order to draw a chart directly
                         break;
@@ -1027,7 +1035,7 @@ public class SerialService {
                     // Safety net, never seen this.
                     Log.w(LOG_TAG, "Return searchCommand() prematurely after 0.5 seconds");
                     // break after 0.5 seconds to enable drawing of the bitmap
-                    tRetval = RPCVIEW_DO_DRAW_AND_CALL_AGAIN;
+                    tReturnValue = RPCVIEW_DO_DRAW_AND_CALL_AGAIN;
                     break;
                 }
 
@@ -1063,7 +1071,7 @@ public class SerialService {
                     if (tCommand == RPCView.FUNCTION_DRAW_DISPLAY) {
                         if (getBufferBytesAvailable() > 0) {
                             // We still have bytes in the buffer so call again
-                            tRetval = RPCVIEW_DO_DRAW_AND_CALL_AGAIN;
+                            tReturnValue = RPCVIEW_DO_DRAW_AND_CALL_AGAIN;
                         }
                         // break in order to draw the bitmap as requested by FUNCTION_DRAW_DISPLAY
                         break;
@@ -1071,7 +1079,7 @@ public class SerialService {
 
                     if ((System.nanoTime() - tStartOfSearchCommand) > MAX_DRAW_INTERVAL_NANOS) {
                         Log.w(LOG_TAG, "Return searchCommand() prematurely after 0.5 seconds to enable display refresh");
-                        tRetval = RPCVIEW_DO_DRAW_AND_CALL_AGAIN;
+                        tReturnValue = RPCVIEW_DO_DRAW_AND_CALL_AGAIN;
                         break;
                     }
                 } else {
@@ -1107,7 +1115,7 @@ public class SerialService {
         inBufferReadingLock = false;
         mStatisticNanoTimeForCommands += System.nanoTime() - tStartOfSearchCommand - tNanosForChart;
         mStatisticNanoTimeForChart += tNanosForChart;
-        return tRetval;
+        return tReturnValue;
     }
 
     /*
@@ -1119,7 +1127,7 @@ public class SerialService {
             tByte = getByteFromBuffer();
             if (tByte != SYNC_TOKEN) {
                 if (tByte >= ' ') { // byte us signed!
-                    // If ASCII append it to string buffer
+                    // If ASCII, then append it to string buffer
                     mSerialPrintBuffer[mSerialPrintBufferInIndex++] = tByte;
                     if (mSerialPrintBufferInIndex == SIZE_OF_SERIAL_PRINT_BUFFER) {
                         mSerialPrintBufferInIndex--;

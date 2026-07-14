@@ -45,8 +45,8 @@
  * - OnCreate of RPCView
  *   - create initial canvas with white background covering 80% of screen space.
  * - Create Sensors
- * - Try connect USB
- * - Autoconnect Bluetooth
+ * - Try to connect USB
+ * - Auto connect Bluetooth
  *   - Connect thread calls connect() and waits. On success it starts connected thread.
  *   - Connected thread calls resetAll() waits 200ms, reads old data from BT input, resets buffer and signals connection to Client.
  *   #### Connected thread forever reads BT input into buffer and calls handleReceived() of SerialService.
@@ -188,8 +188,8 @@ public class BlueDisplay extends Activity {
     private String mAutoConnectMacAddressFromPreferences; // MAC address for auto connect at startup
     // to be displayed in preferences dialog
     private String mAutoConnectDeviceNameFromPreferences; // Device name for auto connect at startup
-    private String mMacAddressToConnect; // MAC address for which an connect is tried
-    private String mDeviceNameToConnect; // Device name for which an connect is tried
+    private String mMacAddressToConnect; // MAC address for which connect is tried
+    private String mDeviceNameToConnect; // Device name for which connect is tried
     private String mMacAddressConnected; // MAC address of the current connected device
     // to be displayed in DeviceListActivity
     private String mBluetoothDeviceNameConnected; // Device name of the current connected Bluetooth device
@@ -215,12 +215,12 @@ public class BlueDisplay extends Activity {
      * Not used by Blue Display internally
      */
     protected int mCurrentScreenOrientation;
-    protected boolean mOrientationisLockedByClient = false;
+    protected boolean mOrientationIsLockedByClient = false;
 
     /*
      * Surface.Rotation is 1 for 0 degree, 1 for 90 degree, 2 for 180 degree and 3 for 270 degree from default orientation,
      * which is Portrait for mobiles and Landscape for Tablets.
-     * Thus rotation is 1 or 0 for landscape (usb connector right) depending on default orientation of model
+     * Thus, rotation is 1 or 0 for landscape (usb connector right) depending on default orientation of model
      * On my mobile, 0 = Portrait, 1 = Landscape, 2 = reverse Portrait, 3 = reverse Landscape
      *
      * = getWindowManager().getDefaultDisplay().getRotation()
@@ -285,7 +285,7 @@ public class BlueDisplay extends Activity {
                  * angle 180 is Surface.ROTATION_180<br>
                  * angle 270 is Surface.ROTATION_90
                  */
-                if (!mOrientationisLockedByClient) {
+                if (!mOrientationIsLockedByClient) {
                     mCurrentRotation = getWindowManager().getDefaultDisplay().getRotation();
                     if (mLastRotation != mCurrentRotation) {
                         if (MyLog.isINFO()) {
@@ -324,9 +324,6 @@ public class BlueDisplay extends Activity {
         mUsbManager = (UsbManager) getSystemService(Context.USB_SERVICE);
         mUSBSerialSocket = new USBSerialSocket(this, mSerialService, mHandlerForGUIRequests, mUsbManager);
         mUSBSerialSocket.connect();
-        // if (mUSBSerialSocket.mIsConnected) {
-        // setMenuItemConnect(true);
-        // }
 
         if (!mUSBDeviceAttached) {
             MyLog.i(LOG_TAG, "No USB device connected -> switch to Bluetooth");
@@ -416,7 +413,7 @@ public class BlueDisplay extends Activity {
     public synchronized void onResume() {
         super.onResume();
         if (MyLog.isINFO()) {
-            Log.i(LOG_TAG, "+ ON RESUME +");
+            MyLog.i(LOG_TAG, "+ ON RESUME +");
         }
 
         if (!mInTryToEnableEnableBT) {
@@ -439,7 +436,7 @@ public class BlueDisplay extends Activity {
             }
         }
         boolean tOldAutoConnectBTValue = mAutoConnectBT; // mAutoConnectBT is overwritten by readPreferences()
-        if (mOrientationisLockedByClient) {
+        if (mOrientationIsLockedByClient) {
             // keep value of mPreferredScreenOrientation, which is overwritten by readPreferences()
             int tOldPreferredScreenOrientation = mPreferredScreenOrientation;
             readPreferences();
@@ -600,7 +597,7 @@ public class BlueDisplay extends Activity {
         mCurrentRotation = getWindowManager().getDefaultDisplay().getRotation();
         if (MyLog.isINFO()) {
             Log.i(LOG_TAG, "Orientation is now: " + getScreenOrientationRotationString(aNewScreenOrientation) + "="
-                    + aNewScreenOrientation + " | " + (90 * mCurrentRotation) + " degrees");
+                    + aNewScreenOrientation + ", " + (90 * mCurrentRotation) + " degrees");
         }
         // really set orientation for device
         setRequestedOrientation(mCurrentScreenOrientation);
@@ -772,7 +769,7 @@ public class BlueDisplay extends Activity {
                 case MESSAGE_USB_CONNECT:
                     /*
                      * called by USBSerialSocket after connect -> set window to always on, reset button and slider and show toast
-                     * Seems too late for the initial events, the are not sent because connect flag is not yet true
+                     * Seems too late for the initial events, they are not sent because connect flag is not yet true
                      */
                     if (MyLog.isDEBUG()) {
                         Log.d(LOG_TAG, "MESSAGE_USB_CONNECT received");
@@ -816,7 +813,7 @@ public class BlueDisplay extends Activity {
                     Toast.makeText(getApplicationContext(), getString(R.string.toast_connection_lost) + " USB", Toast.LENGTH_SHORT)
                             .show();
                     // reset eventually locked orientation
-                    mOrientationisLockedByClient = false;
+                    mOrientationIsLockedByClient = false;
                     setScreenOrientation(mPreferredScreenOrientation);
                     // set window to normal (not persistent) state
                     getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
@@ -838,7 +835,7 @@ public class BlueDisplay extends Activity {
                     Toast.makeText(getApplicationContext(),
                             getString(R.string.toast_connection_lost) + " " + mBluetoothDeviceNameConnected, Toast.LENGTH_SHORT).show();
                     // reset eventually locked orientation
-                    mOrientationisLockedByClient = false;
+                    mOrientationIsLockedByClient = false;
                     setScreenOrientation(mPreferredScreenOrientation);
                     // set window to normal (not persistent) state
                     getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
