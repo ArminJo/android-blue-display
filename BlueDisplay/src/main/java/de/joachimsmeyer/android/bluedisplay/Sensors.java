@@ -29,8 +29,7 @@
  *  If FLAG_SENSOR_SIMPLE_FILTER is set on sensor registering, then sensor values are sent via BT only if values changed.
  *  To avoid noise (event value is solely switching between 2 values), values are skipped too if they are equal last or second last value.
  *
- *  Copyright (C) 2015-2020  Armin Joachimsmeyer
- *  armin.joachimsmeyer@gmail.com
+ *  Copyright (C) 2015-2026  Armin Joachimsmeyer
  *
  * 	This file is part of BlueDisplay.
  *  BlueDisplay is free software: you can redistribute it and/or modify

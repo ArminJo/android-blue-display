@@ -140,15 +140,16 @@ RC car control display
 ![RC car control display](https://github.com/ArminJo/android-blue-display/blob/gh-pages/screenshots/RCCarControl.png)
 
 # Revision History
-### Version 5.1.0 / 23
+### Version 5.1.0 / 24
 - Chart history is deleted on reconnect.
+- Improved BT_CONNECT permission request.
 
-### Version 5.0.0 / 22
+### Version 5.0.0 / 23
 - Voice output with Android TextToSpeech for Android > 5.0 (Lollipop).
 - Text Y and X position is upper left corner of character.
 - Screen orientation flags now also possible in setFlagsAndSize().
 
-### Version 4.4.1 / 21
+### Version 4.4.1 / 22
 - Targeted Android 14 / 34
 - Improved Chart and Slider support, minor bug fixes and improvements.
 

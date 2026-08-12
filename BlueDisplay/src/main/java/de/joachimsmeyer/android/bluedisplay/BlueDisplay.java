@@ -5,8 +5,7 @@
  *     It also implements basic GUI elements as buttons and sliders.
  *     GUI callback, touch and sensor events are sent back to Arduino.
  *
- *  Copyright (C) 2014-2019  Armin Joachimsmeyer
- *  armin.joachimsmeyer@gmail.com
+ *  Copyright (C) 2014-2026  Armin Joachimsmeyer
  *
  *  This file is part of BlueDisplay.
  *  BlueDisplay is free software: you can redistribute it and/or modify

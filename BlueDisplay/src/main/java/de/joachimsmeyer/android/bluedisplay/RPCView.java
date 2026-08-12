@@ -5,8 +5,7 @@
  * 	It also implements basic GUI elements as buttons and sliders.
  * 	It sends touch or GUI callback events over Bluetooth back to Arduino.
  *
- *  Copyright (C) 2014-2020  Armin Joachimsmeyer
- *  armin.joachimsmeyer@gmail.com
+ *  Copyright (C) 2014-2026  Armin Joachimsmeyer
  *
  * 	This file is part of BlueDisplay.
  *  BlueDisplay is free software: you can redistribute it and/or modify
@@ -31,9 +30,11 @@ package de.joachimsmeyer.android.bluedisplay;
 import static android.speech.tts.TextToSpeech.LANG_NOT_SUPPORTED;
 import static android.speech.tts.TextToSpeech.SUCCESS;
 
+import android.Manifest;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.pm.ActivityInfo;
+import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -932,11 +933,15 @@ public class RPCView extends View {
         } else {
             if (mBlueDisplayContext.mBTSerialSocket != null) {
                 if (mBlueDisplayContext.mBTSerialSocket.getState() == BluetoothSerialSocket.STATE_NONE && !mDeviceListActivityLaunched) {
-                    /*
-                     * Launch the DeviceListActivity to choose device if state is "not connected"
-                     */
-                    mBlueDisplayContext.launchDeviceListActivity();
-                    mDeviceListActivityLaunched = true;
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && mBlueDisplayContext.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_DENIED) {
+                        mBlueDisplayContext.requestPermissions(new String[]{Manifest.permission.BLUETOOTH_CONNECT}, 1);
+                    } else {
+                        /*
+                         * Launch the DeviceListActivity to choose device if state is "not connected" AND we have the permission
+                         */
+                        mBlueDisplayContext.launchDeviceListActivity();
+                        mDeviceListActivityLaunched = true;
+                    }
                 }
             }
             if ((mBlueDisplayContext.mUSBDeviceAttached && mBlueDisplayContext.mUSBSerialSocket.mIsConnected) || (mBlueDisplayContext.mBTSerialSocket != null && mBlueDisplayContext.mBTSerialSocket.getState() == BluetoothSerialSocket.STATE_CONNECTED)) {

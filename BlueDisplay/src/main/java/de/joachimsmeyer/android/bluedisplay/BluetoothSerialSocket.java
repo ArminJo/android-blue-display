@@ -5,10 +5,9 @@
  *     It also implements basic GUI elements as buttons and sliders.
  *     It sends touch or GUI callback events over Bluetooth back to Arduino.
  * 
- *  Copyright (C) 2014-2020  Armin Joachimsmeyer
- *  armin.joachimsmeyer@gmail.com
- *  
- *     This file is part of BlueDisplay.
+ *  Copyright (C) 2014-2026  Armin Joachimsmeyer
+ *
+ *  This file is part of BlueDisplay.
  *  BlueDisplay is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
  *  the Free Software Foundation, either version 3 of the License, or
@@ -28,6 +27,7 @@
 
 package de.joachimsmeyer.android.bluedisplay;
 
+import android.annotation.SuppressLint;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothSocket;
 import android.os.Bundle;
@@ -141,6 +141,7 @@ public class BluetoothSerialSocket {
      * @param device
      *            The BluetoothDevice that has been connected
      */
+    @SuppressLint("MissingPermission")
     public synchronized void connected(BluetoothSocket socket, BluetoothDevice device) {
         // Cancel the thread that completed the connection
         if (mConnectThread != null) {
@@ -207,7 +208,7 @@ public class BluetoothSerialSocket {
                 return;
             r = mConnectedThread;
         }
-        // Perform the write unsynchronized
+        // Perform write unsynchronized
         r.sendEvent(aEventDataBuffer, aEventDataLength);
     }
 
@@ -253,7 +254,7 @@ public class BluetoothSerialSocket {
             BluetoothSocket tSocket = null;
             String tSocketType = "insecure";
             /*
-             * try with high priority to avoid long breaks which seems to crash the BT driver if to much data was received e.g. in
+             * try with high priority to avoid long breaks which seems to crash the BT driver if too much data was received e.g. in
              * the Arduino DSO example
              */
             setPriority(MAX_PRIORITY);
@@ -274,6 +275,7 @@ public class BluetoothSerialSocket {
             mmSocket = tSocket;
         }
 
+        @SuppressLint("MissingPermission")
         public void run() {
             if (MyLog.isINFO()) {
                 Log.i(LOG_TAG, "run mConnectThread");
@@ -362,7 +364,7 @@ public class BluetoothSerialSocket {
              */
             try {
                 try {
-                    // 50 is to little, 100 works sometimes, 200 works reliable.
+                    // 50 is too little, 100 works sometimes, 200 works reliable.
                     Thread.sleep(200);
                 } catch (InterruptedException e) {
                     // Just do nothing
@@ -390,7 +392,7 @@ public class BluetoothSerialSocket {
              */
             mSerialService.resetReceiveBuffer();
             mSerialService.resetStatistics();
-            // signal connection to arduino
+            // signal connection to Arduino
             mSerialService.signalBlueDisplayConnection();
 
             /*
@@ -408,7 +410,7 @@ public class BluetoothSerialSocket {
                      * the priority to maximum does not change the random high values. Waiting for 20 or 50 ms to ensure data is
                      * still received, also does not change anything. What is strange that the amount of data received after the
                      * long break is not the maximum. Only the next or even later reads then returns the maximum bytes. It is
-                     * independent from using secure or insecure connection.
+                     * independent of using secure or insecure connection.
                      */
                     tReadLength = mmInStream.read(mSerialService.mBigReceiveBuffer, mSerialService.mReceiveBufferInIndex,
                             BT_READ_MAX_SIZE);

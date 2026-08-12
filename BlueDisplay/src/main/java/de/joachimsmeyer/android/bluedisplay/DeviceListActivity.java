@@ -17,11 +17,13 @@
 package de.joachimsmeyer.android.bluedisplay;
 
 import android.Manifest;
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.content.Intent;
 import android.os.Build;
+import android.os.Build.VERSION_CODES;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
@@ -50,7 +52,6 @@ public class DeviceListActivity extends Activity {
     public static final String EXTRA_DEVICE_ADDRESS = "device_address";
 
     // Member fields
-    private BluetoothAdapter mBtAdapter;
     Set<BluetoothDevice> mPairedDevices;
 
     @Override
@@ -60,7 +61,7 @@ public class DeviceListActivity extends Activity {
             Log.i(LOG_TAG, "+++ ON CREATE +++");
         }
 
-        // Setup the window
+        // Set up the window
         setContentView(R.layout.device_list);
 
         // Set result CANCELED in case the user backs out
@@ -107,10 +108,7 @@ public class DeviceListActivity extends Activity {
         pairedListView.setOnItemClickListener(mDeviceClickListener);
 
         // Get the local Bluetooth adapter
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            requestPermissions(new String[]{Manifest.permission.BLUETOOTH_CONNECT}, 1);
-        }
-        mBtAdapter = BluetoothAdapter.getDefaultAdapter();
+        BluetoothAdapter tBtAdapter = BluetoothAdapter.getDefaultAdapter();
 
         // with this code I always have no permission, without this code I am asked at the first run time for the permission.
         // Tested on 6.0 and
@@ -122,7 +120,7 @@ public class DeviceListActivity extends Activity {
 //            }
 //        }
         // Get a set of currently paired devices
-        mPairedDevices = mBtAdapter.getBondedDevices();
+        mPairedDevices = tBtAdapter.getBondedDevices();
 
         long tCurrentTimestampMillis = System.currentTimeMillis();
         if (mPairedDevices.size() == 1
@@ -141,7 +139,7 @@ public class DeviceListActivity extends Activity {
             setResult(Activity.RESULT_OK, intent);
             finish();
 
-        } else if (mPairedDevices.size() > 0) {
+        } else if (!mPairedDevices.isEmpty()) {
             // If there are paired devices, add each one to the ArrayAdapter
             findViewById(R.id.title_paired_devices).setVisibility(View.VISIBLE);
             /*
@@ -175,11 +173,12 @@ public class DeviceListActivity extends Activity {
 
     // The on-click listener for all devices in the ListViews
     private final OnItemClickListener mDeviceClickListener = new OnItemClickListener() {
+        @SuppressLint("MissingPermission")
         public void onItemClick(AdapterView<?> av, View v, int arg2, long arg3) {
             String noDevicesPaired = getResources().getText(R.string.none_paired).toString();
             String noDevicesFound = getResources().getText(R.string.none_found).toString();
 
-            // Cancel discovery because it's costly and we're about to connect
+            // Cancel discovery because it's costly, and we're about to connect
             //if (mBtAdapter.isDiscovering()) {
             //    mBtAdapter.cancelDiscovery();
             //}

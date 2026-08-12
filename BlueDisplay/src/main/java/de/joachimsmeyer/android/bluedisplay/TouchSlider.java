@@ -5,10 +5,9 @@
  *     It also implements basic GUI elements as buttons and sliders.
  *     It sends touch or GUI callback events over Bluetooth back to Arduino.
  *
- *  Copyright (C) 2014-2020  Armin Joachimsmeyer
- *  armin.joachimsmeyer@gmail.com
+ *  Copyright (C) 2014-2026  Armin Joachimsmeyer
  *
- *     This file is part of BlueDisplay.
+ *  This file is part of BlueDisplay.
  *  BlueDisplay is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
  *  the Free Software Foundation, either version 3 of the License, or
@@ -35,6 +34,7 @@ import android.graphics.Color;
 import java.util.ArrayList;
 import java.util.List;
 
+@SuppressWarnings("SuspiciousNameCombination")
 public class TouchSlider {
 
     private static final String LOG_TAG = "SL";
@@ -175,7 +175,7 @@ public class TouchSlider {
     }
 
     void initSlider(final RPCView aRPCView, final int aPositionX, final int aPositionY, final int aBarWidth, final int aBarLength,
-                    final int aThresholdValue, final int aInitalValue, final int aSliderColor, final int aBarColor, final int aOptions,
+                    final int aThresholdValue, final int aInitialValue, final int aSliderColor, final int aBarColor, final int aOptions,
                     final int aOnChangeHandlerCallbackAddress) {
 
         mBarThresholdColor = sDefaultThresholdColor;
@@ -202,9 +202,9 @@ public class TouchSlider {
             mOptions |= FLAG_SLIDER_IS_INVERSE;
         }
 
-        mCurrentValue = aInitalValue;
-        if (aInitalValue < 0) {
-            mCurrentValue = -aInitalValue;
+        mCurrentValue = aInitialValue;
+        if (aInitialValue < 0) {
+            mCurrentValue = -aInitialValue;
         }
         mThresholdValue = aThresholdValue;
         if (aThresholdValue < 0) {
@@ -475,14 +475,16 @@ public class TouchSlider {
         }
         // aTextLayoutInfo.mPositionsInvalid is true here
 
-        int tMargin = aTextLayoutInfo.mMargin;
-        if (aTextLayoutInfo.mTakeDefaultMargin) {
+        int tMargin;
+        if (!aTextLayoutInfo.mTakeDefaultMargin) {
+            tMargin = aTextLayoutInfo.mMargin;
+        } else {
             if (isValuePosition) {
                 // Position for value
                 if (mCaption == null || aTextLayoutInfo.mAbove != mCaptionLayoutInfo.mAbove) {
                     tMargin = mDefaultValueMargin; // not the same Y position as caption
                 } else {
-                    // 1 default margin for caption but only half marging between caption and value,
+                    // 1 default margin for caption but only half margin between caption and value,
                     // since below the caption text, we have an almost empty font decent
                     tMargin = mCaptionLayoutInfo.mSize + (mDefaultValueMargin) + (mDefaultValueMargin / 2);
                 }
@@ -658,7 +660,7 @@ public class TouchSlider {
      */
     static void deactivateAllSliders() {
         // check needed, because method is called also by setFlags()
-        if (sSliderList != null && sSliderList.size() > 0) {
+        if (sSliderList != null && !sSliderList.isEmpty()) {
             for (TouchSlider tSlider : sSliderList) {
                 if (tSlider != null) {
                     tSlider.mIsActive = false;
@@ -675,7 +677,7 @@ public class TouchSlider {
         String tSliderCaption = "";
 
         /*
-         * Plausi
+         * Plausibility
          */
         if (aCommand != FUNCTION_SLIDER_ACTIVATE_ALL && aCommand != FUNCTION_SLIDER_DEACTIVATE_ALL
                 && aCommand != FUNCTION_SLIDER_GLOBAL_SETTINGS) {
@@ -714,8 +716,8 @@ public class TouchSlider {
         }
 
         try {
+            int tSubcommand;
             switch (aCommand) {
-
                 case FUNCTION_SLIDER_ACTIVATE_ALL:
                     if (MyLog.isINFO()) {
                         MyLog.i(LOG_TAG, "Activate all sliders");
@@ -798,7 +800,8 @@ public class TouchSlider {
                     break;
 
                 case FUNCTION_SLIDER_SETTINGS:
-                    int tSubcommand = aParameters[1];
+                    tSubcommand = aParameters[1];
+                    String tFunction = "";
                     switch (tSubcommand) {
                         case SUBFUNCTION_SLIDER_SET_COLOR_THRESHOLD:
                             tSlider.mBarThresholdColor = RPCView.shortToLongColor(aParameters[2]);
@@ -826,7 +829,6 @@ public class TouchSlider {
 
                         case SUBFUNCTION_SLIDER_SET_VALUE_AND_DRAW_BAR:
                         case SUBFUNCTION_SLIDER_SET_VALUE:
-                            String tFunction = "";
                             tSlider.mCurrentValue = aParameters[2];
                             if (tSubcommand == SUBFUNCTION_SLIDER_SET_VALUE_AND_DRAW_BAR) {
                                 tSlider.drawBar();

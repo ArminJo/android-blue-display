@@ -5,8 +5,7 @@
  * 	It also implements basic GUI elements as buttons and sliders.
  * 	It sends touch or GUI callback events over Bluetooth back to Arduino.
  *
- *  Copyright (C) 2019-2020  Armin Joachimsmeyer
- *  armin.joachimsmeyer@gmail.com
+ *  Copyright (C) 2019-2026  Armin Joachimsmeyer
  *
  * 	This file is part of BlueDisplay.
  *  BlueDisplay is free software: you can redistribute it and/or modify
@@ -30,6 +29,7 @@ package de.joachimsmeyer.android.bluedisplay;
 
 import static android.app.PendingIntent.FLAG_MUTABLE;
 
+import android.annotation.SuppressLint;
 import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -48,6 +48,7 @@ import com.hoho.android.usbserial.util.SerialInputOutputManager;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.Executors;
 
 public class USBSerialSocket implements SerialInputOutputManager.Listener {
@@ -60,7 +61,7 @@ public class USBSerialSocket implements SerialInputOutputManager.Listener {
 
     UsbManager mUsbManager;
 
-    private static final int WRITE_WAIT_MILLIS = 2000; // 0 blocked infinitely on unprogrammed arduino
+    private static final int WRITE_WAIT_MILLIS = 2000; // 0 blocked infinitely on unprogrammed Arduino
 
     private final BlueDisplay mBlueDisplayContext;
     SerialService mSerialService;
@@ -102,26 +103,28 @@ public class USBSerialSocket implements SerialInputOutputManager.Listener {
     final BroadcastReceiver mUSBReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context aContext, Intent aIntent) {
-            if (aIntent.getAction().equals(ACTION_USB_PERMISSION)) {
-                boolean granted = aIntent.getExtras().getBoolean(UsbManager.EXTRA_PERMISSION_GRANTED);
-                if (granted) {
-                    // User accepted our USB connection. Try to open the device as a serial port
-                    MyLog.i(LOG_TAG, "Got user USB permission -> open device now.");
-                    openUSBDevice();
-                } else {
-                    MyLog.i(LOG_TAG, "Got no user USB permission :-(");
-                    disconnect();
+            if (aIntent != null) {
+                if (Objects.equals(aIntent.getAction(), ACTION_USB_PERMISSION)) {
+                    boolean granted = aIntent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false);
+                    if (granted) {
+                        // User accepted our USB connection. Try to open the device as a serial port
+                        MyLog.i(LOG_TAG, "Got user USB permission -> open device now.");
+                        openUSBDevice();
+                    } else {
+                        MyLog.i(LOG_TAG, "Got no user USB permission :-(");
+                        disconnect();
+                    }
+                } else if (Objects.equals(aIntent.getAction(), ACTION_USB_ATTACHED)) {
+                    MyLog.d(LOG_TAG, "USB_attached intent received");
+                    // Not needed to connect since the application is restarted (BlueDisplay OnCreate is called)
+                    // MyLog.i(LOG_TAG, "USB attached received -> call connect()");
+                    // connect(); // this leads to a read error
+                } else if (Objects.equals(aIntent.getAction(), ACTION_USB_DETACHED)) {
+                    MyLog.d(LOG_TAG, "USB_detached intent received");
+                    // The driver get the detached info faster ( by IOException ), so this is redundant.
+                    // MyLog.i(LOG_TAG, "USB detached received -> call disconnect()");
+                    // disconnect();
                 }
-            } else if (aIntent.getAction().equals(ACTION_USB_ATTACHED)) {
-                MyLog.d(LOG_TAG, "USB_attached intent received");
-                // Not needed to connect since the application is restarted (BlueDisplay OnCreate is called)
-                // MyLog.i(LOG_TAG, "USB attached received -> call connect()");
-                // connect(); // this leads to a read error
-            } else if (aIntent.getAction().equals(ACTION_USB_DETACHED)) {
-                MyLog.d(LOG_TAG, "USB_detached intent received");
-                // The driver get the detached info faster ( by IOException ), so this is redundant.
-                // MyLog.i(LOG_TAG, "USB detached received -> call disconnect()");
-                // disconnect();
             }
         }
     };
@@ -153,7 +156,8 @@ public class USBSerialSocket implements SerialInputOutputManager.Listener {
                 MyLog.i(LOG_TAG,
                         "Request user USB permission for VID=" + mUSBDevice.getVendorId() + " ProductId="
                                 + mUSBDevice.getProductId());
-                PendingIntent tUSBPermissionIntent = PendingIntent.getBroadcast(mBlueDisplayContext, 0, new Intent(
+                // FLAG_IMMUTABLE crashes on my android 5.1. tablet
+                @SuppressLint("MutableImplicitPendingIntent") PendingIntent tUSBPermissionIntent = PendingIntent.getBroadcast(mBlueDisplayContext, 0, new Intent(
                         ACTION_USB_PERMISSION), FLAG_MUTABLE);
                 mUsbManager.requestPermission(mUSBDevice, tUSBPermissionIntent);
             }
@@ -179,7 +183,7 @@ public class USBSerialSocket implements SerialInputOutputManager.Listener {
                 mUSBSerialPort.open(mUSBDeviceConnection); // Here I got IOException "Expected 0xee bytes, but get 0xa8 [init#6]"
                 mUSBSerialPort.setParameters(115200, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
 
-                mUSBSerialPort.setDTR(false); // No reset for arduino on app start!
+                mUSBSerialPort.setDTR(false); // No reset for Arduino on app start!
                 mUSBSerialPort.setRTS(true); // Channel readiness on some boards
                 mIoManager = new SerialInputOutputManager(mUSBSerialPort, this);
                 Executors.newSingleThreadExecutor().submit(mIoManager);
@@ -191,7 +195,7 @@ public class USBSerialSocket implements SerialInputOutputManager.Listener {
                 // reset flags, buttons, sliders and sensors (and log this :-))
                 mBlueDisplayContext.mRPCView.resetAll();
                 try {
-                    // 50 is to little, 100 works sometimes, 200 works reliable.
+                    // 50 is too little, 100 works sometimes, 200 works reliable.
                     Thread.sleep(200);
                 } catch (InterruptedException e) {
                     // Just do nothing

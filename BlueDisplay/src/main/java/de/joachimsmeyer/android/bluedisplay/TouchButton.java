@@ -5,10 +5,9 @@
  *     It also implements basic GUI elements as buttons and sliders.
  *     It sends touch or GUI callback events over Bluetooth back to Arduino.
  *
- *  Copyright (C) 2014  Armin Joachimsmeyer
- *  armin.joachimsmeyer@gmail.com
+ *  Copyright (C) 2014-2026  Armin Joachimsmeyer
  *
- *     This file is part of BlueDisplay.
+ *  This file is part of BlueDisplay.
  *  BlueDisplay is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
  *  the Free Software Foundation, either version 3 of the License, or
@@ -31,11 +30,11 @@ package de.joachimsmeyer.android.bluedisplay;
 
 import static de.joachimsmeyer.android.bluedisplay.RPCView.COLOR32_NO_BACKGROUND;
 
-import android.annotation.SuppressLint;
 import android.graphics.Color;
 import android.media.AudioManager;
 import android.media.ToneGenerator;
 import android.os.Handler;
+import android.os.Looper;
 import android.os.Message;
 import android.util.Log;
 
@@ -170,8 +169,8 @@ public class TouchButton {
 
         mWidth = aWidthX;
         mHeight = aHeightY;
-        setEscapedText(aText); // required for error message of plausi, id called again by handleText(aText) below
-        // Plausi is also done here
+        setEscapedText(aText); // required for error message of plausibility, id called again by handleText(aText) below
+        // Plausibility is also done here
         setPosition(aPositionX, aPositionY);
 
         mButtonColor = aButtonColor;
@@ -269,17 +268,8 @@ public class TouchButton {
             }
         }
 
-        if ((aFlags & BUTTON_FLAG_MANUAL_REFRESH) == 0) {
-            mIsManualRefresh = false;
-        } else {
-            mIsManualRefresh = true;
-        }
-
-        if ((aFlags & FLAG_BUTTON_TYPE_AUTOREPEAT) == 0) {
-            mIsAutorepeatButton = false;
-        } else {
-            mIsAutorepeatButton = true;
-        }
+        mIsManualRefresh = (aFlags & BUTTON_FLAG_MANUAL_REFRESH) != 0;
+        mIsAutorepeatButton = (aFlags & FLAG_BUTTON_TYPE_AUTOREPEAT) != 0;
     }
 
     private void positionText() {
@@ -513,8 +503,8 @@ public class TouchButton {
                 && aTouchPositionY <= (mPositionY + mHeight);
     }
 
-    @SuppressLint("HandlerLeak")
-    private final Handler mAutorepeatHandler = new Handler() {
+    // Fully safe for minSdkVersion 12 (API 12+) up to the latest Android version
+    private final Handler mAutorepeatHandler = new Handler(Looper.getMainLooper()) {
         @Override
         public void handleMessage(Message msg) {
             if (mRPCView.mTouchIsActive[0]) {
@@ -548,7 +538,7 @@ public class TouchButton {
         String tString;
 
         /*
-         * Plausi
+         * Plausibility
          */
         if (aCommand != FUNCTION_BUTTON_ACTIVATE_ALL && aCommand != FUNCTION_BUTTON_DEACTIVATE_ALL
                 && aCommand != FUNCTION_BUTTON_GLOBAL_SETTINGS && aCommand != FUNCTION_BUTTON_DISABLE_AUTOREPEAT_UNTIL_END_OF_TOUCH) {

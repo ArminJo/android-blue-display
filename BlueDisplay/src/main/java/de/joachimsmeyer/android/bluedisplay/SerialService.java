@@ -5,10 +5,9 @@
  *     It also implements basic GUI elements as buttons and sliders.
  *     It sends touch or GUI callback events over Bluetooth back to Arduino.
  *
- *  Copyright (C) 2014-2020  Armin Joachimsmeyer
- *  armin.joachimsmeyer@gmail.com
+ *  Copyright (C) 2014-2026  Armin Joachimsmeyer
  *
- *     This file is part of BlueDisplay.
+ *  This file is part of BlueDisplay.
  *  BlueDisplay is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
  *  the Free Software Foundation, either version 3 of the License, or
