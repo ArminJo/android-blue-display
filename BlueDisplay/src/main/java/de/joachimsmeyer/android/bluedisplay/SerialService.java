@@ -52,8 +52,10 @@ public class SerialService {
     public static final int WORK_SIZE_OF_IN_BUFFER = 10 * 4096;
 
     // usable size plus space for one times adding driver data
-    public static final int SIZE_OF_IN_BUFFER = WORK_SIZE_OF_IN_BUFFER + Math.max(BluetoothSerialSocket.BT_READ_MAX_SIZE, SerialInputOutputManager.BUFSIZ);
-    public static final int MIN_MESSAGE_SIZE = 4; // was former 5 (data message with one byte), but this makes problems with receiving empty data blocks
+    public static final int SIZE_OF_IN_BUFFER =
+            WORK_SIZE_OF_IN_BUFFER + Math.max(BluetoothSerialSocket.BT_READ_MAX_SIZE, SerialInputOutputManager.BUFSIZ);
+    public static final int MIN_MESSAGE_SIZE = 4;
+            // was former 5 (data message with one byte), but this makes problems with receiving empty data blocks
     public static final int MIN_COMMAND_SIZE = 4; // command message with no parameter
 
     public volatile byte[] mBigReceiveBuffer = new byte[SIZE_OF_IN_BUFFER];
@@ -159,7 +161,8 @@ public class SerialService {
                 if (tUnprocessedDataLength < SerialService.WORK_SIZE_OF_IN_BUFFER) {
                     if (MyLog.isINFO()) {
                         // use Log.d to make it more visible
-                        Log.d(LOG_TAG, "Buffer full after reading " + aReadLength + " bytes -> remove processed data and keep " + tUnprocessedDataLength + " unprocessed bytes");
+                        Log.d(LOG_TAG, "Buffer full after reading " + aReadLength + " bytes -> remove processed data and keep " +
+                                tUnprocessedDataLength + " unprocessed bytes");
                     }                    /*
                      * Delete already processed data at buffer start / compress buffer
                      * mReceiveBufferOutIndex -> 0
@@ -184,7 +187,8 @@ public class SerialService {
                 if (tSkipIndex != 0) {
                     if (MyLog.isINFO()) {
                         // use Log.w to make it more visible
-                        Log.w(LOG_TAG, "Buffer overflow -> skip " + (tSkipIndex - mReceiveBufferOutIndex) + " bytes in buffer until last clearDisplayAndSkipOptional");
+                        Log.w(LOG_TAG, "Buffer overflow -> skip " + (tSkipIndex - mReceiveBufferOutIndex) +
+                                " bytes in buffer until last clearDisplayAndSkipOptional");
                     }
                     // Here we have commands to skip
                     mReceiveBufferInIndex = (mReceiveBufferOutIndex + tUnprocessedDataLength) - tSkipIndex;
@@ -237,13 +241,14 @@ public class SerialService {
     }
 
     public String getStatisticsString() {
-        String tReturn = mStatisticNumberOfReceivedBytes + " bytes, " + mStatisticNumberOfReceivedCommands + " commands and "
-                + mStatisticNumberOfReceivedChartCommands + " charts received\n";
+        String tReturn = mStatisticNumberOfReceivedBytes + " bytes, " + mStatisticNumberOfReceivedCommands + " commands and " +
+                mStatisticNumberOfReceivedChartCommands + " charts received\n";
         if (mStatisticNumberOfReceivedCommands != 0) {
             tReturn += ((mStatisticNanoTimeForCommands / 1000) / mStatisticNumberOfReceivedCommands) + " \u00B5s per command\n";
         }
         if (mStatisticNumberOfReceivedChartCommands != 0) {
-            tReturn += ((mStatisticNanoTimeForChart / 1000) / mStatisticNumberOfReceivedChartCommands) + " \u00B5s per chart command\n";
+            tReturn += ((mStatisticNanoTimeForChart / 1000) / mStatisticNumberOfReceivedChartCommands) +
+                    " \u00B5s per chart command\n";
         }
         tReturn += mStatisticNumberOfSentBytes + " bytes, " + mStatisticNumberOfSentCommands + " commands sent\n";
 
@@ -254,8 +259,8 @@ public class SerialService {
         if (searchStateInputLengthToWaitFor > MIN_MESSAGE_SIZE) {
             tSearchStateDataLengthToWaitForString = ", waited for " + searchStateInputLengthToWaitFor;
         }
-        tReturn += "InputBuffer: size=" + SIZE_OF_IN_BUFFER + ", in=" + mReceiveBufferInIndex + ", out=" + tInputBufferOutIndex
-                + ", not processed=" + tBytesInBuffer + tSearchStateDataLengthToWaitForString + "\n";
+        tReturn += "InputBuffer: size=" + SIZE_OF_IN_BUFFER + ", in=" + mReceiveBufferInIndex + ", out=" + tInputBufferOutIndex +
+                ", not processed=" + tBytesInBuffer + tSearchStateDataLengthToWaitForString + "\n";
         if (MyLog.isDEBUG()) {
             if (tBytesInBuffer > 0) {
                 if (tBytesInBuffer > 20) {
@@ -274,10 +279,10 @@ public class SerialService {
         }
 
         RPCView tRPCView = mBlueDisplayContext.mRPCView;
-        tReturn += "Scale=" + tRPCView.mScaleFactor * 100 + "%     max=" + tRPCView.mCurrentViewPixelWidth + "/"
-                + tRPCView.mCurrentViewPixelHeight + "\nRequested=" + tRPCView.mRequestedCanvasWidth + "*"
-                + tRPCView.mRequestedCanvasHeight + " -> current=" + tRPCView.mCurrentCanvasPixelWidth + "*"
-                + tRPCView.mCurrentCanvasPixelHeight + "\n";
+        tReturn += "Scale=" + tRPCView.mScaleFactor * 100 + "%     max=" + tRPCView.mCurrentViewPixelWidth + "/" +
+                tRPCView.mCurrentViewPixelHeight + "\nRequested=" + tRPCView.mRequestedCanvasWidth + "*" +
+                tRPCView.mRequestedCanvasHeight + " -> current=" + tRPCView.mCurrentCanvasPixelWidth + "*" +
+                tRPCView.mCurrentCanvasPixelHeight + "\n";
         tReturn += "Codepage=" + System.getProperty("file.encoding");
         return tReturn;
     }
@@ -291,8 +296,8 @@ public class SerialService {
     void signalBlueDisplayConnection() {
         // first write a NOP command for synchronizing
         writeGuiCallbackEvent(SerialService.EVENT_NOP, 0, 0, 0, null);
-        writeTwoIntegerEventAndTimestamp(SerialService.EVENT_CONNECTION_BUILD_UP, mBlueDisplayContext.mRPCView.mCurrentViewPixelWidth,
-                mBlueDisplayContext.mRPCView.mCurrentViewPixelHeight);
+        writeTwoIntegerEventAndTimestamp(SerialService.EVENT_CONNECTION_BUILD_UP,
+                mBlueDisplayContext.mRPCView.mCurrentViewPixelWidth, mBlueDisplayContext.mRPCView.mCurrentViewPixelHeight);
     }
 
     void writeEvent(byte[] aEventDataBuffer, int aEventDataLength) {
@@ -405,8 +410,9 @@ public class SerialService {
         mSendByteBuffer[tIndex] = SYNC_TOKEN;
         if (MyLog.isINFO()) {
             String tType = RPCView.sActionMappings.get(tEventType);
-            MyLog.i(LOG_TAG, "Send Type=0x" + Integer.toHexString(tEventType) + "|" + tType + " X=" + aX + " Y=" + aY
-                    + " PointerIndex=" + aByte);
+            MyLog.i(LOG_TAG,
+                    "Send Type=0x" + Integer.toHexString(tEventType) + "|" + tType + " X=" + aX + " Y=" + aY + " PointerIndex=" +
+                            aByte);
         }
 
         mStatisticNumberOfSentBytes += tEventLength;
@@ -455,8 +461,9 @@ public class SerialService {
             tDateFormat.setTimeZone(TimeZone.getTimeZone("GMT")); // Print as GMT Time
             Date tDate = new Date(tTimestamp);
             MyLog.d(LOG_TAG, "tDefaultTimeZone=" + tDefaultTimeZone);
-            MyLog.i(LOG_TAG, "Send Type=0x" + Integer.toHexString(tEventType) + "|" + tType + " X=" + aX + " Y=" + aY
-                    + " Timestamp=" + tTimestampSeconds + " Date=" + tDateFormat.format(tDate));
+            MyLog.i(LOG_TAG,
+                    "Send Type=0x" + Integer.toHexString(tEventType) + "|" + tType + " X=" + aX + " Y=" + aY + " Timestamp=" +
+                            tTimestampSeconds + " Date=" + tDateFormat.format(tDate));
         }
 
         mStatisticNumberOfSentBytes += tEventLength;
@@ -468,7 +475,8 @@ public class SerialService {
     /*
      * send 16 bit button / slider index, 16 bit filler, 32 bit callback address and 32 bit value
      */
-    public void writeGuiCallbackEvent(int aEventType, int aButtonSliderIndex, int aCallbackAddress, int aValue, String aElementInfo) {
+    public void writeGuiCallbackEvent(int aEventType, int aButtonSliderIndex, int aCallbackAddress, int aValue,
+                                      String aElementInfo) {
         int tEventLength = CALLBACK_DATA_SIZE;
         int tEventType = aEventType & 0xFF;
 
@@ -502,9 +510,8 @@ public class SerialService {
             } else if (tEventType == EVENT_SLIDER_CALLBACK) {
                 tElementInfo = " SliderIndex=" + aButtonSliderIndex;
             }
-            MyLog.i(LOG_TAG,
-                    "Send Type=0x" + Integer.toHexString(tEventType) + "|" + tType + " CallbackAddress=0x"
-                            + Integer.toHexString(aCallbackAddress) + " Value=" + aValue + tElementInfo);
+            MyLog.i(LOG_TAG, "Send Type=0x" + Integer.toHexString(tEventType) + "|" + tType + " CallbackAddress=0x" +
+                    Integer.toHexString(aCallbackAddress) + " Value=" + aValue + tElementInfo);
         }
 
         mStatisticNumberOfSentBytes += tEventLength;
@@ -543,9 +550,8 @@ public class SerialService {
         mSendByteBuffer[tIndex] = SYNC_TOKEN;
         if (MyLog.isINFO()) {
             String tType = RPCView.sActionMappings.get(tEventType);
-            MyLog.i(LOG_TAG,
-                    "Send Type=0x" + Integer.toHexString(tEventType) + "|" + tType + " CallbackAddress=0x"
-                            + Integer.toHexString(aCallbackAddress) + " Value=" + aValue);
+            MyLog.i(LOG_TAG, "Send Type=0x" + Integer.toHexString(tEventType) + "|" + tType + " CallbackAddress=0x" +
+                    Integer.toHexString(aCallbackAddress) + " Value=" + aValue);
         }
 
         mStatisticNumberOfSentBytes += tEventLength;
@@ -582,8 +588,9 @@ public class SerialService {
         mSendByteBuffer[tIndex] = SYNC_TOKEN;
         if (MyLog.isINFO()) {
             String tType = RPCView.sActionMappings.get(tEventType);
-            MyLog.i(LOG_TAG, "Send Type=0x" + Integer.toHexString(tEventType) + "|" + tType + " Direction=" + aIsXDirection
-                    + " Start=" + aStartX + "/" + aStartY + " Delta=" + aDeltaX + "/" + aDeltaY);
+            MyLog.i(LOG_TAG,
+                    "Send Type=0x" + Integer.toHexString(tEventType) + "|" + tType + " Direction=" + aIsXDirection + " Start=" +
+                            aStartX + "/" + aStartY + " Delta=" + aDeltaX + "/" + aDeltaY);
         }
 
         mStatisticNumberOfSentBytes += tEventLength;
@@ -622,8 +629,8 @@ public class SerialService {
         mSendByteBuffer[tIndex] = SYNC_TOKEN;
         if (MyLog.isDEBUG()) {
             String tType = RPCView.sActionMappings.get(tEventType);
-            MyLog.d(LOG_TAG, "Send Sensor Event Type=0x" + Integer.toHexString(tEventType) + "|" + tType + " X=" + aValueX + " Y="
-                    + aValueY + " Z=" + aValueZ);
+            MyLog.d(LOG_TAG, "Send Sensor Event Type=0x" + Integer.toHexString(tEventType) + "|" + tType + " X=" + aValueX + " Y=" +
+                    aValueY + " Z=" + aValueZ);
         }
 
         mStatisticNumberOfSentBytes += tEventLength;
@@ -667,9 +674,9 @@ public class SerialService {
         if (MyLog.isINFO()) {
             String tType = RPCView.sActionMappings.get(tEventType);
             MyLog.i(LOG_TAG,
-                    "Send Type=0x" + Integer.toHexString(tEventType) + "|" + tType + " SubFunction=" + aSubFunction + " ByteInfo="
-                            + (aByteInfo & 0xFF) + " ShortInfo=" + (aShortInfo & 0xFFFF) + " CallbackAddress=0x"
-                            + Integer.toHexString(aCallbackAddress) + " Info 0=" + aInfo_0 + " Info 1=" + aInfo_1);
+                    "Send Type=0x" + Integer.toHexString(tEventType) + "|" + tType + " SubFunction=" + aSubFunction + " ByteInfo=" +
+                            (aByteInfo & 0xFF) + " ShortInfo=" + (aShortInfo & 0xFFFF) + " CallbackAddress=0x" +
+                            Integer.toHexString(aCallbackAddress) + " Info 0=" + aInfo_0 + " Info 1=" + aInfo_1);
         }
 
         mStatisticNumberOfSentBytes += tEventLength;
@@ -718,9 +725,10 @@ public class SerialService {
             tDateFormat.setTimeZone(TimeZone.getTimeZone("GMT")); // Print as GMT Time
             Date tDate = new Date(aLongInfo * 1000);
             MyLog.i(LOG_TAG,
-                    "Send Type=0x" + Integer.toHexString(tEventType) + "|" + tType + " SubFunction=" + aSubFunction + " ByteInfo="
-                            + (aByteInfo & 0xFF) + " ShortInfo=" + (aShortInfo & 0xFFFF) + " CallbackAddress=0x"
-                            + Integer.toHexString(aCallbackAddress) + " LongInfo=" + aLongInfo + " Timestamp=" + aLongInfo + " Date=" + tDateFormat.format(tDate));
+                    "Send Type=0x" + Integer.toHexString(tEventType) + "|" + tType + " SubFunction=" + aSubFunction + " ByteInfo=" +
+                            (aByteInfo & 0xFF) + " ShortInfo=" + (aShortInfo & 0xFFFF) + " CallbackAddress=0x" +
+                            Integer.toHexString(aCallbackAddress) + " LongInfo=" + aLongInfo + " Timestamp=" + aLongInfo +
+                            " Date=" + tDateFormat.format(tDate));
         }
 
         mStatisticNumberOfSentBytes += tEventLength;
@@ -848,8 +856,8 @@ public class SerialService {
     int searchCommand(RPCView aRPCView) {
         if (inBufferReadingLock || (mReceiveBufferOutIndex == mReceiveBufferInIndex)) {
             if (MyLog.isVERBOSE()) {
-                Log.v(LOG_TAG, "searchCommand just returns. No buffer content. Lock=" + inBufferReadingLock + " BufferInIndex="
-                        + mReceiveBufferInIndex);
+                Log.v(LOG_TAG, "searchCommand just returns. No buffer content. Lock=" + inBufferReadingLock + " BufferInIndex=" +
+                        mReceiveBufferInIndex);
             }
             return RPCVIEW_DO_NOTHING;
         }
@@ -931,8 +939,8 @@ public class SerialService {
                     // Plausibility check
                     if (tLengthReceived > mDataBuffer.length) {
                         MyLog.e(LOG_TAG,
-                                "DataLength of " + tLengthReceived + " wrong. Command=0x" + Integer.toHexString(tCommandReceived)
-                                        + " Out=" + mReceiveBufferOutIndex);
+                                "DataLength of " + tLengthReceived + " wrong. Command=0x" + Integer.toHexString(tCommandReceived) +
+                                        " Out=" + mReceiveBufferOutIndex);
                         continue;
                     }
 
@@ -941,13 +949,14 @@ public class SerialService {
                      * Parameter length received
                      */
                     if (MyLog.isVERBOSE()) {
-                        MyLog.v(LOG_TAG, "Command=0x" + Integer.toHexString(tCommandReceived) + " ParameterLength="
-                                + tLengthReceived + " at ptr=" + (mReceiveBufferOutIndex - 1));
+                        MyLog.v(LOG_TAG,
+                                "Command=0x" + Integer.toHexString(tCommandReceived) + " ParameterLength=" + tLengthReceived +
+                                        " at ptr=" + (mReceiveBufferOutIndex - 1));
                     }
                     // Plausibility check
                     if (tLengthReceived > MAX_NUMBER_OF_PARAMS * 2) {
-                        MyLog.e(LOG_TAG, "ParameterLength of " + tLengthReceived + "/0x" + Integer.toHexString(tLengthReceived)
-                                + " wrong. Command=0x" + Integer.toHexString(tCommandReceived) + " Out=" + mReceiveBufferOutIndex);
+                        MyLog.e(LOG_TAG, "ParameterLength of " + tLengthReceived + "/0x" + Integer.toHexString(tLengthReceived) +
+                                " wrong. Command=0x" + Integer.toHexString(tCommandReceived) + " Out=" + mReceiveBufferOutIndex);
                         continue;
                     }
                 }
@@ -964,11 +973,11 @@ public class SerialService {
                     searchStateMustBeLoaded = true;
                     if (MyLog.isVERBOSE()) {
                         if (tCommandReceived <= RPCView.LAST_DATAFIELD_TAG) {
-                            Log.v(LOG_TAG, getBufferBytesAvailable() + "bytes in buffer, but " + tLengthReceived
-                                    + " required for data field");
+                            Log.v(LOG_TAG, getBufferBytesAvailable() + "bytes in buffer, but " + tLengthReceived +
+                                    " required for data field");
                         } else {
-                            Log.v(LOG_TAG, getBufferBytesAvailable() + "bytes in buffer, but " + tLengthReceived
-                                    + " required for command parameters");
+                            Log.v(LOG_TAG, getBufferBytesAvailable() + "bytes in buffer, but " + tLengthReceived +
+                                    " required for command parameters");
                         }
                     }
                     break;
@@ -1010,9 +1019,9 @@ public class SerialService {
                 searchStateInputLengthToWaitFor = MIN_COMMAND_SIZE;
                 aRPCView.interpretCommand(tCommand, mParameters, tParamsLength, mDataBuffer, null, tLengthReceived);
                 tReturnValue = RPCVIEW_DO_DRAW;
-                if (tCommand == RPCView.FUNCTION_DRAW_CHART || tCommand == RPCView.FUNCTION_DRAW_CHART_WITHOUT_DIRECT_RENDERING
-                        || tCommand == RPCView.FUNCTION_DRAW_SCALED_CHART
-                        || tCommand == RPCView.FUNCTION_DRAW_SCALED_CHART_WITHOUT_DIRECT_RENDERING) {
+                if (tCommand == RPCView.FUNCTION_DRAW_CHART || tCommand == RPCView.FUNCTION_DRAW_CHART_WITHOUT_DIRECT_RENDERING ||
+                        tCommand == RPCView.FUNCTION_DRAW_SCALED_CHART ||
+                        tCommand == RPCView.FUNCTION_DRAW_SCALED_CHART_WITHOUT_DIRECT_RENDERING) {
                     // do statistics
                     mStatisticNumberOfReceivedChartCommands++;
                     tNanosForChart += System.nanoTime() - tStart1;
@@ -1100,16 +1109,16 @@ public class SerialService {
                         }
                     }
                     if (i == 100) {
-                        MyLog.e(LOG_TAG, "Timeout waiting for data sync token. Out=" + mReceiveBufferOutIndex + " In="
-                                + mReceiveBufferInIndex);
+                        MyLog.e(LOG_TAG, "Timeout waiting for data sync token. Out=" + mReceiveBufferOutIndex + " In=" +
+                                mReceiveBufferInIndex);
                     }
                 }
             }
         } /* while */
         if (MyLog.isVERBOSE()) {
-            Log.v(LOG_TAG, "End searchCommand. Out=" + tStartOut + "->" + mReceiveBufferOutIndex + "="
-                    + (mReceiveBufferOutIndex - tStartOut) + " In=" + tStartIn + "->" + mReceiveBufferInIndex + "="
-                    + (mReceiveBufferInIndex - tStartIn) + " bytes in buffer=" + (mReceiveBufferInIndex - mReceiveBufferOutIndex));
+            Log.v(LOG_TAG, "End searchCommand. Out=" + tStartOut + "->" + mReceiveBufferOutIndex + "=" +
+                    (mReceiveBufferOutIndex - tStartOut) + " In=" + tStartIn + "->" + mReceiveBufferInIndex + "=" +
+                    (mReceiveBufferInIndex - tStartIn) + " bytes in buffer=" + (mReceiveBufferInIndex - mReceiveBufferOutIndex));
         }
         inBufferReadingLock = false;
         mStatisticNanoTimeForCommands += System.nanoTime() - tStartOfSearchCommand - tNanosForChart;
@@ -1147,15 +1156,15 @@ public class SerialService {
                         /*
                          * Do not output this at level verbose, since at this level RawData is output
                          */
-                        Log.w(LOG_TAG, "Byte=0x" + Integer.toHexString(tByte) + " at:" + mReceiveBufferOutIndex
-                                + " is no SYNC_TOKEN");
+                        Log.w(LOG_TAG,
+                                "Byte=0x" + Integer.toHexString(tByte) + " at:" + mReceiveBufferOutIndex + " is no SYNC_TOKEN");
                     }
                 }
                 if (mReceiveBufferOutIndex == mReceiveBufferInIndex) {
                     inBufferReadingLock = false;
                     if (mSerialPrintBufferInIndex == 0) {
-                        Log.i(LOG_TAG, "Sync Token not found util end of buffer. End searchCommand. Out=" + aStartOut + "->"
-                                + mReceiveBufferOutIndex + " In=" + aStartIn + "->" + mReceiveBufferInIndex);
+                        Log.i(LOG_TAG, "Sync Token not found util end of buffer. End searchCommand. Out=" + aStartOut + "->" +
+                                mReceiveBufferOutIndex + " In=" + aStartIn + "->" + mReceiveBufferInIndex);
                     }
                     return false;
                 }
@@ -1184,11 +1193,11 @@ public class SerialService {
         while (tBufferScanIndex <= (aBufferStartScanIndex + aBytesToScan - 6)) {
             // Check for FUNCTION_SKIP_AND_CLEAR_DISPLAY
             if (mBigReceiveBuffer[tBufferScanIndex] == SYNC_TOKEN) {
-                if (((mBigReceiveBuffer[tBufferScanIndex + 1] == RPCView.FUNCTION_CLEAR_DISPLAY_AND_SKIP_OPTIONAL)
-                        && (mBigReceiveBuffer[tBufferScanIndex + 2] == 2) /* lsb of length 2 | one parameter */
-                        && (mBigReceiveBuffer[tBufferScanIndex + 3] == 0) /* msb of length 2 | one parameter */
-                        && (tBufferScanIndex == ((aBufferStartScanIndex + aBytesToScan) - 6))) || (mBigReceiveBuffer[tBufferScanIndex + 6] == SYNC_TOKEN) /* sync token of next command if next command*/
-                ) {
+                if (((mBigReceiveBuffer[tBufferScanIndex + 1] == RPCView.FUNCTION_CLEAR_DISPLAY_AND_SKIP_OPTIONAL) &&
+                        (mBigReceiveBuffer[tBufferScanIndex + 2] == 2) /* lsb of length 2 | one parameter */ &&
+                        (mBigReceiveBuffer[tBufferScanIndex + 3] == 0) /* msb of length 2 | one parameter */ &&
+                        (tBufferScanIndex == ((aBufferStartScanIndex + aBytesToScan) - 6))) ||
+                        (mBigReceiveBuffer[tBufferScanIndex + 6] == SYNC_TOKEN) /* sync token of next command if next command*/) {
                     tFoundIndex = tBufferScanIndex;
                 }
             }

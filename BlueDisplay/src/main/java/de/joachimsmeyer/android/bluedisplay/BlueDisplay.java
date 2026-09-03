@@ -181,6 +181,7 @@ public class BlueDisplay extends Activity {
      */
     public AudioManager mAudioManager;
     public int mMaxSystemVolume;
+    public static int StreamToUseForTouchTone = AudioManager.STREAM_MUSIC;
 
     private boolean mInTryToEnableEnableBT; // We try to enable Bluetooth
     private boolean mAutoConnectBT = false; // Auto connect at startup
@@ -254,7 +255,7 @@ public class BlueDisplay extends Activity {
          * RPCView uses this values
          */
         mAudioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
-        mMaxSystemVolume = mAudioManager.getStreamMaxVolume(AudioManager.STREAM_SYSTEM);
+        mMaxSystemVolume = mAudioManager.getStreamMaxVolume(StreamToUseForTouchTone);
 
         /*
          * Create RPCView

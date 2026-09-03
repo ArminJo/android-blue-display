@@ -153,12 +153,11 @@ public class USBSerialSocket implements SerialInputOutputManager.Listener {
                 /*
                  * Request user permission
                  */
-                MyLog.i(LOG_TAG,
-                        "Request user USB permission for VID=" + mUSBDevice.getVendorId() + " ProductId="
-                                + mUSBDevice.getProductId());
+                MyLog.i(LOG_TAG, "Request user USB permission for VID=" + mUSBDevice.getVendorId() + " ProductId=" +
+                        mUSBDevice.getProductId());
                 // FLAG_IMMUTABLE crashes on my android 5.1. tablet
-                @SuppressLint("MutableImplicitPendingIntent") PendingIntent tUSBPermissionIntent = PendingIntent.getBroadcast(mBlueDisplayContext, 0, new Intent(
-                        ACTION_USB_PERMISSION), FLAG_MUTABLE);
+                @SuppressLint("MutableImplicitPendingIntent") PendingIntent tUSBPermissionIntent =
+                        PendingIntent.getBroadcast(mBlueDisplayContext, 0, new Intent(ACTION_USB_PERMISSION), FLAG_MUTABLE);
                 mUsbManager.requestPermission(mUSBDevice, tUSBPermissionIntent);
             }
         }

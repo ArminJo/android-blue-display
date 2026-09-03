@@ -4,7 +4,7 @@
  *     It receives basic draw requests from Arduino etc. over Bluetooth and renders it.
  *     It also implements basic GUI elements as buttons and sliders.
  *     It sends touch or GUI callback events over Bluetooth back to Arduino.
- * 
+ *
  *  Copyright (C) 2015-2026  Armin Joachimsmeyer
  *
  *  This file is part of BlueDisplay.
@@ -20,8 +20,8 @@
 
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/gpl.html>.
- *  
- *  
+ *
+ *
  * This class implements local view of the BlueDisplay log output to help debugging a client arduino application.
  * Data is provided by the MyLog wrapper class.
  */

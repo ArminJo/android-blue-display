@@ -31,7 +31,6 @@ package de.joachimsmeyer.android.bluedisplay;
 import static de.joachimsmeyer.android.bluedisplay.RPCView.COLOR32_NO_BACKGROUND;
 
 import android.graphics.Color;
-import android.media.AudioManager;
 import android.media.ToneGenerator;
 import android.os.Handler;
 import android.os.Looper;
@@ -63,7 +62,16 @@ public class TouchButton {
     int mValue;
     int mListIndex; // index in sButtonList
     int mCallbackAddress;
-    boolean mDoBeep;
+
+    /*
+     * Button feedback tone stuff
+     */
+    private static final int BUTTON_GLOBAL_TOUCH_TONE_STATE_DISABLED = 0;
+    private static final int BUTTON_GLOBAL_TOUCH_TONE_STATE_INDIVIDUAL = 1;
+    private static final int BUTTON_GLOBAL_TOUCH_TONE_STATE_FORCE_ENABLED = 2;
+    boolean mDoTouchTone;
+    static int sGlobalButtonTouchToneState = BUTTON_GLOBAL_TOUCH_TONE_STATE_INDIVIDUAL; // disabled | individual | force enabled
+
     boolean mIsManualRefresh; // default = false, true = no automatic refresh (currently only for red/green buttons)
     boolean mIsRedGreen; // Red = false, true = green
     String mRawTextForValueFalse; // contains the string for RedGreen button value == false
@@ -71,8 +79,7 @@ public class TouchButton {
 
     /*
      * Autorepeat stuff
-     */
-    boolean mIsAutorepeatButton;
+     */ boolean mIsAutorepeatButton;
     int mMillisFirstAutorepeatDelay;
     int mMillisFirstAutorepeatRate;
     int mFirstAutorepeatCount;
@@ -88,7 +95,7 @@ public class TouchButton {
 
     boolean mIsActive;
     boolean mIsInitialized;
-    static int sTouchBeepIndex = ToneGenerator.TONE_CDMA_KEYPAD_VOLUME_KEY_LITE; // 89
+    static int sTouchToneIndex = ToneGenerator.TONE_CDMA_KEYPAD_VOLUME_KEY_LITE; // 89
     static ToneGenerator sButtonToneGenerator;
     static int sLastRequestedToneVolume;
     static int sLastSystemToneVolume;
@@ -106,20 +113,28 @@ public class TouchButton {
     private static final int FUNCTION_BUTTON_SETTINGS = 0x42;
     private static final int FUNCTION_BUTTON_REMOVE = 0x43;
 
-    // static functions
+    /*
+     * static functions
+     */
     private static final int FUNCTION_BUTTON_ACTIVATE_ALL = 0x48;
     private static final int FUNCTION_BUTTON_DEACTIVATE_ALL = 0x49;
     private static final int FUNCTION_BUTTON_GLOBAL_SETTINGS = 0x4A;
+    // Flags for BUTTON_GLOBAL_SETTINGS
+    private static final int FLAG_BUTTON_GLOBAL_USE_DOWN_EVENTS_FOR_BUTTONS = 0x00;
+    private static final int FLAG_BUTTON_GLOBAL_USE_UP_EVENTS_FOR_BUTTONS = 0x01;
+    private static final int FLAG_BUTTON_GLOBAL_SET_TOUCH_TONE = 0x02;
+    private static final int FLAG_BUTTON_GLOBAL_SET_TOUCH_TONE_STATE = 0x03;
+            // BUTTON_GLOBAL_TOUCH_TONE_STATE_DISABLED, BUTTON_GLOBAL_TOUCH_TONE_STATE_INDIVIDUAL, BUTTON_GLOBAL_TOUCH_TONE_STATE_FORCE_ENABLED
 
     private static final int FUNCTION_BUTTON_DISABLE_AUTOREPEAT_UNTIL_END_OF_TOUCH = 0x4B;
-    // Flags for BUTTON_GLOBAL_SETTINGS
-    private static final int FLAG_BUTTON_GLOBAL_USE_UP_EVENTS_FOR_BUTTONS = 0x01;
-    private static final int FLAG_BUTTON_GLOBAL_SET_BEEP_TONE = 0x02;
 
-    // Function with variable data size
+    /*
+     * Function with variable data size
+     */
     private static final int FUNCTION_BUTTON_INIT = 0x70;
     // Flags for button settings contained in flags parameter
-    private static final int FLAG_BUTTON_DO_BEEP_ON_TOUCH = 0x01;
+    private static final int FLAG_BUTTON_DO_TONE_ON_TOUCH = 0x01;
+
     // Red if value == 0 else green
     private static final int FLAG_BUTTON_TYPE_TOGGLE = 0x02;
     private static final int FLAG_BUTTON_TYPE_AUTOREPEAT = 0x04;
@@ -159,7 +174,7 @@ public class TouchButton {
     static void resetButtons(final RPCView aRPCView) {
         sButtonList.clear();
         aRPCView.mUseUpEventForButtons = false;
-        sTouchBeepIndex = ToneGenerator.TONE_CDMA_KEYPAD_VOLUME_KEY_LITE;
+        sTouchToneIndex = ToneGenerator.TONE_CDMA_KEYPAD_VOLUME_KEY_LITE;
     }
 
     void initButton(final RPCView aRPCView, final int aPositionX, final int aPositionY, final int aWidthX, final int aHeightY,
@@ -249,15 +264,16 @@ public class TouchButton {
      */
     private void handleFlags(int aFlags) {
 
-        if ((aFlags & FLAG_BUTTON_DO_BEEP_ON_TOUCH) == 0) {
-            mDoBeep = false;
+        if ((aFlags & FLAG_BUTTON_DO_TONE_ON_TOUCH) == 0) {
+            mDoTouchTone = false;
         } else {
             if (sButtonToneGenerator == null) {
-                int tCurrentSystemVolume = mRPCView.mBlueDisplayContext.mAudioManager.getStreamVolume(AudioManager.STREAM_SYSTEM);
-                sButtonToneGenerator = new ToneGenerator(AudioManager.STREAM_SYSTEM,
+                int tCurrentSystemVolume = mRPCView.mBlueDisplayContext.mAudioManager.getStreamVolume(
+                        mRPCView.mBlueDisplayContext.StreamToUseForTouchTone);
+                sButtonToneGenerator = new ToneGenerator(mRPCView.mBlueDisplayContext.StreamToUseForTouchTone,
                         (tCurrentSystemVolume * ToneGenerator.MAX_VOLUME) / mRPCView.mBlueDisplayContext.mMaxSystemVolume);
             }
-            mDoBeep = true;
+            mDoTouchTone = true;
         }
         if ((aFlags & FLAG_BUTTON_TYPE_TOGGLE) == 0) {
             mIsRedGreen = false;
@@ -280,11 +296,13 @@ public class TouchButton {
                  */
                 if (mTextSize * mTextStrings.length >= mHeight) {
                     // Font height to big
-                    MyLog.w(LOG_TAG, "text \"" + mEscapedText + "\" height=" + mTextSize + " with " + mTextStrings.length + " lines is higher than button height=" + mHeight);
+                    MyLog.w(LOG_TAG, "text \"" + mEscapedText + "\" height=" + mTextSize + " with " + mTextStrings.length +
+                            " lines is higher than button height=" + mHeight);
                     mTextPositionY = mPositionY + (int) ((RPCView.TEXT_ASCEND_FACTOR * mTextSize) + 0.5); // Fallback - start
                     // at top + ascend
                 } else {
-                    mTextPositionY = (int) (mPositionY + (((float) (mHeight - (mTextSize * (mTextStrings.length)))) / 2) + ((RPCView.TEXT_ASCEND_FACTOR * mTextSize) + 0.5));
+                    mTextPositionY = (int) (mPositionY + (((float) (mHeight - (mTextSize * (mTextStrings.length)))) / 2) +
+                            ((RPCView.TEXT_ASCEND_FACTOR * mTextSize) + 0.5));
                 }
                 mTextPositionX = -1; // to indicate multiline text
 
@@ -304,10 +322,13 @@ public class TouchButton {
 
                 if (mTextSize >= mHeight) {
                     // Font height to big
-                    MyLog.w(LOG_TAG, "text \"" + mEscapedText + "\" height=" + mTextSize + " is higher than button height=" + mHeight);
+                    MyLog.w(LOG_TAG,
+                            "text \"" + mEscapedText + "\" height=" + mTextSize + " is higher than button height=" + mHeight);
                 }
                 // (RPCView.TEXT_ASCEND_FACTOR * mCTextSize) is Ascend
-                mTextPositionY = (int) ((mPositionY + (((float) (mHeight - mTextSize)) / 2) + (RPCView.TEXT_ASCEND_FACTOR * mTextSize)) + 0.5);
+                mTextPositionY =
+                        (int) ((mPositionY + (((float) (mHeight - mTextSize)) / 2) + (RPCView.TEXT_ASCEND_FACTOR * mTextSize)) +
+                                0.5);
             }
         }
     }
@@ -335,8 +356,8 @@ public class TouchButton {
         if (mTextSize > 0) { // don't render anything if text size == 0
             if (mTextStrings.length == 1) {
                 // Draw mTextStrings[0], set by handleText()
-                mRPCView.drawTextWithBackground(mTextPositionX, mTextPositionY, mTextStrings[0], mTextSize,
-                        mTextColor, mButtonColor);
+                mRPCView.drawTextWithBackground(mTextPositionX, mTextPositionY, mTextStrings[0], mTextSize, mTextColor,
+                        mButtonColor);
             } else {
                 // Multiline text
                 int TPosY = mTextPositionY;
@@ -347,12 +368,12 @@ public class TouchButton {
                     if (tLength >= mWidth) {
                         // String too long here
                         tTextPositionX = mPositionX;
-                        MyLog.w(LOG_TAG, "sub text \"" + mTextString + "\" length=" + tLength + " is longer than button width=" + mWidth);
+                        MyLog.w(LOG_TAG,
+                                "sub text \"" + mTextString + "\" length=" + tLength + " is longer than button width=" + mWidth);
                     } else {
                         tTextPositionX = mPositionX + ((mWidth - tLength) / 2);
                     }
-                    mRPCView.drawTextWithBackground(tTextPositionX, TPosY, mTextString, mTextSize, mTextColor,
-                            mButtonColor);
+                    mRPCView.drawTextWithBackground(tTextPositionX, TPosY, mTextString, mTextSize, mTextColor, mButtonColor);
                     TPosY += mTextSize + 1; // for space between lines otherwise we see "g" truncated
                 }
             }
@@ -365,23 +386,38 @@ public class TouchButton {
 
         // check values
         if (aPositionX > mRPCView.mRequestedCanvasWidth) {
-            MyLog.e(LOG_TAG, mEscapedText + " Button x-position " + aPositionX + " is greater than " + mRPCView.mRequestedCanvasWidth + ". Set position to 0");
+            MyLog.e(LOG_TAG,
+                    mEscapedText + " Button x-position " + aPositionX + " is greater than " + mRPCView.mRequestedCanvasWidth +
+                            ". Set position to 0");
             aPositionX = 0;
         }
         if (aPositionX + mWidth > mRPCView.mRequestedCanvasWidth) {
-            MyLog.e(LOG_TAG, mEscapedText + " Button x-position + width " + aPositionX + " + " + mWidth + " is too great. Set width to:"
-                    + (mRPCView.mRequestedCanvasWidth - aPositionX));
+            MyLog.e(LOG_TAG,
+                    mEscapedText + " Button x-position + width " + aPositionX + " + " + mWidth + " is too great. Set width to:" +
+                            (mRPCView.mRequestedCanvasWidth - aPositionX));
             mWidth = mRPCView.mRequestedCanvasWidth - aPositionX;
         }
         if (aPositionY > mRPCView.mRequestedCanvasHeight) {
-            MyLog.e(LOG_TAG, mEscapedText + " Button y-position " + aPositionY + " is greater than " + mRPCView.mRequestedCanvasHeight + ". Set position to 0");
+            MyLog.e(LOG_TAG,
+                    mEscapedText + " Button y-position " + aPositionY + " is greater than " + mRPCView.mRequestedCanvasHeight +
+                            ". Set position to 0");
             aPositionY = 0;
         }
         if (aPositionY + mHeight > mRPCView.mRequestedCanvasHeight) {
-            MyLog.e(LOG_TAG, mEscapedText + " Button y-position + height " + aPositionY + " + " + mHeight + " is too great. Set height to:"
-                    + (mRPCView.mRequestedCanvasHeight - aPositionY));
+            MyLog.e(LOG_TAG,
+                    mEscapedText + " Button y-position + height " + aPositionY + " + " + mHeight + " is too great. Set height to:" +
+                            (mRPCView.mRequestedCanvasHeight - aPositionY));
             mHeight = mRPCView.mRequestedCanvasHeight - aPositionY;
         }
+    }
+
+    boolean getDoTouchTone() {
+        if (sGlobalButtonTouchToneState == BUTTON_GLOBAL_TOUCH_TONE_STATE_DISABLED) {
+            return false;
+        } else if (sGlobalButtonTouchToneState == BUTTON_GLOBAL_TOUCH_TONE_STATE_FORCE_ENABLED) {
+            return true;
+        }
+        return mDoTouchTone;
     }
 
     /**
@@ -389,25 +425,24 @@ public class TouchButton {
      *
      * @return true if any active button touched
      */
-    boolean checkIfTouchInButton(int aTouchPositionX, int aTouchPositionY,
-                                 boolean aDoCallbackOnlyForAutorepeatButton) {
+    boolean checkIfTouchInButton(int aTouchPositionX, int aTouchPositionY, boolean aDoCallbackOnlyForAutorepeatButton) {
         if (mIsActive && mCallbackAddress != 0 && checkIfTouchInButtonArea(aTouchPositionX, aTouchPositionY)) {
             if (!aDoCallbackOnlyForAutorepeatButton || mIsAutorepeatButton) {
                 /*
                  * Touch position is in button - call callback function
                  */
-                if (mDoBeep) {
+                if (getDoTouchTone()) {
                     /*
                      * check if user changed volume
                      */
-                    int tCurrentSystemVolume = mRPCView.mBlueDisplayContext.mAudioManager
-                            .getStreamVolume(AudioManager.STREAM_SYSTEM);
+                    int tCurrentSystemVolume = mRPCView.mBlueDisplayContext.mAudioManager.getStreamVolume(
+                            mRPCView.mBlueDisplayContext.StreamToUseForTouchTone);
                     if (sLastSystemToneVolume != tCurrentSystemVolume) {
                         sLastSystemToneVolume = tCurrentSystemVolume;
-                        sButtonToneGenerator = new ToneGenerator(AudioManager.STREAM_SYSTEM,
+                        sButtonToneGenerator = new ToneGenerator(mRPCView.mBlueDisplayContext.StreamToUseForTouchTone,
                                 (tCurrentSystemVolume * ToneGenerator.MAX_VOLUME) / mRPCView.mBlueDisplayContext.mMaxSystemVolume);
                     }
-                    sButtonToneGenerator.startTone(sTouchBeepIndex, sCurrentToneDurationMillis);
+                    sButtonToneGenerator.startTone(sTouchToneIndex, sCurrentToneDurationMillis);
                 }
                 /*
                  * Handle Toggle red/green button
@@ -458,12 +493,11 @@ public class TouchButton {
     /**
      * @return number of button if touched else -1
      */
-    static int checkAllButtons(int aTouchPositionX, int aTouchPositionY,
-                               boolean aDoCallbackOnlyForAutorepeatButton) {
+    static int checkAllButtons(int aTouchPositionX, int aTouchPositionY, boolean aDoCallbackOnlyForAutorepeatButton) {
         // walk through list of active elements
         for (TouchButton tButton : sButtonList) {
-            if (tButton.mIsActive
-                    && tButton.checkIfTouchInButton(aTouchPositionX, aTouchPositionY, aDoCallbackOnlyForAutorepeatButton)) {
+            if (tButton.mIsActive &&
+                    tButton.checkIfTouchInButton(aTouchPositionX, aTouchPositionY, aDoCallbackOnlyForAutorepeatButton)) {
                 return tButton.mListIndex;
             }
         }
@@ -499,8 +533,8 @@ public class TouchButton {
      * Check if touch event is in button area if yes - return true if no - return false
      */
     private boolean checkIfTouchInButtonArea(int aTouchPositionX, int aTouchPositionY) {
-        return aTouchPositionX >= mPositionX && aTouchPositionX <= mPositionX + mWidth && aTouchPositionY >= mPositionY
-                && aTouchPositionY <= (mPositionY + mHeight);
+        return aTouchPositionX >= mPositionX && aTouchPositionX <= mPositionX + mWidth && aTouchPositionY >= mPositionY &&
+                aTouchPositionY <= (mPositionY + mHeight);
     }
 
     // Fully safe for minSdkVersion 12 (API 12+) up to the latest Android version
@@ -510,11 +544,11 @@ public class TouchButton {
             if (mRPCView.mTouchIsActive[0]) {
                 if (sAutorepeatState != BUTTON_AUTOREPEAT_DISABLED_UNTIL_END_OF_TOUCH) {
                     // beep and send button event
-                    if (mDoBeep) {
-                        sButtonToneGenerator.startTone(sTouchBeepIndex, sCurrentToneDurationMillis);
+                    if (getDoTouchTone()) {
+                        sButtonToneGenerator.startTone(sTouchToneIndex, sCurrentToneDurationMillis);
                     }
-                    mRPCView.mBlueDisplayContext.mSerialService.writeGuiCallbackEvent(SerialService.EVENT_BUTTON_CALLBACK, mListIndex,
-                            mCallbackAddress, mValue, mEscapedText);
+                    mRPCView.mBlueDisplayContext.mSerialService.writeGuiCallbackEvent(SerialService.EVENT_BUTTON_CALLBACK,
+                            mListIndex, mCallbackAddress, mValue, mEscapedText);
                     if (sAutorepeatState == BUTTON_AUTOREPEAT_FIRST_PERIOD) {
                         sAutorepeatCount--;
                         if (sAutorepeatCount <= 0) {
@@ -529,29 +563,27 @@ public class TouchButton {
         }
     };
 
-    public static void interpretCommand(final RPCView aRPCView, int aCommand,
-                                        int[] aParameters, int aParamsLength,
+    public static void interpretCommand(final RPCView aRPCView, int aCommand, int[] aParameters, int aParamsLength,
                                         byte[] aDataBytes, int aDataLength) {
         int tButtonNumber = -1; // to have it initialized ;-)
         TouchButton tButton = null;
         String tButtonText = ""; // Always contains a leading space and ends with ", ButtonNr=" + tButtonNumber
-        String tString;
+        String tString = "";
 
         /*
          * Plausibility
          */
-        if (aCommand != FUNCTION_BUTTON_ACTIVATE_ALL && aCommand != FUNCTION_BUTTON_DEACTIVATE_ALL
-                && aCommand != FUNCTION_BUTTON_GLOBAL_SETTINGS && aCommand != FUNCTION_BUTTON_DISABLE_AUTOREPEAT_UNTIL_END_OF_TOUCH) {
+        if (aCommand != FUNCTION_BUTTON_ACTIVATE_ALL && aCommand != FUNCTION_BUTTON_DEACTIVATE_ALL &&
+                aCommand != FUNCTION_BUTTON_GLOBAL_SETTINGS && aCommand != FUNCTION_BUTTON_DISABLE_AUTOREPEAT_UNTIL_END_OF_TOUCH) {
             /*
              * We need a button for the command
              */
             if (aParamsLength <= 0) {
-                MyLog.e(LOG_TAG,
-                        "aParamsLength is <=0 but Command=0x" + Integer.toHexString(aCommand) + " is not one of 0x"
-                                + Integer.toHexString(FUNCTION_BUTTON_ACTIVATE_ALL) + ", 0x"
-                                + Integer.toHexString(FUNCTION_BUTTON_DEACTIVATE_ALL) + " or 0x"
-                                + Integer.toHexString(FUNCTION_BUTTON_GLOBAL_SETTINGS) + " or 0x"
-                                + Integer.toHexString(FUNCTION_BUTTON_DISABLE_AUTOREPEAT_UNTIL_END_OF_TOUCH));
+                MyLog.e(LOG_TAG, "aParamsLength is <=0 but Command=0x" + Integer.toHexString(aCommand) + " is not one of 0x" +
+                        Integer.toHexString(FUNCTION_BUTTON_ACTIVATE_ALL) + ", 0x" +
+                        Integer.toHexString(FUNCTION_BUTTON_DEACTIVATE_ALL) + " or 0x" +
+                        Integer.toHexString(FUNCTION_BUTTON_GLOBAL_SETTINGS) + " or 0x" +
+                        Integer.toHexString(FUNCTION_BUTTON_DISABLE_AUTOREPEAT_UNTIL_END_OF_TOUCH));
                 return;
             } else {
                 tButtonNumber = aParameters[0];
@@ -559,15 +591,16 @@ public class TouchButton {
                     // get button for create with existent button number
                     tButton = sButtonList.get(tButtonNumber);
                     if (aCommand != FUNCTION_BUTTON_INIT && (tButton == null || !tButton.mIsInitialized)) {
-                        MyLog.e(LOG_TAG, "Command=0x" + Integer.toHexString(aCommand) + " ButtonNr=" + tButtonNumber
-                                + " is null or not initialized.");
+                        MyLog.e(LOG_TAG, "Command=0x" + Integer.toHexString(aCommand) + " ButtonNr=" + tButtonNumber +
+                                " is null or not initialized.");
                         return;
                     }
                     tButtonText = " \"" + tButton.mEscapedText + "\". ButtonNr=" + tButtonNumber;
 
                 } else if (aCommand != FUNCTION_BUTTON_INIT) {
-                    MyLog.e(LOG_TAG, "Command=0x" + Integer.toHexString(aCommand) + " ButtonNr=" + tButtonNumber
-                            + " not found. Only " + sButtonList.size() + " buttons created.");
+                    MyLog.e(LOG_TAG,
+                            "Command=0x" + Integer.toHexString(aCommand) + " ButtonNr=" + tButtonNumber + " not found. Only " +
+                                    sButtonList.size() + " buttons created.");
                     return;
                 }
             }
@@ -597,63 +630,77 @@ public class TouchButton {
                 break;
 
             case FUNCTION_BUTTON_GLOBAL_SETTINGS:
-                if ((aParameters[0] & FLAG_BUTTON_GLOBAL_USE_UP_EVENTS_FOR_BUTTONS) != 0) {
-                    if (aRPCView.mTouchIsActive[0] && !aRPCView.mUseUpEventForButtons) {
-                        // since we switched mode while button was down
-                        aRPCView.mDisableButtonUpOnce = true;
-                    }
-                    aRPCView.mUseUpEventForButtons = true;
-                } else {
-                    aRPCView.mUseUpEventForButtons = false;
+                int tSubcommand = aParameters[0];
+                String tInfoString = "";
+                switch (tSubcommand) {
+                    case FLAG_BUTTON_GLOBAL_USE_DOWN_EVENTS_FOR_BUTTONS:
+                        aRPCView.mUseUpEventForButtons = false;
+                        if (MyLog.isINFO()) {
+                            tString = "UseDownEventForButtons";
+                        }
+                        break;
+
+                    case FLAG_BUTTON_GLOBAL_USE_UP_EVENTS_FOR_BUTTONS:
+                        if (aRPCView.mTouchIsActive[0] && !aRPCView.mUseUpEventForButtons) {
+                            // since we switched mode while button was down
+                            aRPCView.mDisableButtonUpOnce = true;
+                        }
+                        aRPCView.mUseUpEventForButtons = true;
+                        if (MyLog.isINFO()) {
+                            tString = "UseUpEventForButtons";
+                        }
+                        break;
+
+                    case FLAG_BUTTON_GLOBAL_SET_TOUCH_TONE:
+                        // set Tone
+                        if (aParameters[1] > 0 && aParameters[1] < ToneGenerator.TONE_CDMA_SIGNAL_OFF) {
+                            sTouchToneIndex = aParameters[1]; // aToneIndex
+                        }
+                        sCurrentToneDurationMillis = aParameters[2]; // aToneDuration in ms
+                        if (aParamsLength >= 4) {
+                            /*
+                             * set absolute value of volume
+                             */
+                            int tVolume = aParameters[3];
+                            if (tVolume > ToneGenerator.MAX_VOLUME) {
+                                tVolume = ToneGenerator.MAX_VOLUME;
+                            }
+                            if (tVolume >= 0 && tVolume != sLastRequestedToneVolume) {
+                                sLastRequestedToneVolume = tVolume;
+                                sButtonToneGenerator =
+                                        new ToneGenerator(aRPCView.mBlueDisplayContext.StreamToUseForTouchTone, tVolume);
+                            }
+                        } else {
+                            /*
+                             * set to user defined value of volume
+                             */
+                            int tCurrentSystemVolume = aRPCView.mBlueDisplayContext.mAudioManager.getStreamVolume(
+                                    aRPCView.mBlueDisplayContext.StreamToUseForTouchTone);
+                            sButtonToneGenerator = new ToneGenerator(aRPCView.mBlueDisplayContext.StreamToUseForTouchTone,
+                                    (tCurrentSystemVolume * ToneGenerator.MAX_VOLUME) /
+                                            aRPCView.mBlueDisplayContext.mMaxSystemVolume);
+                        }
+
+                        if (MyLog.isINFO()) {
+                            tInfoString =
+                                    " Touch tone volume=" + sLastRequestedToneVolume + ", duration=" + sCurrentToneDurationMillis +
+                                            "ms, index=" + sTouchToneIndex;
+                            tString = "SetTouchTone";
+                        }
+                        break;
+
+                    case FLAG_BUTTON_GLOBAL_SET_TOUCH_TONE_STATE:
+                        sGlobalButtonTouchToneState = aParameters[1];
+                        if (MyLog.isINFO()) {
+                            tInfoString = " Global touch tone state=" + sGlobalButtonTouchToneState;
+                            tString = "SetTouchToneState";
+                        }
+                        break;
                 }
 
-                String tInfoString = "";
-                if ((aParameters[0] & FLAG_BUTTON_GLOBAL_SET_BEEP_TONE) != 0) {
-                    if (aParamsLength > 1) {
-                        // set Tone
-                        if (aParamsLength > 2) {
-                            /*
-                             * set duration in ms
-                             */
-                            sCurrentToneDurationMillis = aParameters[2];
-                            if (aParamsLength > 3) {
-                                /*
-                                 * set absolute value of volume
-                                 */
-                                int tVolume = aParameters[3];
-                                if (tVolume > ToneGenerator.MAX_VOLUME) {
-                                    tVolume = ToneGenerator.MAX_VOLUME;
-                                }
-                                if (tVolume >= 0 && tVolume != sLastRequestedToneVolume) {
-                                    sLastRequestedToneVolume = tVolume;
-                                    sButtonToneGenerator = new ToneGenerator(AudioManager.STREAM_SYSTEM, tVolume);
-                                }
-                            } else {
-                                /*
-                                 * set to user defined value of volume
-                                 */
-                                int tCurrentSystemVolume = aRPCView.mBlueDisplayContext.mAudioManager
-                                        .getStreamVolume(AudioManager.STREAM_SYSTEM);
-                                sButtonToneGenerator = new ToneGenerator(AudioManager.STREAM_SYSTEM,
-                                        (tCurrentSystemVolume * ToneGenerator.MAX_VOLUME)
-                                                / aRPCView.mBlueDisplayContext.mMaxSystemVolume);
-                            }
-                        }
-                        if (aParameters[1] > 0 && aParameters[1] < ToneGenerator.TONE_CDMA_SIGNAL_OFF) {
-                            sTouchBeepIndex = aParameters[1];
-                        }
-                        if (MyLog.isINFO()) {
-                            tInfoString = " Touch tone volume=" + sLastRequestedToneVolume + ", duration=" + sCurrentToneDurationMillis + "ms, index=" + sTouchBeepIndex;
-                        }
-                    }
-                }
                 if (MyLog.isINFO()) {
-                    tString = "";
-                    if (aRPCView.mUseUpEventForButtons) {
-                        tString = " UseUpEventForButtons=";
-                    }
-                    MyLog.i(LOG_TAG, "Global settings. Flags=0x" + Integer.toHexString(aParameters[0]) + tString
-                            + aRPCView.mUseUpEventForButtons + "." + tInfoString);
+                    MyLog.i(LOG_TAG, "Global settings. Subfunction=0x" + Integer.toHexString(aParameters[1]) + " | " + tString +
+                            tInfoString);
                 }
                 break;
 
@@ -667,8 +714,8 @@ public class TouchButton {
             case FUNCTION_BUTTON_REMOVE:
                 int tBackgroundColor = RPCView.shortToLongColor(aParameters[1]);
                 if (MyLog.isINFO()) {
-                    MyLog.i(LOG_TAG, "Remove button, background color=" + RPCView.shortToColorString(aParameters[1]) + " for"
-                            + tButtonText);
+                    MyLog.i(LOG_TAG,
+                            "Remove button, background color=" + RPCView.shortToColorString(aParameters[1]) + " for" + tButtonText);
                 }
                 tButton.removeButton(tBackgroundColor);
                 break;
@@ -715,7 +762,7 @@ public class TouchButton {
                 break;
 
             case FUNCTION_BUTTON_SETTINGS:
-                int tSubcommand = aParameters[1];
+                tSubcommand = aParameters[1];
                 switch (tSubcommand) {
                     case SUBFUNCTION_BUTTON_SET_BUTTON_COLOR:
                     case SUBFUNCTION_BUTTON_SET_BUTTON_COLOR_AND_DRAW:
@@ -725,7 +772,8 @@ public class TouchButton {
                             if (tSubcommand == SUBFUNCTION_BUTTON_SET_BUTTON_COLOR_AND_DRAW) {
                                 tFunction = " and draw for";
                             }
-                            MyLog.i(LOG_TAG, "Set button color=" + RPCView.shortToColorString(aParameters[2]) + tFunction + tButtonText);
+                            MyLog.i(LOG_TAG,
+                                    "Set button color=" + RPCView.shortToColorString(aParameters[2]) + tFunction + tButtonText);
 
                         }
                         if (tSubcommand == SUBFUNCTION_BUTTON_SET_BUTTON_COLOR_AND_DRAW) {
@@ -737,7 +785,8 @@ public class TouchButton {
                     case SUBFUNCTION_BUTTON_SET_TEXT_COLOR:
                         tButton.mTextColor = RPCView.shortToLongColor(aParameters[2]);
                         if (MyLog.isINFO()) {
-                            MyLog.i(LOG_TAG, "Set text color= " + RPCView.shortToColorString(aParameters[2]) + " for" + tButtonText);
+                            MyLog.i(LOG_TAG,
+                                    "Set text color= " + RPCView.shortToColorString(aParameters[2]) + " for" + tButtonText);
                         }
                         if (tSubcommand == SUBFUNCTION_BUTTON_SET_TEXT_COLOR_AND_DRAW) {
                             tButton.drawButton();
@@ -776,8 +825,9 @@ public class TouchButton {
                         tButton.mButtonColor = RPCView.shortToLongColor(aParameters[2]);
                         tButton.mValue = aParameters[3];
                         if (MyLog.isINFO()) {
-                            MyLog.i(LOG_TAG, "set color=" + RPCView.shortToColorString(aParameters[2]) + " and value=" + tButton.mValue
-                                    + " for" + tButtonText);
+                            MyLog.i(LOG_TAG,
+                                    "set color=" + RPCView.shortToColorString(aParameters[2]) + " and value=" + tButton.mValue +
+                                            " for" + tButtonText);
                         }
                         if (tSubcommand == SUBFUNCTION_BUTTON_SET_COLOR_AND_VALUE_AND_DRAW) {
                             tButton.drawButton();
@@ -803,8 +853,8 @@ public class TouchButton {
                          */
                         tButton.mIsAutorepeatButton = true;
                         if (MyLog.isINFO()) {
-                            MyLog.i(LOG_TAG, "Set autorepeat timing. 1.delay=" + aParameters[2] + ", 1.rate=" + aParameters[3]
-                                    + ", 1.count=" + aParameters[4] + ", 2.rate=" + aParameters[5] + ". " + tButtonText);
+                            MyLog.i(LOG_TAG, "Set autorepeat timing. 1.delay=" + aParameters[2] + ", 1.rate=" + aParameters[3] +
+                                    ", 1.count=" + aParameters[4] + ", 2.rate=" + aParameters[5] + ". " + tButtonText);
                         }
                         tButton.mMillisFirstAutorepeatDelay = aParameters[2];
                         tButton.mMillisFirstAutorepeatRate = aParameters[3];
@@ -832,22 +882,22 @@ public class TouchButton {
                             // 16 bit Arduino / AVR address
                             tCallbackAddressStringAdjustedForClientDebugging = "/0x" + Integer.toHexString(tCallbackAddress << 1);
                         }
-                        tOldCallbackAddressStringAdjustedForClientDebugging = "/0x" + Integer.toHexString(tButton.mCallbackAddress << 1);
+                        tOldCallbackAddressStringAdjustedForClientDebugging =
+                                "/0x" + Integer.toHexString(tButton.mCallbackAddress << 1);
 
                         if (MyLog.isINFO()) {
-                            MyLog.i(LOG_TAG,
-                                    "Set callback from 0x" + Integer.toHexString(tButton.mCallbackAddress)
-                                            + tOldCallbackAddressStringAdjustedForClientDebugging + " to 0x"
-                                            + Integer.toHexString(tCallbackAddress) + tCallbackAddressStringAdjustedForClientDebugging
-                                            + ". " + tButtonText);
+                            MyLog.i(LOG_TAG, "Set callback from 0x" + Integer.toHexString(tButton.mCallbackAddress) +
+                                    tOldCallbackAddressStringAdjustedForClientDebugging + " to 0x" +
+                                    Integer.toHexString(tCallbackAddress) + tCallbackAddressStringAdjustedForClientDebugging +
+                                    ". " + tButtonText);
                         }
                         tButton.mCallbackAddress = tCallbackAddress;
                         break;
 
                     default:
-                        MyLog.w(LOG_TAG, "Unknown button settings subfunction 0x" + Integer.toHexString(tSubcommand)
-                                + "  received. aParameters[2]=" + aParameters[2] + ", aParameters[3]=" + aParameters[3]
-                                + tButtonText);
+                        MyLog.w(LOG_TAG, "Unknown button settings subfunction 0x" + Integer.toHexString(tSubcommand) +
+                                "  received. aParameters[2]=" + aParameters[2] + ", aParameters[3]=" + aParameters[3] +
+                                tButtonText);
                         break;
                 }
                 break;
@@ -885,8 +935,8 @@ public class TouchButton {
                         tButtonNumber = sButtonList.size();
                         sButtonList.add(tButton);
                         if (MyLog.isDEBUG()) {
-                            Log.d(LOG_TAG, "Button with index " + tButtonNumber + " appended at end of list. List size now "
-                                    + sButtonList.size());
+                            Log.d(LOG_TAG, "Button with index " + tButtonNumber + " appended at end of list. List size now " +
+                                    sButtonList.size());
                         }
                     }
                     tButton.mListIndex = tButtonNumber;
@@ -897,19 +947,18 @@ public class TouchButton {
                         tCallbackAddress);
 
                 if (MyLog.isINFO()) {
-                    MyLog.i(LOG_TAG,
-                            "Init button. ButtonNr=" + tButtonNumber + ", init(\"" + tButton.mEscapedText + "\", x="
-                                    + aParameters[1] + ", y=" + aParameters[2] + ", width=" + aParameters[3] + ", height="
-                                    + aParameters[4] + ", color=" + RPCView.shortToColorString(aParameters[5]) + ", size="
-                                    + aParameters[6] + ", flags=" + Integer.toHexString(aParameters[7]) + ", value="
-                                    + aParameters[8] + ", callback=0x" + Integer.toHexString(tCallbackAddress)
-                                    + tCallbackAddressStringAdjustedForClientDebugging + ") ListSize=" + sButtonList.size());
+                    MyLog.i(LOG_TAG, "Init button. ButtonNr=" + tButtonNumber + ", init(\"" + tButton.mEscapedText + "\", x=" +
+                            aParameters[1] + ", y=" + aParameters[2] + ", width=" + aParameters[3] + ", height=" + aParameters[4] +
+                            ", color=" + RPCView.shortToColorString(aParameters[5]) + ", size=" + aParameters[6] + ", flags=" +
+                            Integer.toHexString(aParameters[7]) + ", value=" + aParameters[8] + ", callback=0x" +
+                            Integer.toHexString(tCallbackAddress) + tCallbackAddressStringAdjustedForClientDebugging +
+                            ") ListSize=" + sButtonList.size());
                 }
                 break;
 
             default:
-                MyLog.e(LOG_TAG, "unknown command 0x" + Integer.toHexString(aCommand) + " received. paramsLength=" + aParamsLength
-                        + " dataLength=" + aDataLength);
+                MyLog.e(LOG_TAG, "unknown command 0x" + Integer.toHexString(aCommand) + " received. paramsLength=" + aParamsLength +
+                        " dataLength=" + aDataLength);
                 break;
         }
     }

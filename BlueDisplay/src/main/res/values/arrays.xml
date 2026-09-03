@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
- @date 30.08.2014
- @author Armin Joachimsmeyer
- armin.joachimsmeyer@gmail.com
+ * @copyright (C) 2014-2026  Armin Joachimsmeyer
+ * @author Armin Joachimsmeyer
+ * @license GPL v3 (http://www.gnu.org/licenses/gpl.html)
 -->
 
 <resources xmlns:android="http://schemas.android.com/apk/res/android">

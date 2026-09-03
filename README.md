@@ -140,6 +140,12 @@ RC car control display
 ![RC car control display](https://github.com/ArminJo/android-blue-display/blob/gh-pages/screenshots/RCCarControl.png)
 
 # Revision History
+### Version 5.2.0 / 25
+- Use `AudioManager.STREAM_MUSIC` instead of `AudioManager.STREAM_SYSTEM`.
+- Recompute slider value printing format for `SLIDER_SET_MIN_MAX` and `SLIDER_SET_SCALE_FACTOR`.
+- New function `setButtonsGlobalTouchToneState()`.
+- Removed `clearDisplayAndDisableButtonsAndSliders()`, is now included in `.clearDisplay()`. Added `clearDisplayArea()`.
+
 ### Version 5.1.0 / 24
 - Chart history is deleted on reconnect.
 - Improved BT_CONNECT permission request.

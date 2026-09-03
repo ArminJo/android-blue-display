@@ -4,7 +4,7 @@
  *     It receives basic draw requests from Arduino etc. over Bluetooth and renders it.
  *     It also implements basic GUI elements as buttons and sliders.
  *     It sends touch or GUI callback events over Bluetooth back to Arduino.
- * 
+ *
  *  Copyright (C) 2014-2026  Armin Joachimsmeyer
  *
  *  This file is part of BlueDisplay.
@@ -20,8 +20,8 @@
 
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/gpl.html>.
- *  
- *  
+ *
+ *
  * This service handles the Bluetooth connection and the Bluetooth socket communication.
  */
 
@@ -80,11 +80,9 @@ public class BluetoothSerialSocket {
 
     /**
      * Constructor. Prepares a new BluetoothChat session.
-     * 
-     * @param aContext
-     *            The UI Activity Context
-     * @param aHandler
-     *            A Handler to send messages back to the UI Activity
+     *
+     * @param aContext The UI Activity Context
+     * @param aHandler A Handler to send messages back to the UI Activity
      */
     public BluetoothSerialSocket(BlueDisplay aContext, SerialService aSerialService, Handler aHandler) {
         //mAdapter = BluetoothAdapter.getDefaultAdapter();
@@ -104,9 +102,8 @@ public class BluetoothSerialSocket {
 
     /**
      * Start the ConnectThread to initiate a connection to a remote device.
-     * 
-     * @param device
-     *            The BluetoothDevice to connect
+     *
+     * @param device The BluetoothDevice to connect
      */
     public synchronized void connect(BluetoothDevice device) {
         if (MyLog.isINFO()) {
@@ -135,11 +132,9 @@ public class BluetoothSerialSocket {
 
     /**
      * Start the ConnectedThread to begin managing a Bluetooth connection
-     * 
-     * @param socket
-     *            The BluetoothSocket on which the connection was made
-     * @param device
-     *            The BluetoothDevice that has been connected
+     *
+     * @param socket The BluetoothSocket on which the connection was made
+     * @param device The BluetoothDevice that has been connected
      */
     @SuppressLint("MissingPermission")
     public synchronized void connected(BluetoothSocket socket, BluetoothDevice device) {
@@ -204,8 +199,7 @@ public class BluetoothSerialSocket {
         ConnectedThread r;
         // Synchronize a copy of the ConnectedThread
         synchronized (this) {
-            if (mState != STATE_CONNECTED)
-                return;
+            if (mState != STATE_CONNECTED) return;
             r = mConnectedThread;
         }
         // Perform write unsynchronized

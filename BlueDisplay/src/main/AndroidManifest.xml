@@ -3,6 +3,7 @@
     android:installLocation="auto">
     <!-- versionCode and name are in gradle build script. See also File > Project Structure > Modules > Default Config -->
 
+    <!-- versionCode="25" => Version 5.2.0 -->
     <!-- versionCode="24" => Version 5.1.0 -->
     <!-- versionCode="20" => Version 4.4 -->
     <!-- versionCode="19" => Version 4.3.2 -->

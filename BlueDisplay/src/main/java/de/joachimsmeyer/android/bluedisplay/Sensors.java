@@ -102,9 +102,9 @@ public class Sensors implements SensorEventListener {
          * @return true if current value is no "noise"
          */
         boolean checkIfValueIsNoNoise(SensorEvent aEvent) {
-            if ((aEvent.values[0] == mLastValueX || aEvent.values[0] == mSecondLastValueX)
-                    && (aEvent.values[1] == mLastValueY || aEvent.values[1] == mSecondLastValueY)
-                    && (aEvent.values[2] == mLastValueZ || aEvent.values[2] == mSecondLastValueZ)) {
+            if ((aEvent.values[0] == mLastValueX || aEvent.values[0] == mSecondLastValueX) &&
+                    (aEvent.values[1] == mLastValueY || aEvent.values[1] == mSecondLastValueY) &&
+                    (aEvent.values[2] == mLastValueZ || aEvent.values[2] == mSecondLastValueZ)) {
                 if (MyLog.isVERBOSE()) {
                     Log.v(LOG_TAG, "Event detected as noise");
                 }
@@ -144,8 +144,7 @@ public class Sensors implements SensorEventListener {
     /*
      * Activate or deactivate sensor. To be called from interpret command.
      */
-    public void setSensor(int aSensorType, boolean DoActivate, int aSensorRate,
-                          int aFilterFlag) {
+    public void setSensor(int aSensorType, boolean DoActivate, int aSensorRate, int aFilterFlag) {
         if (MyLog.isINFO()) {
             MyLog.i(LOG_TAG, "SetSensor sensor=" + aSensorType + " DoActivate=" + DoActivate + " rate=" + aSensorRate);
         }
@@ -207,17 +206,18 @@ public class Sensors implements SensorEventListener {
             if (MyLog.isVERBOSE()) {
                 Log.v(LOG_TAG, "onSensorChanged sensorType=" + tSensorType);
             }
-            if (tSensorType == Sensor.TYPE_ACCELEROMETER || tSensorType == Sensor.TYPE_GRAVITY
-                    || tSensorType == Sensor.TYPE_GYROSCOPE || tSensorType == Sensor.TYPE_LINEAR_ACCELERATION
-                    || tSensorType == Sensor.TYPE_MAGNETIC_FIELD) {
+            if (tSensorType == Sensor.TYPE_ACCELEROMETER || tSensorType == Sensor.TYPE_GRAVITY ||
+                    tSensorType == Sensor.TYPE_GYROSCOPE || tSensorType == Sensor.TYPE_LINEAR_ACCELERATION ||
+                    tSensorType == Sensor.TYPE_MAGNETIC_FIELD) {
 
                 float ValueX = aEvent.values[0];
                 float ValueY = aEvent.values[1];
                 float ValueZ = aEvent.values[2];
                 if (MyLog.isVERBOSE()) {
                     // timestamp is in nanoseconds
-                    Log.v(LOG_TAG, "Values=" + ValueX + " " + ValueY + " " + ValueZ + " rotation="
-                            + mBlueDisplayContext.mCurrentRotation + " TimeStamp=" + aEvent.timestamp / 1000 + "\u00B5s");
+                    Log.v(LOG_TAG,
+                            "Values=" + ValueX + " " + ValueY + " " + ValueZ + " rotation=" + mBlueDisplayContext.mCurrentRotation +
+                                    " TimeStamp=" + aEvent.timestamp / 1000 + "\u00B5s");
                 }
 
                 if (mBlueDisplayContext.mCurrentRotation == Surface.ROTATION_90) {
