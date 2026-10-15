@@ -125,6 +125,7 @@ public class LogViewActivity extends ListActivity {
             }
             TextView textView = (TextView) rowView;
             String tLogMessage = MyLog.get(position);
+            textView.setTextColor(Color.WHITE);
 
             if (tLogMessage != null) {
                 if (tLogMessage.charAt(0) == 'E') {
@@ -134,11 +135,11 @@ public class LogViewActivity extends ListActivity {
                 } else if (tLogMessage.charAt(0) == 'I') {
                     textView.setBackgroundColor(Color.BLACK);
                 } else if (tLogMessage.charAt(0) == 'D') {
-                    textView.setBackgroundColor(Color.rgb(0x50, 0x50, 0x50));
+                    textView.setBackgroundColor(Color.GRAY);
                 } else if (tLogMessage.charAt(0) == 'V') {
                     // Monospace for BTSerial RawData
                     textView.setTypeface(Typeface.MONOSPACE);
-                    textView.setBackgroundColor(Color.rgb(0x68, 0x68, 0x68));
+                    textView.setBackgroundColor(Color.LTGRAY);
                 }
                 textView.setText(tLogMessage);
             }
