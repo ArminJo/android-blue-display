@@ -1497,7 +1497,7 @@ public class RPCView extends View {
         try {
             switch (aCommand) {
                 case FUNCTION_PLAY_TONE:
-                    int tToneIndex = ToneGenerator.TONE_CDMA_KEYPAD_VOLUME_KEY_LITE;
+                    int tToneIndex = ToneGenerator.TONE_CDMA_KEYPAD_VOLUME_KEY_LITE; // default feedback tone
                     int tDurationMillis = -1;
                     ToneGenerator tToneGenerator = mToneGenerator;
                     if (aParamsLength > 0) {
@@ -1509,9 +1509,8 @@ public class RPCView extends View {
                              * set duration in ms
                              */
                             tDurationMillis = aParameters[1];
-                            // Only duration -1 means forever, -2 gives 65534
-                            if (tDurationMillis < -1) {
-                                tDurationMillis = 0x10000 + tDurationMillis;
+                            if (tDurationMillis == 0) {
+                                tDurationMillis = -1; // Map unsigned duration 0 to -1, which means forever
                             }
                             if (aParamsLength > 2) {
                                 /*

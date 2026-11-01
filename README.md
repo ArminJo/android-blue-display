@@ -140,6 +140,9 @@ RC car control display
 ![RC car control display](https://github.com/ArminJo/android-blue-display/blob/gh-pages/screenshots/RCCarControl.png)
 
 # Revision History
+### Version 5.3.0 / 26 - work in progress
+- Added slider function `SUBFUNCTION_SLIDER_SET_VALUE_AND_DRAW_SLIDER`.
+
 ### Version 5.2.0 / 25
 - Use `AudioManager.STREAM_MUSIC` instead of `AudioManager.STREAM_SYSTEM`.
 - Recompute slider value printing format for `SLIDER_SET_MIN_MAX` and `SLIDER_SET_SCALE_FACTOR`.

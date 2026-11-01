@@ -1001,7 +1001,7 @@ public class BlueDisplay extends Activity {
                     | InputType.TYPE_NUMBER_FLAG_SIGNED);
         }
         if (aInitialValue != RPCView.NUMBER_INITIAL_VALUE_DO_NOT_SHOW) {
-            tUserInput.setText(Float.toString(aInitialValue).replaceAll("\\.?0*$", ""));
+            tUserInput.setText(Float.toString(aInitialValue).replaceAll("\\.?0*$", "")); // "\\.?0*$" -> remove trailing zeros
         }
         AlertDialog.Builder tBuilder = new AlertDialog.Builder(this);
         tBuilder.setView(tInputView);

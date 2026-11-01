@@ -142,6 +142,7 @@ public class TouchSlider {
     private static final int SUBFUNCTION_SLIDER_SET_BORDER_SIZES_AND_COLOR = 0x0B;
 
     private static final int SUBFUNCTION_SLIDER_SET_VALUE = 0x0C;
+    private static final int SUBFUNCTION_SLIDER_SET_VALUE_AND_DRAW_SLIDER = 0x0D;
 
 
     private static final int SUBFUNCTION_SLIDER_SET_CALLBACK = 0x20;
@@ -829,6 +830,7 @@ public class TouchSlider {
                             break;
 
                         case SUBFUNCTION_SLIDER_SET_VALUE_AND_DRAW_BAR:
+                        case SUBFUNCTION_SLIDER_SET_VALUE_AND_DRAW_SLIDER:
                         case SUBFUNCTION_SLIDER_SET_VALUE:
                             tSlider.mCurrentValue = aParameters[2];
                             if (tSubcommand == SUBFUNCTION_SLIDER_SET_VALUE_AND_DRAW_BAR) {
@@ -837,6 +839,10 @@ public class TouchSlider {
                                 if ((tSlider.mOptions & FLAG_SLIDER_SHOW_VALUE) != 0) {
                                     tSlider.printCurrentValue();
                                 }
+                            }
+                            if (tSubcommand == SUBFUNCTION_SLIDER_SET_VALUE_AND_DRAW_SLIDER) {
+                                tSlider.drawSlider();
+                                tFunction = " and draw slider";
                             }
                             // Log on debug level, because it may be called very often
                             if (MyLog.isDEBUG()) {
