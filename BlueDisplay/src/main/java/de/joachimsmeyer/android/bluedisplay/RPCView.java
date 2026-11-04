@@ -1361,7 +1361,7 @@ public class RPCView extends View {
 
             // send new size to client
             if (mBlueDisplayContext.mSerialService != null && aSendToClient) {
-                mBlueDisplayContext.mSerialService.writeTwoIntegerEvent(SerialService.EVENT_REDRAW, mCurrentCanvasPixelWidth,
+                mBlueDisplayContext.mSerialService.writeTwoIntegerEventAndTimestamp(SerialService.EVENT_REDRAW, mCurrentCanvasPixelWidth,
                         mCurrentCanvasPixelHeight);
             }
             // show new Values

@@ -423,7 +423,7 @@ public class SerialService {
     }
 
     /**
-     * send 16 bit X and Y position
+     * send 16 bit X and Y position and timestamp
      */
     public void writeTwoIntegerEventAndTimestamp(int aEventType, int aX, int aY) {
         int tEventLength = 11;
