@@ -55,7 +55,7 @@ public class SerialService {
     public static final int SIZE_OF_IN_BUFFER =
             WORK_SIZE_OF_IN_BUFFER + Math.max(BluetoothSerialSocket.BT_READ_MAX_SIZE, SerialInputOutputManager.BUFSIZ);
     public static final int MIN_MESSAGE_SIZE = 4;
-            // was former 5 (data message with one byte), but this makes problems with receiving empty data blocks
+    // was former 5 (data message with one byte), but this makes problems with receiving empty data blocks
     public static final int MIN_COMMAND_SIZE = 4; // command message with no parameter
 
     public volatile byte[] mBigReceiveBuffer = new byte[SIZE_OF_IN_BUFFER];
@@ -1193,7 +1193,8 @@ public class SerialService {
         while (tBufferScanIndex <= (aBufferStartScanIndex + aBytesToScan - 6)) {
             // Check for FUNCTION_SKIP_AND_CLEAR_DISPLAY
             if (mBigReceiveBuffer[tBufferScanIndex] == SYNC_TOKEN) {
-                if (((mBigReceiveBuffer[tBufferScanIndex + 1] == RPCView.FUNCTION_CLEAR_DISPLAY_AND_SKIP_OPTIONAL) &&
+                if ((((mBigReceiveBuffer[tBufferScanIndex + 1] == RPCView.FUNCTION_CLEAR_DISPLAY_AND_SKIP_OPTIONAL) ||
+                        (mBigReceiveBuffer[tBufferScanIndex + 1] == RPCView.FUNCTION_CLEAR_DISPLAY_AREA_AND_SKIP_OPTIONAL)) &&
                         (mBigReceiveBuffer[tBufferScanIndex + 2] == 2) /* lsb of length 2 | one parameter */ &&
                         (mBigReceiveBuffer[tBufferScanIndex + 3] == 0) /* msb of length 2 | one parameter */ &&
                         (tBufferScanIndex == ((aBufferStartScanIndex + aBytesToScan) - 6))) ||

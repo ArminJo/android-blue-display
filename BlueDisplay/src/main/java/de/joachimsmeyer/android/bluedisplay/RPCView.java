@@ -325,6 +325,7 @@ public class RPCView extends View {
     public final static int FUNCTION_CLEAR_DISPLAY_AREA = 0x13;
     public final static int FUNCTION_DRAW_DISPLAY = 0x11;
     public final static int FUNCTION_CLEAR_DISPLAY_AND_SKIP_OPTIONAL = 0x12; // used for skipping commands in buffer
+    public final static int FUNCTION_CLEAR_DISPLAY_AREA_AND_SKIP_OPTIONAL = 0x15; // used for skipping commands in buffer
     // with 3 parameter
     private final static int FUNCTION_DRAW_PIXEL = 0x14;
     // 6 parameter
@@ -1864,11 +1865,12 @@ public class RPCView extends View {
                     break;
 
                 case FUNCTION_CLEAR_DISPLAY_AND_SKIP_OPTIONAL:
+                case FUNCTION_CLEAR_DISPLAY_AREA_AND_SKIP_OPTIONAL:
                 case FUNCTION_CLEAR_DISPLAY:
                 case FUNCTION_CLEAR_DISPLAY_AREA:
                     // clear screen
                     mCanvas.drawColor(shortToLongColor(aParameters[0]));
-                    if (aCommand == FUNCTION_CLEAR_DISPLAY_AREA) {
+                    if (aCommand == FUNCTION_CLEAR_DISPLAY_AREA || aCommand == FUNCTION_CLEAR_DISPLAY_AREA_AND_SKIP_OPTIONAL) {
                         if (MyLog.isINFO()) {
                             MyLog.i(LOG_TAG, "Clear display with color=" + shortToColorString(aParameters[0]));
                         }
