@@ -29,7 +29,6 @@ package de.joachimsmeyer.android.bluedisplay;
 
 import static android.app.PendingIntent.FLAG_MUTABLE;
 
-import android.annotation.SuppressLint;
 import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -156,8 +155,8 @@ public class USBSerialSocket implements SerialInputOutputManager.Listener {
                 MyLog.i(LOG_TAG, "Request user USB permission for VID=" + mUSBDevice.getVendorId() + " ProductId=" +
                         mUSBDevice.getProductId());
                 // FLAG_IMMUTABLE crashes on my android 5.1. tablet
-                @SuppressLint("MutableImplicitPendingIntent") PendingIntent tUSBPermissionIntent =
-                        PendingIntent.getBroadcast(mBlueDisplayContext, 0, new Intent(ACTION_USB_PERMISSION), FLAG_MUTABLE);
+                PendingIntent tUSBPermissionIntent = PendingIntent.getBroadcast(mBlueDisplayContext, 0,
+                        new Intent(ACTION_USB_PERMISSION).setPackage(mBlueDisplayContext.getPackageName()), FLAG_MUTABLE);
                 mUsbManager.requestPermission(mUSBDevice, tUSBPermissionIntent);
             }
         }
@@ -251,7 +250,7 @@ public class USBSerialSocket implements SerialInputOutputManager.Listener {
             // do not do it twice so do it here
             mIsConnected = false;
             mBlueDisplayContext.mUSBDeviceAttached = false;
-            // Send a disconnect message back to the Activity, which resets mUSBDeviceAttached flag
+            // Send a disconnect message back to the Activity
             mHandler.sendEmptyMessage(BlueDisplay.MESSAGE_USB_DISCONNECT);
         }
     }

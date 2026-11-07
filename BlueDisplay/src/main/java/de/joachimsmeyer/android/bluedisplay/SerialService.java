@@ -60,11 +60,12 @@ public class SerialService {
 
     public volatile byte[] mBigReceiveBuffer = new byte[SIZE_OF_IN_BUFFER];
     /*
-     * Current end of buffer content. Last content byte + 1. Ranges from SIZE_OF_IN_BUFFER -
-     * max(BluetoothSerialSocket.BT_READ_MAX_SIZE, SerialInputOutputManager.BUFSIZE) to SIZE_OF_IN_BUFFER
+     * Current end of buffer content. Last content byte + 1. Ranges from 0 to WORK_SIZE_OF_IN_BUFFER
      */
     volatile int mReceiveBufferInIndex; // Last content byte + 1 or first free byte
     volatile int mReceiveBufferOutIndex; // first unprocessed byte
+    private final Object mBufferLock = new Object(); // Guards the in and out index and moving of buffer content
+    private volatile boolean mBufferContentWasDiscarded = false; // Tells searchCommand() that its saved state is invalid
 
     byte[] mDataBuffer = new byte[4096]; // Buffer to hold data for one data command
     private volatile boolean inBufferReadingLock = false; // Safety net to avoid 2 instances of search command calls. Should never
@@ -125,7 +126,7 @@ public class SerialService {
     private final byte[] mSendByteBuffer = new byte[CALLBACK_DATA_SIZE]; // Static buffer since we only send one item at a time
 
     /**
-     * Constructor. Prepares a new BluetoothChat session.
+     * Constructor. Prepares a new Bluetooth session.
      *
      * @param aContext The UI Activity Context
      * @param aHandler A Handler to send messages back to the UI Activity
@@ -138,7 +139,7 @@ public class SerialService {
 
     /**
      * Called by BT or USB driver thread after copying up to 4096 bytes from input to buffer.
-     * Handle mReceiveBufferInIndex, statistics, FUNCTION_SKIP_AND_CLEAR_DISPLAY and buffer overflow
+     * Handle mReceiveBufferInIndex, statistics, FUNCTION_CLEAR_DISPLAY_AND_SKIP_OPTIONAL, FUNCTION_CLEAR_DISPLAY_AREA_AND_SKIP_OPTIONAL and buffer overflow
      * and signal BlueDisplay.MESSAGE_UPDATE_VIEW.
      *
      * @param aReadLength - The number of bytes copied into buffer by BT or USB driver thread.
@@ -149,59 +150,64 @@ public class SerialService {
             MyLog.w(LOG_TAG, "Read length = 0");
         } else {
             mStatisticNumberOfReceivedBytes += aReadLength;
-            int tOldReceiveBufferInIndex = mReceiveBufferInIndex;
-            mReceiveBufferInIndex += aReadLength;
+            synchronized (mBufferLock) {
+                int tOldReceiveBufferInIndex = mReceiveBufferInIndex;
+                mReceiveBufferInIndex += aReadLength;
 
-            /*
-             * Check for buffer end reached i.e. no space for a new complete reading of 4096 bytes from driver.
-             * -> shift new received data to start
-             */
-            if (mReceiveBufferInIndex >= SerialService.WORK_SIZE_OF_IN_BUFFER) {
-                int tUnprocessedDataLength = mReceiveBufferInIndex - mReceiveBufferOutIndex;
-                if (tUnprocessedDataLength < SerialService.WORK_SIZE_OF_IN_BUFFER) {
-                    if (MyLog.isINFO()) {
-                        // use Log.d to make it more visible
-                        Log.d(LOG_TAG, "Buffer full after reading " + aReadLength + " bytes -> remove processed data and keep " +
-                                tUnprocessedDataLength + " unprocessed bytes");
-                    }                    /*
-                     * Delete already processed data at buffer start / compress buffer
-                     * mReceiveBufferOutIndex -> 0
-                     */
-                    System.arraycopy(mBigReceiveBuffer, mReceiveBufferOutIndex, mBigReceiveBuffer, 0, tUnprocessedDataLength);
-                    mReceiveBufferInIndex = tUnprocessedDataLength;
-                    mReceiveBufferOutIndex = 0;
-                }
-            }
-
-            /*
-             * Check again, because we may have a new mReceiveBufferInIndex, which is still too big
-             */
-            if (mReceiveBufferInIndex >= SerialService.WORK_SIZE_OF_IN_BUFFER) {
-                int tUnprocessedDataLength = mReceiveBufferInIndex - mReceiveBufferOutIndex;
                 /*
-                 * Here all data is unprocessed :-(
-                 * Check data for last FUNCTION_CLEAR_DISPLAY_AND_SKIP_OPTIONAL and skip content before
-                 * or keep only new data
+                 * Check for buffer end reached i.e. no space for a new complete reading of 10*4096 bytes from driver.
+                 * -> shift new received data to start
                  */
-                int tSkipIndex = scanBufferForLastSkipAndClearDisplayCommand(mReceiveBufferOutIndex, tUnprocessedDataLength);
-                if (tSkipIndex != 0) {
-                    if (MyLog.isINFO()) {
-                        // use Log.w to make it more visible
-                        Log.w(LOG_TAG, "Buffer overflow -> skip " + (tSkipIndex - mReceiveBufferOutIndex) +
-                                " bytes in buffer until last clearDisplayAndSkipOptional");
+                if (mReceiveBufferInIndex >= SerialService.WORK_SIZE_OF_IN_BUFFER) {
+                    int tUnprocessedDataLength = mReceiveBufferInIndex - mReceiveBufferOutIndex;
+                    if (tUnprocessedDataLength < SerialService.WORK_SIZE_OF_IN_BUFFER) {
+                        if (MyLog.isINFO()) {
+                            // use Log.d to make it more visible
+                            Log.d(LOG_TAG,
+                                    "Buffer full after reading " + aReadLength + " bytes -> remove processed data and keep " +
+                                            tUnprocessedDataLength + " unprocessed bytes");
+                        }
+                        /*
+                         * Delete already processed data at buffer start / compress buffer
+                         * mReceiveBufferOutIndex -> 0
+                         */
+                        System.arraycopy(mBigReceiveBuffer, mReceiveBufferOutIndex, mBigReceiveBuffer, 0, tUnprocessedDataLength);
+                        mReceiveBufferInIndex = tUnprocessedDataLength;
+                        mReceiveBufferOutIndex = 0;
                     }
-                    // Here we have commands to skip
-                    mReceiveBufferInIndex = (mReceiveBufferOutIndex + tUnprocessedDataLength) - tSkipIndex;
-                    System.arraycopy(mBigReceiveBuffer, tSkipIndex, mBigReceiveBuffer, 0, mReceiveBufferInIndex);
-                    mStatisticNumberOfBufferSkip++;
-                } else {
-                    Log.w(LOG_TAG, "Buffer overflow -> remove all old and keep only new data of " + aReadLength + " bytes.");
-                    // No skip command found, discard all except the new data.
-                    mReceiveBufferInIndex = aReadLength;
-                    System.arraycopy(mBigReceiveBuffer, tOldReceiveBufferInIndex, mBigReceiveBuffer, 0, mReceiveBufferInIndex);
-                    mStatisticNumberOfBufferOverflow++;
                 }
-                mReceiveBufferOutIndex = 0;
+
+                /*
+                 * Check again, because we may have a new mReceiveBufferInIndex, which is still too big
+                 */
+                if (mReceiveBufferInIndex >= SerialService.WORK_SIZE_OF_IN_BUFFER) {
+                    int tUnprocessedDataLength = mReceiveBufferInIndex - mReceiveBufferOutIndex;
+                    /*
+                     * Here all data is unprocessed :-(
+                     * Check data for last FUNCTION_CLEAR_DISPLAY_AND_SKIP_OPTIONAL or FUNCTION_CLEAR_DISPLAY_AREA_AND_SKIP_OPTIONAL
+                     * and skip content before or keep only new data
+                     */
+                    int tSkipIndex = scanBufferForLastSkipAndClearDisplayCommand(mReceiveBufferOutIndex, tUnprocessedDataLength);
+                    if (tSkipIndex != 0) {
+                        if (MyLog.isINFO()) {
+                            // use Log.w to make it more visible
+                            Log.w(LOG_TAG, "Buffer overflow -> skip " + (tSkipIndex - mReceiveBufferOutIndex) +
+                                    " bytes in buffer until last clearDisplayAndSkipOptional");
+                        }
+                        // Here we have commands to skip
+                        mReceiveBufferInIndex = (mReceiveBufferOutIndex + tUnprocessedDataLength) - tSkipIndex;
+                        System.arraycopy(mBigReceiveBuffer, tSkipIndex, mBigReceiveBuffer, 0, mReceiveBufferInIndex);
+                        mStatisticNumberOfBufferSkip++;
+                    } else {
+                        Log.w(LOG_TAG, "Buffer overflow -> remove all old and keep only new data of " + aReadLength + " bytes.");
+                        // No skip command found, discard all except the new data.
+                        mReceiveBufferInIndex = aReadLength;
+                        System.arraycopy(mBigReceiveBuffer, tOldReceiveBufferInIndex, mBigReceiveBuffer, 0, mReceiveBufferInIndex);
+                        mStatisticNumberOfBufferOverflow++;
+                    }
+                    mReceiveBufferOutIndex = 0;
+                    mBufferContentWasDiscarded = true; // A partially received command is gone now
+                }
             }
 
             if (MyLog.isVERBOSE()) {
@@ -210,8 +216,9 @@ public class SerialService {
             }
         }
         if (mRequireUpdateViewMessage) {
-            mHandler.sendEmptyMessage(BlueDisplay.MESSAGE_UPDATE_VIEW);
+            // Reset flag before sending, otherwise we may overwrite a true just set by onDraw() and lose the next trigger
             mRequireUpdateViewMessage = false;
+            mHandler.sendEmptyMessage(BlueDisplay.MESSAGE_UPDATE_VIEW);
             if (MyLog.isDEVELOPMENT_TESTING() && MyLog.isINFO()) {
                 Log.v(LOG_TAG, "Send MESSAGE_UPDATE_VIEW. Bytes in buffer=" + mReceiveBufferInIndex);
             }
@@ -223,9 +230,12 @@ public class SerialService {
     }
 
     void resetReceiveBuffer() {
-        mReceiveBufferInIndex = 0;
-        mReceiveBufferOutIndex = 0;
-        mSerialPrintBufferInIndex = 0;
+        synchronized (mBufferLock) {
+            mReceiveBufferInIndex = 0;
+            mReceiveBufferOutIndex = 0;
+            mSerialPrintBufferInIndex = 0;
+            mBufferContentWasDiscarded = true;
+        }
     }
 
     void resetStatistics() {
@@ -316,7 +326,7 @@ public class SerialService {
     /**
      * send 16 bit X and Y position
      */
-    public void writeTwoIntegerEvent(int aEventType, int aX, int aY) {
+    public synchronized void writeTwoIntegerEvent(int aEventType, int aX, int aY) {
         int tEventLength = 7;
         int tEventType = aEventType & 0xFF;
 
@@ -343,7 +353,7 @@ public class SerialService {
         writeEvent(mSendByteBuffer, tEventLength);
     }
 
-    public void writeOneIntegerEvent(int aEventType, int aValue) {
+    public synchronized void writeOneIntegerEvent(int aEventType, int aValue) {
         int tEventLength = 5;
         int tEventType = aEventType & 0xFF;
 
@@ -368,7 +378,7 @@ public class SerialService {
         writeEvent(mSendByteBuffer, tEventLength);
     }
 
-    public void writeNoDataEvent(int aEventType) {
+    public synchronized void writeNoDataEvent(int aEventType) {
         int tEventLength = 3;
         int tEventType = aEventType & 0xFF;
 
@@ -391,7 +401,7 @@ public class SerialService {
     /**
      * send 16 bit X and Y position and 8 bit pointer index
      */
-    public void writeTwoIntegerAndAByteEvent(int aEventType, int aX, int aY, int aByte) {
+    public synchronized void writeTwoIntegerAndAByteEvent(int aEventType, int aX, int aY, int aByte) {
         int tEventLength = 8;
         int tEventType = aEventType & 0xFF;
 
@@ -425,7 +435,7 @@ public class SerialService {
     /**
      * send 16 bit X and Y position and timestamp
      */
-    public void writeTwoIntegerEventAndTimestamp(int aEventType, int aX, int aY) {
+    public synchronized void writeTwoIntegerEventAndTimestamp(int aEventType, int aX, int aY) {
         int tEventLength = 11;
         int tEventType = aEventType & 0xFF;
 
@@ -475,8 +485,8 @@ public class SerialService {
     /*
      * send 16 bit button / slider index, 16 bit filler, 32 bit callback address and 32 bit value
      */
-    public void writeGuiCallbackEvent(int aEventType, int aButtonSliderIndex, int aCallbackAddress, int aValue,
-                                      String aElementInfo) {
+    public synchronized void writeGuiCallbackEvent(int aEventType, int aButtonSliderIndex, int aCallbackAddress, int aValue,
+                                                   String aElementInfo) {
         int tEventLength = CALLBACK_DATA_SIZE;
         int tEventType = aEventType & 0xFF;
 
@@ -522,7 +532,7 @@ public class SerialService {
     /*
      * send 16 bit button index, 16-bit filler, 32-bit callback address and 32-bit FLOAT value
      */
-    public void writeNumberCallbackEvent(int aEventType, int aCallbackAddress, float aValue) {
+    public synchronized void writeNumberCallbackEvent(int aEventType, int aCallbackAddress, float aValue) {
         int tEventLength = CALLBACK_DATA_SIZE;
         int tEventType = aEventType & 0xFF;
 
@@ -562,7 +572,8 @@ public class SerialService {
     /*
      * send 16 bit direction,16 bit filler, 32 bit start position and 32 bit delta
      */
-    public void writeSwipeCallbackEvent(int aEventType, int aIsXDirection, int aStartX, int aStartY, int aDeltaX, int aDeltaY) {
+    public synchronized void writeSwipeCallbackEvent(int aEventType, int aIsXDirection, int aStartX, int aStartY, int aDeltaX,
+                                                     int aDeltaY) {
         int tEventLength = CALLBACK_DATA_SIZE;
         int tEventType = aEventType & 0xFF;
 
@@ -602,7 +613,7 @@ public class SerialService {
     /*
      * send sensor event type and xyz 32-bit FLOAT values
      */
-    public void writeSensorEvent(int aEventType, float aValueX, float aValueY, float aValueZ) {
+    public synchronized void writeSensorEvent(int aEventType, float aValueX, float aValueY, float aValueZ) {
         int tEventLength = CALLBACK_DATA_SIZE;
         int tEventType = aEventType & 0xFF;
 
@@ -641,56 +652,10 @@ public class SerialService {
     }
 
     /*
-     * Never used yet
-     */
-    public void writeInfoCallbackEvent(int aEventType, int aSubFunction, int aByteInfo, int aShortInfo, int aCallbackAddress,
-                                       int aInfo_0, int aInfo_1) {
-        int tEventLength = CALLBACK_DATA_SIZE;
-        int tEventType = aEventType & 0xFF;
-
-        // assemble data buffer
-        int tIndex = 0;
-        mSendByteBuffer[tIndex++] = (byte) tEventLength; // gross message length in bytes including sync token
-
-        mSendByteBuffer[tIndex++] = (byte) tEventType; // Sub function token
-
-        mSendByteBuffer[tIndex++] = (byte) (aSubFunction & 0xFF);
-
-        mSendByteBuffer[tIndex++] = (byte) (aByteInfo & 0xFF);
-        // put special info here
-        mSendByteBuffer[tIndex++] = (byte) (aShortInfo & 0xFF); // LSB
-        mSendByteBuffer[tIndex++] = (byte) ((aShortInfo >> 8) & 0xFF); // MSB
-
-        mSendByteBuffer[tIndex++] = (byte) (aCallbackAddress & 0xFF); // LSB
-        mSendByteBuffer[tIndex++] = (byte) ((aCallbackAddress >> 8) & 0xFF); // MSB
-        mSendByteBuffer[tIndex++] = (byte) ((aCallbackAddress >> 16) & 0xFF);
-        mSendByteBuffer[tIndex++] = (byte) ((aCallbackAddress >> 24) & 0xFF);
-
-        mSendByteBuffer[tIndex++] = (byte) (aInfo_0 & 0xFF); // LSB
-        mSendByteBuffer[tIndex++] = (byte) ((aInfo_0 >> 8) & 0xFF); // MSB
-        mSendByteBuffer[tIndex++] = (byte) (aInfo_1 & 0xFF); // LSB
-        mSendByteBuffer[tIndex++] = (byte) ((aInfo_1 >> 8) & 0xFF); // MSB
-        mSendByteBuffer[tIndex] = SYNC_TOKEN;
-        if (MyLog.isINFO()) {
-            String tType = RPCView.sActionMappings.get(tEventType);
-            MyLog.i(LOG_TAG,
-                    "Send Type=0x" + Integer.toHexString(tEventType) + "|" + tType + " SubFunction=" + aSubFunction + " ByteInfo=" +
-                            (aByteInfo & 0xFF) + " ShortInfo=" + (aShortInfo & 0xFFFF) + " CallbackAddress=0x" +
-                            Integer.toHexString(aCallbackAddress) + " Info 0=" + aInfo_0 + " Info 1=" + aInfo_1);
-        }
-
-        mStatisticNumberOfSentBytes += tEventLength;
-        mStatisticNumberOfSentCommands++;
-
-        writeEvent(mSendByteBuffer, tEventLength);
-
-    }
-
-    /*
      * Only used for SUBFUNCTION_GET_INFO_LOCAL_TIME and SUBFUNCTION_GET_INFO_GMT_TIME
      */
-    public void writeInfoCallbackEvent(int aEventType, int aSubFunction, int aByteInfo, int aShortInfo, int aCallbackAddress,
-                                       long aLongInfo) {
+    public synchronized void writeInfoCallbackEvent(int aEventType, int aSubFunction, int aByteInfo, int aShortInfo,
+                                                    int aCallbackAddress, long aLongInfo) {
         int tEventLength = CALLBACK_DATA_SIZE;
         int tEventType = aEventType & 0xFF;
 
@@ -763,11 +728,9 @@ public class SerialService {
     private static final int[] mParameters = new int[MAX_NUMBER_OF_PARAMS];
 
     int getBufferBytesAvailable() {
-        if (mReceiveBufferOutIndex == mReceiveBufferInIndex) {
-            // buffer empty
-            return 0;
+        synchronized (mBufferLock) {
+            return Math.max(mReceiveBufferInIndex - mReceiveBufferOutIndex, 0);
         }
-        return (mReceiveBufferInIndex - mReceiveBufferOutIndex);
     }
 
     private static final int numberOfBitsInAHalfByte = 4;
@@ -792,14 +755,19 @@ public class SerialService {
     }
 
     /*
-     * Get byte from buffer, clear buffer, increment pointer and handle wrap around
+     * Get byte from buffer, clear buffer and increment pointer
      */
-    int getUnsignedByteFromBuffer() {
-        return convertByteToInt(getByteFromBuffer());
-    }
-
     byte getByteFromBuffer() {
-        byte tByte = mBigReceiveBuffer[mReceiveBufferOutIndex];
+        byte tByte;
+        synchronized (mBufferLock) {
+            if (mReceiveBufferOutIndex >= mReceiveBufferInIndex) {
+                return 0; // Buffer content was discarded while reading a command
+            }
+            tByte = mBigReceiveBuffer[mReceiveBufferOutIndex];
+            // clear processed content
+            mBigReceiveBuffer[mReceiveBufferOutIndex] = 0x00;
+            mReceiveBufferOutIndex++;
+        }
 
         if (MyLog.isVERBOSE()) {
             mHexOutputTempBuffer[mHexOutputTempBufferCurrentIndex++] = tByte;
@@ -831,9 +799,6 @@ public class SerialService {
                 MyLog.v("", "Hex=" + tDataRaw + "\n   Asc=" + tDataString);
             }
         }
-        // clear processed content
-        mBigReceiveBuffer[mReceiveBufferOutIndex] = 0x00;
-        mReceiveBufferOutIndex++;
         return tByte;
     }
 
@@ -845,7 +810,15 @@ public class SerialService {
     public static final int RPCVIEW_DO_DRAW_AND_CALL_AGAIN = 3; // The canvas should be rendered, but we may have more data, so try
 // it again
 
-// after rendering -> call invalidate().
+    // after rendering -> call invalidate().
+    /*
+     * Called only by UI thread, which is the owner of the search state
+     */
+    private void resetSearchStateAfterDiscard() {
+        mBufferContentWasDiscarded = false;
+        searchStateMustBeLoaded = false;
+        searchStateInputLengthToWaitFor = MIN_COMMAND_SIZE;
+    }
 
     /**
      * Search the input buffer for valid commands and call interpretCommand() as long as there is data available.
@@ -854,7 +827,10 @@ public class SerialService {
      * @return RPCVIEW_DO_... if we have more data in the buffer but want to redraw now, e.g. after a FUNCTION_DRAW_CHART command.
      */
     int searchCommand(RPCView aRPCView) {
-        if (inBufferReadingLock || (mReceiveBufferOutIndex == mReceiveBufferInIndex)) {
+        if (mBufferContentWasDiscarded) {
+            resetSearchStateAfterDiscard();
+        }
+        if (inBufferReadingLock || getBufferBytesAvailable() == 0) {
             if (MyLog.isVERBOSE()) {
                 Log.v(LOG_TAG, "searchCommand just returns. No buffer content. Lock=" + inBufferReadingLock + " BufferInIndex=" +
                         mReceiveBufferInIndex);
@@ -899,6 +875,11 @@ public class SerialService {
          * we have a chance, that we received a complete command.
          */
         while (getBufferBytesAvailable() >= searchStateInputLengthToWaitFor) {
+            if (mBufferContentWasDiscarded) {
+                resetSearchStateAfterDiscard();
+                tCommand = 0; // The parameters of a command waiting for its data are invalid now
+                tParamsLength = 0;
+            }
             if (searchStateMustBeLoaded) {
                 // restore state of last call to searchCommand()
                 tLengthReceived = searchStateInputLengthToWaitFor;
@@ -937,7 +918,7 @@ public class SerialService {
                         MyLog.v(LOG_TAG, "Data: length=" + tLengthReceived + " at ptr=" + (mReceiveBufferOutIndex - 1));
                     }
                     // Plausibility check
-                    if (tLengthReceived > mDataBuffer.length) {
+                    if (tLengthReceived < 0 || tLengthReceived > mDataBuffer.length) {
                         MyLog.e(LOG_TAG,
                                 "DataLength of " + tLengthReceived + " wrong. Command=0x" + Integer.toHexString(tCommandReceived) +
                                         " Out=" + mReceiveBufferOutIndex);
@@ -954,7 +935,7 @@ public class SerialService {
                                         " at ptr=" + (mReceiveBufferOutIndex - 1));
                     }
                     // Plausibility check
-                    if (tLengthReceived > MAX_NUMBER_OF_PARAMS * 2) {
+                    if (tLengthReceived < 0 || tLengthReceived > MAX_NUMBER_OF_PARAMS * 2) {
                         MyLog.e(LOG_TAG, "ParameterLength of " + tLengthReceived + "/0x" + Integer.toHexString(tLengthReceived) +
                                 " wrong. Command=0x" + Integer.toHexString(tCommandReceived) + " Out=" + mReceiveBufferOutIndex);
                         continue;
@@ -1046,8 +1027,9 @@ public class SerialService {
                     tReturnValue = RPCVIEW_DO_DRAW_AND_CALL_AGAIN;
                     break;
                 }
+                // End of data buffer command
 
-            } else /* Data buffer command */ {
+            } else {
                 /*
                  * Command parameters here
                  */
@@ -1134,7 +1116,7 @@ public class SerialService {
         do {
             tByte = getByteFromBuffer();
             if (tByte != SYNC_TOKEN) {
-                if (tByte >= ' ') { // byte us signed!
+                if (tByte >= ' ') { // is ASCII. We do not need to check for > 0x80, because byte is signed!
                     // If ASCII, then append it to string buffer
                     mSerialPrintBuffer[mSerialPrintBufferInIndex++] = tByte;
                     if (mSerialPrintBufferInIndex == SIZE_OF_SERIAL_PRINT_BUFFER) {
@@ -1150,20 +1132,16 @@ public class SerialService {
                         mBlueDisplayContext.mRPCView.showAsDebugToast(tStringFromSerial);
                     }
                 } else {
-                    // reset string buffer
+                    // Here we found no SYNC_TOKEN but a non ASCII character -> reset string buffer
                     mSerialPrintBufferInIndex = 0;
-                    if (!MyLog.isVERBOSE()) {
-                        /*
-                         * Do not output this at level verbose, since at this level RawData is output
-                         */
-                        Log.w(LOG_TAG,
-                                "Byte=0x" + Integer.toHexString(tByte) + " at:" + mReceiveBufferOutIndex + " is no SYNC_TOKEN");
-                    }
+                    Log.w(LOG_TAG,
+                            "Byte=0x" + Integer.toHexString(tByte & 0xFF) + " at:" + Integer.toString(mReceiveBufferOutIndex - 1) +
+                                    " is no SYNC_TOKEN");
                 }
-                if (mReceiveBufferOutIndex == mReceiveBufferInIndex) {
+                if (getBufferBytesAvailable() == 0) {
                     inBufferReadingLock = false;
                     if (mSerialPrintBufferInIndex == 0) {
-                        Log.i(LOG_TAG, "Sync Token not found util end of buffer. End searchCommand. Out=" + aStartOut + "->" +
+                        Log.i(LOG_TAG, "Sync Token not found until end of buffer. End searchCommand. Out=" + aStartOut + "->" +
                                 mReceiveBufferOutIndex + " In=" + aStartIn + "->" + mReceiveBufferInIndex);
                     }
                     return false;
@@ -1184,21 +1162,22 @@ public class SerialService {
     }
 
     /*
-     * Scan for last FUNCTION_SKIP_AND_CLEAR_DISPLAY command and return its index.
+     * Scan for last FUNCTION_CLEAR_DISPLAY_AND_SKIP_OPTIONAL or FUNCTION_CLEAR_DISPLAY_AREA_AND_SKIP_OPTIONAL command and return its index.
      */
     private int scanBufferForLastSkipAndClearDisplayCommand(int aBufferStartScanIndex, int aBytesToScan) {
         int tBufferScanIndex = aBufferStartScanIndex;
         int tFoundIndex = 0;
 
         while (tBufferScanIndex <= (aBufferStartScanIndex + aBytesToScan - 6)) {
-            // Check for FUNCTION_SKIP_AND_CLEAR_DISPLAY
+            // Check for FUNCTION_CLEAR_DISPLAY_AND_SKIP_OPTIONAL or FUNCTION_CLEAR_DISPLAY_AREA_AND_SKIP_OPTIONAL
             if (mBigReceiveBuffer[tBufferScanIndex] == SYNC_TOKEN) {
-                if ((((mBigReceiveBuffer[tBufferScanIndex + 1] == RPCView.FUNCTION_CLEAR_DISPLAY_AND_SKIP_OPTIONAL) ||
+                if (((mBigReceiveBuffer[tBufferScanIndex + 1] == RPCView.FUNCTION_CLEAR_DISPLAY_AND_SKIP_OPTIONAL) ||
                         (mBigReceiveBuffer[tBufferScanIndex + 1] == RPCView.FUNCTION_CLEAR_DISPLAY_AREA_AND_SKIP_OPTIONAL)) &&
-                        (mBigReceiveBuffer[tBufferScanIndex + 2] == 2) /* lsb of length 2 | one parameter */ &&
-                        (mBigReceiveBuffer[tBufferScanIndex + 3] == 0) /* msb of length 2 | one parameter */ &&
-                        (tBufferScanIndex == ((aBufferStartScanIndex + aBytesToScan) - 6))) ||
-                        (mBigReceiveBuffer[tBufferScanIndex + 6] == SYNC_TOKEN) /* sync token of next command if next command*/) {
+                                (mBigReceiveBuffer[tBufferScanIndex + 2] == 2) /* lsb of length 2 | one parameter */ &&
+                                (mBigReceiveBuffer[tBufferScanIndex + 3] == 0) /* msb of length 2 | one parameter */ &&
+                                ((tBufferScanIndex == ((aBufferStartScanIndex + aBytesToScan) - 6)) ||
+                                        (mBigReceiveBuffer[tBufferScanIndex + 6] ==
+                                                SYNC_TOKEN)) /* sync token of next command if next command */) {
                     tFoundIndex = tBufferScanIndex;
                 }
             }

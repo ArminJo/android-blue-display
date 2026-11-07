@@ -16,14 +16,11 @@
 
 package de.joachimsmeyer.android.bluedisplay;
 
-import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.content.Intent;
-import android.os.Build;
-import android.os.Build.VERSION_CODES;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
@@ -41,7 +38,7 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * This Activity appears as a dialog. It lists any paired devices and devices detected in the area after discovery. When a device is
+ * This Activity appears as a dialog. It lists any paired devices and devices detected in the area. When a device is
  * chosen by the user, the MAC address of the device is sent back to the parent Activity in the result Intent.
  */
 public class DeviceListActivity extends Activity {
@@ -67,13 +64,12 @@ public class DeviceListActivity extends Activity {
         // Set result CANCELED in case the user backs out
         setResult(Activity.RESULT_CANCELED);
 
-        // Initialize the button to perform device discovery
         Button tConnectButton = findViewById(R.id.connect_last_device);
         /*
          * Change caption of top connect button to include name of last device
          */
         String tDeviceNameLastConnected = this.getIntent().getStringExtra(BlueDisplay.BT_DEVICE_NAME);
-        if (tDeviceNameLastConnected.equalsIgnoreCase("null")) {
+        if (tDeviceNameLastConnected == null || tDeviceNameLastConnected.isEmpty()) {
             tConnectButton.setVisibility(View.INVISIBLE);
         } else {
             tConnectButton.setVisibility(View.VISIBLE);
@@ -123,8 +119,8 @@ public class DeviceListActivity extends Activity {
         mPairedDevices = tBtAdapter.getBondedDevices();
 
         long tCurrentTimestampMillis = System.currentTimeMillis();
-        if (mPairedDevices.size() == 1
-                && BluetoothSerialSocket.sLastFailOrDisconnectTimestampMillis < (tCurrentTimestampMillis - 10000)) {
+        if (mPairedDevices.size() == 1 &&
+                BluetoothSerialSocket.sLastFailOrDisconnectTimestampMillis < (tCurrentTimestampMillis - 10000)) {
             /*
              * If only one device found, do auto connect (send device address directly) But not within 10 seconds after last fail or
              * disconnect.
@@ -204,6 +200,7 @@ public class DeviceListActivity extends Activity {
                         // Set result and finish this Activity
                         setResult(Activity.RESULT_OK, intent);
                         finish();
+                        return;
                     }
                 }
                 setResult(Activity.RESULT_CANCELED);

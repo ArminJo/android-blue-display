@@ -23,7 +23,7 @@
  *
  *
  * This class implements a simple wrapper for the android Log class.
- * It stores the last 300 entries in a string array for local output.
+ * It stores the last 1500 entries in a string array for local output.
  */
 
 package de.joachimsmeyer.android.bluedisplay;
@@ -37,7 +37,7 @@ public class MyLog {
     static int mNextIndex = 0;
     static int mLength = 0; // used to determine if wrap around has happened
     // to prevent "The content of the adapter has changed but ListView did not receive a notification"
-    static boolean mStopLoggingSinceLogIsDisplayed = false;
+    static volatile boolean mStopLoggingSinceLogIsDisplayed = false;
 
     public static final String LOGLEVEL_KEY = "loglevel";
     static int mLoglevel = Log.INFO; // 6=ERROR 5=WARN, 4=INFO, 3=DEBUG, 2=VERBOSE
@@ -63,12 +63,12 @@ public class MyLog {
         return (mLoglevel <= Log.VERBOSE);
     }
 
-    public static void clear() {
+    public static synchronized void clear() {
         mNextIndex = 0;
         mLength = 0;
     }
 
-    public static String get(int aPosition) {
+    public static synchronized String get(int aPosition) {
         if (mLength < SIZE_OF_LOG_HISTORY) {
             if (aPosition > mLength) {
                 return null;
@@ -80,11 +80,11 @@ public class MyLog {
         }
     }
 
-    public static int getCount() {
+    public static synchronized int getCount() {
         return mLength;
     }
 
-    private static void InsertLog(String aLevel, String tag, String msg) {
+    private static synchronized void InsertLog(String aLevel, String tag, String msg) {
         if (!mStopLoggingSinceLogIsDisplayed) {
             Logmessages[mNextIndex++] = aLevel + " " + tag + " " + msg;
             if (mNextIndex >= SIZE_OF_LOG_HISTORY) {
@@ -93,7 +93,6 @@ public class MyLog {
             if (mLength < SIZE_OF_LOG_HISTORY) {
                 mLength++;
             }
-
         }
     }
 

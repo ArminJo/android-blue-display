@@ -40,6 +40,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 /**
  * This class does all the work for setting up and managing Bluetooth connections with other devices. It has a thread for connecting
@@ -275,6 +277,11 @@ public class BluetoothSerialSocket {
                 Log.i(LOG_TAG, "run mConnectThread");
             }
             setName("ConnectThread");
+            if (mmSocket == null) {
+                // Socket creation failed in constructor, e.g. because of missing BLUETOOTH_CONNECT permission
+                connectionFailed(null);
+                return;
+            }
 
             // Always cancel discovery because it will slow down a connection
             //mAdapter.cancelDiscovery();
@@ -293,6 +300,13 @@ public class BluetoothSerialSocket {
                 } catch (IOException e2) {
                     Log.e(LOG_TAG, "unable to close() socket during connection failure", e2);
                 }
+                String tDeviceName = null;
+                try {
+                    tDeviceName = mmDevice.getName();
+                } catch (SecurityException e3) {
+                    Log.e(LOG_TAG, "No permission to get device name", e3);
+                }
+                connectionFailed(tDeviceName);
                 return;
             }
 
@@ -306,6 +320,9 @@ public class BluetoothSerialSocket {
         }
 
         public void cancel() {
+            if (mmSocket == null) {
+                return;
+            }
             try {
                 mmSocket.close();
             } catch (IOException e) {
@@ -345,9 +362,27 @@ public class BluetoothSerialSocket {
             }
 
             /*
-             * reset flags, buttons, sliders and sensors (and log this :-)) Must be at first
+             * reset flags, buttons, sliders and sensors (and log this :-)) Must be at first.
+             * Run it on the UI thread, which owns the button and slider lists, and wait until it is done,
+             * otherwise it may delete buttons created by the first commands received.
              */
-            mBlueDisplayContext.mRPCView.resetAll();
+            final CountDownLatch tResetDoneLatch = new CountDownLatch(1);
+            mBlueDisplayContext.runOnUiThread(() -> {
+                try {
+                    mBlueDisplayContext.mRPCView.resetAll();
+                } finally {
+                    tResetDoneLatch.countDown(); // release the waiting thread even if resetAll() throws
+                }
+            });
+            try {
+                if (!tResetDoneLatch.await(2, TimeUnit.SECONDS)) {
+                    MyLog.w(LOG_TAG, "Timeout waiting for resetAll() on UI thread");
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                connectionLost(); // thread was cancelled
+                return;
+            }
 
             // Read old content from Bluetooth buffer
             // Data is present if data was sent before connection
@@ -365,7 +400,11 @@ public class BluetoothSerialSocket {
                 }
                 tBytesAvailable = mmInStream.available();
                 while (tBytesAvailable > 0) {
-                    tReadSize += mmInStream.read(mSerialService.mDataBuffer, 0, tBytesAvailable);
+                    int tLength = mmInStream.read(mSerialService.mDataBuffer, 0, Math.min(tBytesAvailable, mSerialService.mDataBuffer.length));
+                    if (tLength < 0) {
+                        break;
+                    }
+                    tReadSize += tLength;
                     tBytesAvailable = mmInStream.available();
                 }
                 if (tReadSize > 0) {

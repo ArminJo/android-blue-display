@@ -66,7 +66,6 @@ public class TouchSlider {
         int mColor = Color.BLACK;
         int mBackgroundColor = Color.WHITE;
 
-        boolean mPositionsInvalid = true; // Values or caption text have changed, need to recompute position values
         int mPositionX; // resulting X positions computed from the above values and the text content
         int mPositionY; // resulting Y position
     }
@@ -104,8 +103,8 @@ public class TouchSlider {
      * This value can be different from mCurrentTouchValue and is provided by callback handler
      */ int mCurrentValue;
     int mThresholdValue;
-    float mMaxValue; // The value of slider, if position is left or bottom - default is mBarLength
-    float mMinValue; // The value of slider, if position is right or top - default is 0
+    float mMaxValue; // The value of slider, if position is right or top (left or bottom if inverse) - default is mBarLength
+    float mMinValue; // The value of slider, if position is left or bottom (right or top if inverse) - default is 0
 
     int mSliderNumber; // index in sSliderList - to identify slider while debugging
     int mOnChangeHandlerCallbackAddress;
@@ -210,6 +209,7 @@ public class TouchSlider {
         if (aThresholdValue < 0) {
             mThresholdValue = -aThresholdValue;
         }
+        mCurrentTouchValue = Integer.MIN_VALUE; // force to send the next touch
         mOnChangeHandlerCallbackAddress = aOnChangeHandlerCallbackAddress;
 
         if ((mOptions & FLAG_SLIDER_SHOW_BORDER) == 0) {
@@ -322,7 +322,7 @@ public class TouchSlider {
      * Overwrite and deactivate slider, but do not delete it.
      */
     void removeSlider(int tBackgroundColor) {
-        // Remove slider with border - works only with + 1 because last "virtual" pixel can be bigger than 1 physical pixel
+        // Overwrite slider with border - works only with + 1 because last "virtual" pixel can be bigger than 1 physical pixel
         mRPCView.fillRect(mPositionX, mPositionY, mPositionXRight + 1, mPositionYBottom + 1, tBackgroundColor);
 
         if (mCaption != null) {
@@ -335,10 +335,17 @@ public class TouchSlider {
             /*
              * Overwrite value with max value drawn with background color
              */
+            int tOldCurrentValue = mCurrentValue;
+            int tOldColor = mValueLayoutInfo.mColor;
+            int tOldBackgroundColor = mValueLayoutInfo.mBackgroundColor;
             mCurrentValue = (int) mMaxValue;
             mValueLayoutInfo.mColor = tBackgroundColor;
             mValueLayoutInfo.mBackgroundColor = tBackgroundColor;
             printCurrentValue();
+            // restore values after printing
+            mCurrentValue = tOldCurrentValue;
+            mValueLayoutInfo.mColor = tOldColor;
+            mValueLayoutInfo.mBackgroundColor = tOldBackgroundColor;
         }
         mIsActive = false;
     }
@@ -362,13 +369,20 @@ public class TouchSlider {
         }
         mValueFormatString = "%" + tNumberOfDigits + "d";
         if (mValueUnitString != null) {
-            mValueFormatString = mValueFormatString + mValueUnitString;
+            mValueFormatString = mValueFormatString + mValueUnitString.replace("%", "%%"); // % must be escaped for String.format()
         }
     }
 
     @SuppressLint("DefaultLocale")
     void printCurrentValue() {
-        String tValueString = String.format(mValueFormatString, mCurrentValue);
+        String tValueString;
+        try {
+            tValueString = String.format(mValueFormatString, mCurrentValue);
+        } catch (java.util.IllegalFormatException e) {
+            // Format string is sent by the client and may not fit to an int value. This must not crash the app on touch.
+            MyLog.e(LOG_TAG, "Invalid value format string \"" + mValueFormatString + "\". " + e);
+            tValueString = Integer.toString(mCurrentValue);
+        }
         printValueString(tValueString);
     }
 
@@ -472,11 +486,9 @@ public class TouchSlider {
     }
 
     void computeTextPositions(TextLayoutInfo aTextLayoutInfo, String aText, boolean isValuePosition) {
-        if (aText == null || aTextLayoutInfo == null || !aTextLayoutInfo.mPositionsInvalid) {
+        if (aText == null || aTextLayoutInfo == null) {
             return;
         }
-        // aTextLayoutInfo.mPositionsInvalid is true here
-
         int tMargin;
         if (!aTextLayoutInfo.mTakeDefaultMargin) {
             tMargin = aTextLayoutInfo.mMargin;
@@ -637,6 +649,9 @@ public class TouchSlider {
     }
 
     static boolean checkIfTouchInSliderNumber(final int aTouchPositionX, final int aTouchPositionY, final int aSliderNumber) {
+        if (aSliderNumber >= sSliderList.size()) {
+            return false; // Sliders were reset by client during this touch
+        }
         TouchSlider tSlider = sSliderList.get(aSliderNumber);
         if (tSlider.mIsActive) {
             return tSlider.checkIfTouchInSlider(aTouchPositionX, aTouchPositionY, false); // no recursion, but different function
@@ -833,6 +848,7 @@ public class TouchSlider {
                         case SUBFUNCTION_SLIDER_SET_VALUE_AND_DRAW_SLIDER:
                         case SUBFUNCTION_SLIDER_SET_VALUE:
                             tSlider.mCurrentValue = aParameters[2];
+                            tSlider.mCurrentTouchValue = Integer.MIN_VALUE; // force to send the next touch
                             if (tSubcommand == SUBFUNCTION_SLIDER_SET_VALUE_AND_DRAW_BAR) {
                                 tSlider.drawBar();
                                 tFunction = " and draw bar";
@@ -890,7 +906,6 @@ public class TouchSlider {
                                 tFunction = "print value";
                                 tLayoutInfo = tSlider.mValueLayoutInfo;
                             }
-                            tLayoutInfo.mPositionsInvalid = true;
 
                             tLayoutInfo.mSize = aParameters[2];
                             tLayoutInfo.mTakeDefaultMargin =
@@ -924,7 +939,7 @@ public class TouchSlider {
                             }
                             break;
 
-                        case SUBFUNCTION_SLIDER_SET_SCALE_FACTOR: // modifies only aMaxValue, not aMinValue
+                        case SUBFUNCTION_SLIDER_SET_SCALE_FACTOR:
                             // convert 2 short parameters to one float
                             int tFloat = aParameters[2] & 0xFFFF;
                             tFloat = tFloat | ((aParameters[3] & 0xFFFF) << 16);
@@ -940,7 +955,7 @@ public class TouchSlider {
                                             (tNewScaleFactor * tSlider.mBarLength) + " and mMinValue to 0 " + tSliderCaption +
                                             tSliderNumber);
                                 }
-                                tSlider.mMaxValue = tNewScaleFactor * tSlider.mMaxValue;
+                                tSlider.mMaxValue = tNewScaleFactor * tSlider.mBarLength;
                                 tSlider.mMinValue = (float) 0.0;
                                 tSlider.setFormatString(); // for new max value
                                 // do not modify mCurrentValue, since it was specified with scaling in mind!
@@ -962,10 +977,9 @@ public class TouchSlider {
                             break;
 
                         case SUBFUNCTION_SLIDER_SET_BORDER_SIZES_AND_COLOR:
-                            tSlider.mCurrentValue = (int) ((tSlider.mCurrentValue * (aParameters[3] - aParameters[2])) /
-                                    (tSlider.mMaxValue - tSlider.mMinValue)) + aParameters[2];
                             tSlider.mLongBorderWidth = aParameters[2];
                             tSlider.mShortBorderWidth = aParameters[3];
+                            tSlider.computeLowerRightCorner();
                             tSlider.mBorderColor = RPCView.shortToLongColor(aParameters[4]);
                             if (MyLog.isINFO()) {
                                 MyLog.i(LOG_TAG, "Set long border width=" + tSlider.mLongBorderWidth + ", short=" +

@@ -99,6 +99,7 @@ public class TouchButton {
     static ToneGenerator sButtonToneGenerator;
     static int sLastRequestedToneVolume;
     static int sLastSystemToneVolume;
+    static boolean sUseAbsoluteToneVolume = false; // true if the client set an absolute volume
     static int sCurrentToneDurationMillis = -1; // -1 means till end of tone or forever
 
     static final int sDefaultButtonColor = Color.RED;
@@ -124,7 +125,7 @@ public class TouchButton {
     private static final int FLAG_BUTTON_GLOBAL_USE_UP_EVENTS_FOR_BUTTONS = 0x01;
     private static final int FLAG_BUTTON_GLOBAL_SET_TOUCH_TONE = 0x02;
     private static final int FLAG_BUTTON_GLOBAL_SET_TOUCH_TONE_STATE = 0x03;
-            // BUTTON_GLOBAL_TOUCH_TONE_STATE_DISABLED, BUTTON_GLOBAL_TOUCH_TONE_STATE_INDIVIDUAL, BUTTON_GLOBAL_TOUCH_TONE_STATE_FORCE_ENABLED
+    // BUTTON_GLOBAL_TOUCH_TONE_STATE_DISABLED, BUTTON_GLOBAL_TOUCH_TONE_STATE_INDIVIDUAL, BUTTON_GLOBAL_TOUCH_TONE_STATE_FORCE_ENABLED
 
     private static final int FUNCTION_BUTTON_DISABLE_AUTOREPEAT_UNTIL_END_OF_TOUCH = 0x4B;
 
@@ -175,6 +176,12 @@ public class TouchButton {
         sButtonList.clear();
         aRPCView.mUseUpEventForButtons = false;
         sTouchToneIndex = ToneGenerator.TONE_CDMA_KEYPAD_VOLUME_KEY_LITE;
+        sCurrentToneDurationMillis = -1; // -1 means till end of tone or forever
+        sGlobalButtonTouchToneState = BUTTON_GLOBAL_TOUCH_TONE_STATE_INDIVIDUAL;
+        sUseAbsoluteToneVolume = false;
+        releaseButtonToneGenerator(); // is created again with system volume by handleFlags() or checkIfTouchInButton()
+        sLastRequestedToneVolume = 0;
+        sLastSystemToneVolume = 0; // forces creating a new generator with system volume at next touch
     }
 
     void initButton(final RPCView aRPCView, final int aPositionX, final int aPositionY, final int aWidthX, final int aHeightY,
@@ -269,8 +276,8 @@ public class TouchButton {
         } else {
             if (sButtonToneGenerator == null) {
                 int tCurrentSystemVolume = mRPCView.mBlueDisplayContext.mAudioManager.getStreamVolume(
-                        mRPCView.mBlueDisplayContext.StreamToUseForTouchTone);
-                sButtonToneGenerator = new ToneGenerator(mRPCView.mBlueDisplayContext.StreamToUseForTouchTone,
+                        BlueDisplay.StreamToUseForTouchTone);
+                setButtonToneGenerator(
                         (tCurrentSystemVolume * ToneGenerator.MAX_VOLUME) / mRPCView.mBlueDisplayContext.mMaxSystemVolume);
             }
             mDoTouchTone = true;
@@ -385,29 +392,29 @@ public class TouchButton {
         mPositionY = aPositionY;
 
         // check values
-        if (aPositionX > mRPCView.mRequestedCanvasWidth) {
+        if (mPositionX > mRPCView.mRequestedCanvasWidth) {
             MyLog.e(LOG_TAG,
-                    mEscapedText + " Button x-position " + aPositionX + " is greater than " + mRPCView.mRequestedCanvasWidth +
+                    mEscapedText + " Button x-position " + mPositionX + " is greater than " + mRPCView.mRequestedCanvasWidth +
                             ". Set position to 0");
-            aPositionX = 0;
+            mPositionX = 0;
         }
-        if (aPositionX + mWidth > mRPCView.mRequestedCanvasWidth) {
+        if (mPositionX + mWidth > mRPCView.mRequestedCanvasWidth) {
             MyLog.e(LOG_TAG,
-                    mEscapedText + " Button x-position + width " + aPositionX + " + " + mWidth + " is too great. Set width to:" +
-                            (mRPCView.mRequestedCanvasWidth - aPositionX));
-            mWidth = mRPCView.mRequestedCanvasWidth - aPositionX;
+                    mEscapedText + " Button x-position + width " + mPositionX + " + " + mWidth + " is too great. Set width to:" +
+                            (mRPCView.mRequestedCanvasWidth - mPositionX));
+            mWidth = mRPCView.mRequestedCanvasWidth - mPositionX;
         }
-        if (aPositionY > mRPCView.mRequestedCanvasHeight) {
+        if (mPositionY > mRPCView.mRequestedCanvasHeight) {
             MyLog.e(LOG_TAG,
-                    mEscapedText + " Button y-position " + aPositionY + " is greater than " + mRPCView.mRequestedCanvasHeight +
+                    mEscapedText + " Button y-position " + mPositionY + " is greater than " + mRPCView.mRequestedCanvasHeight +
                             ". Set position to 0");
-            aPositionY = 0;
+            mPositionY = 0;
         }
-        if (aPositionY + mHeight > mRPCView.mRequestedCanvasHeight) {
+        if (mPositionY + mHeight > mRPCView.mRequestedCanvasHeight) {
             MyLog.e(LOG_TAG,
-                    mEscapedText + " Button y-position + height " + aPositionY + " + " + mHeight + " is too great. Set height to:" +
-                            (mRPCView.mRequestedCanvasHeight - aPositionY));
-            mHeight = mRPCView.mRequestedCanvasHeight - aPositionY;
+                    mEscapedText + " Button y-position + height " + mPositionY + " + " + mHeight + " is too great. Set height to:" +
+                            (mRPCView.mRequestedCanvasHeight - mPositionY));
+            mHeight = mRPCView.mRequestedCanvasHeight - mPositionY;
         }
     }
 
@@ -418,6 +425,24 @@ public class TouchButton {
             return true;
         }
         return mDoTouchTone;
+    }
+
+    /*
+     * Replaces the button tone generator and frees the native resources of the old one.
+     * aVolume is 0 to 100 (ToneGenerator.MAX_VOLUME).
+     */
+    static void setButtonToneGenerator(int aVolume) {
+        if (sButtonToneGenerator != null) {
+            sButtonToneGenerator.release();
+        }
+        sButtonToneGenerator = new ToneGenerator(BlueDisplay.StreamToUseForTouchTone, aVolume);
+    }
+
+    static void releaseButtonToneGenerator() {
+        if (sButtonToneGenerator != null) {
+            sButtonToneGenerator.release();
+            sButtonToneGenerator = null;
+        }
     }
 
     /**
@@ -436,10 +461,13 @@ public class TouchButton {
                      * check if user changed volume
                      */
                     int tCurrentSystemVolume = mRPCView.mBlueDisplayContext.mAudioManager.getStreamVolume(
-                            mRPCView.mBlueDisplayContext.StreamToUseForTouchTone);
-                    if (sLastSystemToneVolume != tCurrentSystemVolume) {
+                            BlueDisplay.StreamToUseForTouchTone);
+                    if (sButtonToneGenerator == null
+                            //  covers FORCE_ENABLED with no tone button
+                            || (!sUseAbsoluteToneVolume                                  // keep the volume set by the client
+                            && sLastSystemToneVolume != tCurrentSystemVolume)) {
                         sLastSystemToneVolume = tCurrentSystemVolume;
-                        sButtonToneGenerator = new ToneGenerator(mRPCView.mBlueDisplayContext.StreamToUseForTouchTone,
+                        setButtonToneGenerator(
                                 (tCurrentSystemVolume * ToneGenerator.MAX_VOLUME) / mRPCView.mBlueDisplayContext.mMaxSystemVolume);
                     }
                     sButtonToneGenerator.startTone(sTouchToneIndex, sCurrentToneDurationMillis);
@@ -544,7 +572,7 @@ public class TouchButton {
             if (mRPCView.mTouchIsActive[0]) {
                 if (sAutorepeatState != BUTTON_AUTOREPEAT_DISABLED_UNTIL_END_OF_TOUCH) {
                     // beep and send button event
-                    if (getDoTouchTone()) {
+                    if (getDoTouchTone() && sButtonToneGenerator != null) {
                         sButtonToneGenerator.startTone(sTouchToneIndex, sCurrentToneDurationMillis);
                     }
                     mRPCView.mBlueDisplayContext.mSerialService.writeGuiCallbackEvent(SerialService.EVENT_BUTTON_CALLBACK,
@@ -657,6 +685,10 @@ public class TouchButton {
                             sTouchToneIndex = aParameters[1]; // aToneIndex
                         }
                         sCurrentToneDurationMillis = aParameters[2]; // aToneDuration in ms
+                        if (sCurrentToneDurationMillis == 0) {
+                            sCurrentToneDurationMillis =
+                                    -1; // Map unsigned duration 0 (TONE_DURATION_FOREVER) to -1, which means forever
+                        }
                         if (aParamsLength >= 4) {
                             /*
                              * set absolute value of volume
@@ -665,19 +697,26 @@ public class TouchButton {
                             if (tVolume > ToneGenerator.MAX_VOLUME) {
                                 tVolume = ToneGenerator.MAX_VOLUME;
                             }
-                            if (tVolume >= 0 && tVolume != sLastRequestedToneVolume) {
-                                sLastRequestedToneVolume = tVolume;
-                                sButtonToneGenerator =
-                                        new ToneGenerator(aRPCView.mBlueDisplayContext.StreamToUseForTouchTone, tVolume);
+                            if (tVolume >= 0) {
+                                sUseAbsoluteToneVolume = true;
+                                if (tVolume != sLastRequestedToneVolume ||
+                                        sButtonToneGenerator == null) {      // the first request for volume 0 was ignored
+                                    sLastRequestedToneVolume = tVolume;
+                                    setButtonToneGenerator(tVolume);
+                                }
+                            } else {                                            // negative volume means user volume, as in the next branch
+                                sUseAbsoluteToneVolume = false;                 // the next touch then uses the system volume
+                                sLastSystemToneVolume = -1;                     // forces a new generator on the next touch
                             }
                         } else {
                             /*
                              * set to user defined value of volume
                              */
+                            sUseAbsoluteToneVolume = false;
                             int tCurrentSystemVolume = aRPCView.mBlueDisplayContext.mAudioManager.getStreamVolume(
-                                    aRPCView.mBlueDisplayContext.StreamToUseForTouchTone);
-                            sButtonToneGenerator = new ToneGenerator(aRPCView.mBlueDisplayContext.StreamToUseForTouchTone,
-                                    (tCurrentSystemVolume * ToneGenerator.MAX_VOLUME) /
+                                    BlueDisplay.StreamToUseForTouchTone);
+                            sLastSystemToneVolume = tCurrentSystemVolume;       // avoids a second generator on the next touch
+                            setButtonToneGenerator((tCurrentSystemVolume * ToneGenerator.MAX_VOLUME) /
                                             aRPCView.mBlueDisplayContext.mMaxSystemVolume);
                         }
 
@@ -699,7 +738,7 @@ public class TouchButton {
                 }
 
                 if (MyLog.isINFO()) {
-                    MyLog.i(LOG_TAG, "Global settings. Subfunction=0x" + Integer.toHexString(aParameters[1]) + " | " + tString +
+                    MyLog.i(LOG_TAG, "Global settings. Subfunction=0x" + Integer.toHexString(aParameters[0]) + " | " + tString +
                             tInfoString);
                 }
                 break;

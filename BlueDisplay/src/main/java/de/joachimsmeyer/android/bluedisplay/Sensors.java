@@ -44,10 +44,6 @@
 
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/gpl.html>.
- *
- *  This is the view which interprets the global and graphic commands received by serial service.
- *  It also handles touch events and swipe as well as long touch detection.
- *
  */
 
 package de.joachimsmeyer.android.bluedisplay;
@@ -131,9 +127,12 @@ public class Sensors implements SensorEventListener {
     }
 
     public void getAllAvailableSensors() {
+        // The list is static and survives a re-creation of the Activity, so start with an empty list
+        sAvailableSensorList.clear();
         List<Sensor> tSensorsList = mSensorManager.getSensorList(Sensor.TYPE_ALL);
         for (Sensor tSensor : tSensorsList) {
-            SensorInfo tSensorInfo = new SensorInfo(tSensor, 3, false);
+            // take a quite responsive delay, SENSOR_DELAY_NORMAL may be too slow
+            SensorInfo tSensorInfo = new SensorInfo(tSensor, SensorManager.SENSOR_DELAY_UI, false);
             sAvailableSensorList.add(tSensorInfo);
             if (MyLog.isINFO()) {
                 MyLog.i(LOG_TAG, "Sensor found: " + tSensor.toString());
@@ -148,12 +147,12 @@ public class Sensors implements SensorEventListener {
         if (MyLog.isINFO()) {
             MyLog.i(LOG_TAG, "SetSensor sensor=" + aSensorType + " DoActivate=" + DoActivate + " rate=" + aSensorRate);
         }
+        if (aSensorRate > SensorManager.SENSOR_DELAY_NORMAL) {
+            // sensor rate received is in milliseconds -> convert it to microseconds
+            aSensorRate *= 1000;
+        }
         for (SensorInfo tSensorInfo : sAvailableSensorList) {
             if (tSensorInfo.mSensor.getType() == aSensorType) {
-                if (aSensorRate > SensorManager.SENSOR_DELAY_NORMAL) {
-                    // sensor rate received is in milliseconds -> convert it to microseconds
-                    aSensorRate *= 1000;
-                }
                 if (DoActivate) {
                     mSensorManager.registerListener(this, tSensorInfo.mSensor, aSensorRate);
                 } else {
@@ -161,6 +160,7 @@ public class Sensors implements SensorEventListener {
                 }
                 tSensorInfo.isActive = DoActivate;
                 tSensorInfo.mFilterFlag = aFilterFlag;
+                tSensorInfo.mRate = aSensorRate; // to restore the client's rate in registerAllActiveSensorListeners()
             }
         }
     }
@@ -174,7 +174,7 @@ public class Sensors implements SensorEventListener {
     public void registerAllActiveSensorListeners() {
         for (SensorInfo tSensorInfo : sAvailableSensorList) {
             if (tSensorInfo.isActive) {
-                mSensorManager.registerListener(this, tSensorInfo.mSensor, SensorManager.SENSOR_DELAY_UI);
+                mSensorManager.registerListener(this, tSensorInfo.mSensor, tSensorInfo.mRate);
                 if (MyLog.isDEBUG()) {
                     MyLog.d(LOG_TAG, "Register listener sensor=" + tSensorInfo.mSensor.getName());
                 }
@@ -226,7 +226,7 @@ public class Sensors implements SensorEventListener {
                     ValueX = -aEvent.values[1]; // -ValueY
                 } else if (mBlueDisplayContext.mCurrentRotation == Surface.ROTATION_270) {
                     ValueY = -ValueX;
-                    ValueX = aEvent.values[1]; // -ValueY
+                    ValueX = aEvent.values[1]; // ValueY
                 } else if (mBlueDisplayContext.mCurrentRotation == Surface.ROTATION_180) {
                     ValueX = -ValueX;
                     ValueY = -ValueY;

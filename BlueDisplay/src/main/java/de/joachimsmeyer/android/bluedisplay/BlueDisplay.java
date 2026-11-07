@@ -124,7 +124,7 @@ public class BlueDisplay extends Activity {
     // Intent request codes
     public static final int REQUEST_CONNECT_DEVICE = 1;
     private static final int REQUEST_ENABLE_BT = 2;
-
+    private static final int REQUEST_BT_CONNECT_PERMISSION = 3;
     static final String LOG_TAG = "BlueDisplay";
 
     // Message types sent from the BluetoothSerialSocket Handler
@@ -166,8 +166,7 @@ public class BlueDisplay extends Activity {
     boolean mUSBDeviceAttached = false;
     boolean mDeviceConnected = false; // Communication with the device is now possible
 
-    // True for 5 seconds after start of connection and reset by FUNCTION_REQUEST_MAX_CANVAS_SIZE and
-    // SUBFUNCTION_GLOBAL_SET_FLAGS_AND_SIZE
+    // True for 5 seconds after start of connection and reset by any command
     boolean mWaitForDataAfterConnect = false;
     public static final int SECONDS_TO_WAIT_FOR_COMMANDS_RECEIVED = 5;
 
@@ -218,7 +217,7 @@ public class BlueDisplay extends Activity {
     protected boolean mOrientationIsLockedByClient = false;
 
     /*
-     * Surface.Rotation is 1 for 0 degree, 1 for 90 degree, 2 for 180 degree and 3 for 270 degree from default orientation,
+     * Surface.Rotation is 0 for 0 degree, 1 for 90 degree, 2 for 180 degree and 3 for 270 degree from default orientation,
      * which is Portrait for mobiles and Landscape for Tablets.
      * Thus, rotation is 1 or 0 for landscape (usb connector right) depending on default orientation of model
      * On my mobile, 0 = Portrait, 1 = Landscape, 2 = reverse Portrait, 3 = reverse Landscape
@@ -233,6 +232,8 @@ public class BlueDisplay extends Activity {
     // private MenuItem mMenuItemStartStopLogging;
 
     private Dialog mAboutDialog;
+
+    private OrientationEventListener mOrientationEventListener;
 
     /******************
      * Event Handler
@@ -251,11 +252,11 @@ public class BlueDisplay extends Activity {
         }
 
         /*
-         * Get Audio manager and max volume for beep volume handling in Buttons and playTone() Must be before create RPCView, since
-         * RPCView uses this values
+         * Get Audio manager and max volume for beep volume handling in Buttons and playTone()
+         * Must be before create RPCView, since RPCView uses this values
          */
         mAudioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
-        mMaxSystemVolume = mAudioManager.getStreamMaxVolume(StreamToUseForTouchTone);
+        mMaxSystemVolume = mAudioManager.getStreamMaxVolume(BlueDisplay.StreamToUseForTouchTone);
 
         /*
          * Create RPCView
@@ -271,11 +272,11 @@ public class BlueDisplay extends Activity {
          * onConfigurationChanged().
          * If configuration changed, this is called after onConfigurationChanged(), onSizeChanged() and redrawing the canvas.
          */
-        OrientationEventListener mOrientationEventListener = new OrientationEventListener(this, SensorManager.SENSOR_DELAY_NORMAL) {
+        mOrientationEventListener = new OrientationEventListener(this, SensorManager.SENSOR_DELAY_NORMAL) {
             @Override
-            public void onOrientationChanged(int mAngle) {
+            public void onOrientationChanged(int aAngle) {
                 // mAngle ranges from 0 to 359 degrees
-                if (mAngle == OrientationEventListener.ORIENTATION_UNKNOWN) { // == -1
+                if (aAngle == OrientationEventListener.ORIENTATION_UNKNOWN) { // == -1
                     return;
                 }
                 /*
@@ -289,7 +290,7 @@ public class BlueDisplay extends Activity {
                     mCurrentRotation = getWindowManager().getDefaultDisplay().getRotation();
                     if (mLastRotation != mCurrentRotation) {
                         if (MyLog.isINFO()) {
-                            Log.i(LOG_TAG, "+ ON onOrientationChanged(" + mAngle + "), rotation changed from "
+                            Log.i(LOG_TAG, "+ ON onOrientationChanged(" + aAngle + "), rotation changed from "
                                     + mLastRotation + " to " + mCurrentRotation);
                         }
                         setTopAndLeftInsets();
@@ -366,6 +367,16 @@ public class BlueDisplay extends Activity {
              * Create BluetoothSerialSocket to get bluetooth data
              */
             mBTSerialSocket = new BluetoothSerialSocket(this, mSerialService, mHandlerForGUIRequests);
+
+            // On Android 12+ we need BLUETOOTH_CONNECT before any Bluetooth call
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                    && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                MyLog.i(LOG_TAG, "Request BLUETOOTH_CONNECT permission");
+                requestPermissions(new String[]{Manifest.permission.BLUETOOTH_CONNECT}, REQUEST_BT_CONNECT_PERMISSION);
+                mInTryToEnableEnableBT = false;
+                return; // continued in onRequestPermissionsResult()
+            }
+
             if (mBTSerialSocket.getState() == BluetoothSerialSocket.STATE_NONE && mBluetoothAdapter.isEnabled()) {
                 if (mAutoConnectBT) {
                     /*
@@ -405,7 +416,7 @@ public class BlueDisplay extends Activity {
             Log.i(LOG_TAG, "- ON PAUSE -");
         }
         mSensorEventListener.deregisterAllActiveSensorListeners();
-        mRPCView.mToneGenerator.stopTone();
+        mRPCView.stopAllTones();
     }
 
     @SuppressLint("InlinedApi")
@@ -418,18 +429,15 @@ public class BlueDisplay extends Activity {
 
         if (!mInTryToEnableEnableBT) {
             if ((mBluetoothAdapter != null) && (!mBluetoothAdapter.isEnabled())) {
-                Log.i(LOG_TAG, "Activate Bluetooth and request permissions");
-                // first permission check after booting is here
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    requestPermissions(new String[]{Manifest.permission.BLUETOOTH_CONNECT}, 1);
-                }
-                Intent enableIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
                         && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-                    MyLog.e(LOG_TAG, "Cannot activate Bluetooth, because no BLUETOOTH_CONNECT granted by user");
-                    mInTryToEnableEnableBT = false;
-                    finish();
+                    // Android 12+: we need the permission before we can ask to enable Bluetooth
+                    Log.i(LOG_TAG, "Request BLUETOOTH_CONNECT permission before activating Bluetooth");
+                    requestPermissions(new String[]{Manifest.permission.BLUETOOTH_CONNECT}, REQUEST_BT_CONNECT_PERMISSION);
+                    // no finish() here, the answer comes in onRequestPermissionsResult()
                 } else {
+                    Log.i(LOG_TAG, "Activate Bluetooth");
+                    Intent enableIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
                     startActivityForResult(enableIntent, REQUEST_ENABLE_BT);
                     mInTryToEnableEnableBT = true;
                 }
@@ -498,18 +506,39 @@ public class BlueDisplay extends Activity {
 
     @Override
     public void onDestroy() {
-        super.onDestroy();
         if (MyLog.isINFO()) {
             Log.i(LOG_TAG, "--- ON DESTROY ---");
+        }
+        if (mOrientationEventListener != null) {
+            mOrientationEventListener.disable();
+        }
+        if (mSensorEventListener != null) {
+            mSensorEventListener.deregisterAllActiveSensorListeners();
         }
         if (mBTSerialSocket != null) {
             mBTSerialSocket.stop();
         }
-        unregisterReceiver(mUSBSerialSocket.mUSBReceiver);
+        if (mUSBSerialSocket != null) {
+            unregisterReceiver(mUSBSerialSocket.mUSBReceiver);
+        }
+        if (mRPCView != null) {
+            if (mRPCView.mTextToSpeech != null) {
+                mRPCView.mTextToSpeech.shutdown();
+            }
+            if (mRPCView.mToneGenerator != null) {
+                mRPCView.mToneGenerator.release();
+            }
+            if (mRPCView.mToneGeneratorForAbsoluteVolumes != null) {
+                mRPCView.mToneGeneratorForAbsoluteVolumes.release();
+            }
+        }
+        TouchButton.releaseButtonToneGenerator();
+
+        super.onDestroy();
     }
 
     /*
-     * Get current orientation - 1 for Portrait and 2 for Landscape, 8 for reverse Landscape and 9 for reverse Portrait
+     * Get current orientation - 1 for Portrait and 0 for Landscape, 8 for reverse Landscape and 9 for reverse Portrait
      */
     int getCurrentOrientationFromConfigurationOrientation(int aConfigurationOrientation) {
         int tCurrentScreenOrientation;
@@ -817,7 +846,7 @@ public class BlueDisplay extends Activity {
                     setScreenOrientation(mPreferredScreenOrientation);
                     // set window to normal (not persistent) state
                     getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-                    mRPCView.mToneGenerator.stopTone();
+                    mRPCView.stopAllTones();
                     Sensors.disableAllSensors();
                     mSensorEventListener.deregisterAllActiveSensorListeners();
                     break;
@@ -839,7 +868,7 @@ public class BlueDisplay extends Activity {
                     setScreenOrientation(mPreferredScreenOrientation);
                     // set window to normal (not persistent) state
                     getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-                    mRPCView.mToneGenerator.stopTone();
+                    mRPCView.stopAllTones();
                     Sensors.disableAllSensors();
                     mSensorEventListener.deregisterAllActiveSensorListeners();
                     break;
@@ -856,7 +885,7 @@ public class BlueDisplay extends Activity {
 
                 case MESSAGE_UPDATE_VIEW:
                     /*
-                     * called by SerialService after command processed.
+                     * Called by SerialService after data received.
                      */
                     if (MyLog.isVERBOSE()) {
                         Log.v(LOG_TAG, "Received MESSAGE_UPDATE_VIEW -> call mRPCView.invalidate()");
@@ -936,6 +965,20 @@ public class BlueDisplay extends Activity {
         }
     }
 
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQUEST_BT_CONNECT_PERMISSION || requestCode == 1) { // 1 is used in RPCView and onResume()
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                MyLog.i(LOG_TAG, "BLUETOOTH_CONNECT granted -> init Bluetooth");
+                initBluetooth(); // now auto connect or device list works
+            } else {
+                MyLog.e(LOG_TAG, "BLUETOOTH_CONNECT denied by user");
+                Toast.makeText(this, "Bluetooth permission is required to connect", Toast.LENGTH_LONG).show();
+            }
+        }
+    }
+
     void launchDeviceListActivity() {
         // Launch the DeviceListActivity to see devices
         Intent tDeviceListIntent = new Intent(this, DeviceListActivity.class);
@@ -1001,7 +1044,7 @@ public class BlueDisplay extends Activity {
                     | InputType.TYPE_NUMBER_FLAG_SIGNED);
         }
         if (aInitialValue != RPCView.NUMBER_INITIAL_VALUE_DO_NOT_SHOW) {
-            tUserInput.setText(Float.toString(aInitialValue).replaceAll("\\.?0*$", "")); // "\\.?0*$" -> remove trailing zeros
+            tUserInput.setText(Float.toString(aInitialValue).replaceAll("\\.0$", "")); // "\\.0$" -> remove trailing zeros
         }
         AlertDialog.Builder tBuilder = new AlertDialog.Builder(this);
         tBuilder.setView(tInputView);
